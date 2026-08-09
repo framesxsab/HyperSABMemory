@@ -19,9 +19,11 @@ When interacting with or extending HyperMemory, AI coding agents must strictly o
 - Generated Oh-My-Pi context headers must stay within the 1500 token limit by default.
 - If the active file context or git diff exceeds token budget, apply lossy compression (summarize diffs, truncate old stack traces, collapse whitespace).
 
+
 ### R-4: Local-First Privacy Preservation
 - Do not transmit code snippets, file contents, or developer prompts to external web endpoints unless explicitly configured by the user.
 - Local SQLite database and `Memory.md` are the single source of truth.
+- 
 
 ### R-5: Incremental Memory Updates
 - When `Memory.md` is updated after file edits, overwrite only changed sections or append structured state logs. Do not regenerate the entire memory document from scratch unnecessarily.
