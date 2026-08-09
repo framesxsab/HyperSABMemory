@@ -13,6 +13,8 @@ When interacting with or extending HyperMemory, AI coding agents must strictly o
 - Every 3-5 minutes (or on significant file save milestones), staged changes are automatically checkpointed with concise micro-commit messages (e.g., `hypermemory(snapshot): auto-checkpoint [active_file]`).
 - Provides bulletproof rollback safety so developers and agents can revert to exact historical states at any minute.
 
+- 
+
 ### R-3: Strict Token Ceilings (< 1500 Tokens)
 - Generated Oh-My-Pi context headers must stay within the 1500 token limit by default.
 - If the active file context or git diff exceeds token budget, apply lossy compression (summarize diffs, truncate old stack traces, collapse whitespace).
