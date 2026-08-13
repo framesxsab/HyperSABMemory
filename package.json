@@ -1,6 +1,6 @@
 {
   "name": "hypermemory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Open-source IDE context harness and persistent memory engine inspired by Supermemory and Oh-My-Pi",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
