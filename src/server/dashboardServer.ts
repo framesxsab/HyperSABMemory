@@ -130,8 +130,8 @@ export class DashboardServer {
 </html>`);
       });
 
-      this.server.listen(this.port, () => {
-        console.log(`⚡ [HyperMemory :: Dashboard] Server running at http://localhost:${this.port}`);
+      this.server.listen(this.port, '127.0.0.1', () => {
+        console.log(`⚡ [HyperMemory :: Dashboard] Server running at http://127.0.0.1:${this.port}`);
         resolve();
       });
     });

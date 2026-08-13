@@ -9,6 +9,7 @@ import { McpAccessEngine } from '../src/harness/mcpAccess.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { buildContextBlock } from '../src/memory/contextBlock.js';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
+import { AutoCommitEngine } from '../src/hooks/autoCommit.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -162,5 +163,11 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
   it('should render Ponytail ultra intensity with subagent inject', () => {
     const ponytail = new PonytailEngine({ intensity: 'ultra' });
     expect(ponytail.generatePonytailHeader()).toContain('subagent');
+  });
+
+  it('should reject rollback hashes that are not git object ids', async () => {
+    const engine = new AutoCommitEngine({ workspaceDir: process.cwd() });
+    expect(await engine.rollback('HEAD; rm -rf /')).toBe(false);
+    expect(await engine.rollback('../.git')).toBe(false);
   });
 });

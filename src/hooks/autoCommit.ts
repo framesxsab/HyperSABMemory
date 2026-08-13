@@ -3,14 +3,14 @@
  * Automatically commits uncommitted changes every 3-5 minutes for granular rollback capability.
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface AutoCommitOptions {
-  intervalMinutes?: number; // Default: 3 to 5 minutes
+  intervalMinutes?: number;
   workspaceDir?: string;
   authorName?: string;
   authorEmail?: string;
@@ -38,26 +38,16 @@ export class AutoCommitEngine {
     this.onError = options.onError;
   }
 
-  /**
-   * Starts the background auto-commit timer.
-   */
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
     console.log(`⚡ [HyperMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
-
-    // Initial check
     this.createCheckpoint();
-
-    // Set recurring timer
     this.timer = setInterval(() => {
       this.createCheckpoint();
     }, this.intervalMs);
   }
 
-  /**
-   * Stops the auto-commit timer.
-   */
   public stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -67,43 +57,39 @@ export class AutoCommitEngine {
     console.log('⚡ [HyperMemory :: AutoCommit] Engine paused');
   }
 
-  /**
-   * Configures git author identity locally.
-   */
   public async configureGitIdentity(): Promise<void> {
     try {
-      await execAsync(`git config user.name "${this.authorName}"`, { cwd: this.workspaceDir });
-      await execAsync(`git config user.email "${this.authorEmail}"`, { cwd: this.workspaceDir });
+      await execFileAsync('git', ['config', 'user.name', this.authorName], { cwd: this.workspaceDir });
+      await execFileAsync('git', ['config', 'user.email', this.authorEmail], { cwd: this.workspaceDir });
     } catch {
       // Ignore git config errors
     }
   }
 
-  /**
-   * Executes a git checkpoint commit if uncommitted changes exist.
-   */
   public async createCheckpoint(customReason?: string): Promise<{ committed: boolean; hash?: string }> {
     try {
       await this.configureGitIdentity();
 
-      // Check status
-      const { stdout: status } = await execAsync('git status --porcelain', { cwd: this.workspaceDir });
+      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
       if (!status.trim()) {
         return { committed: false };
       }
 
-      // Stage all changes
-      await execAsync('git add -A', { cwd: this.workspaceDir });
+      await execFileAsync('git', ['add', '-A'], { cwd: this.workspaceDir });
 
       const fileFocus = this.workspaceDir ? path.basename(this.workspaceDir) : 'workspace';
-      const commitMessage = customReason ? `feat: ${customReason}` : `checkpoint: auto snapshot`;
+      const commitMessage = customReason
+        ? `feat: ${customReason.replace(/[\r\n]/g, ' ').slice(0, 200)}`
+        : `checkpoint: auto snapshot (${fileFocus})`;
 
-      // Commit changes with explicit author
-      const gitAuthorStr = `"${this.authorName} <${this.authorEmail}>"`;
-      await execAsync(`git commit --author=${gitAuthorStr} -m "${commitMessage}" --allow-empty`, { cwd: this.workspaceDir });
+      const author = `${this.authorName} <${this.authorEmail}>`;
+      await execFileAsync(
+        'git',
+        ['commit', `--author=${author}`, '-m', commitMessage, '--allow-empty'],
+        { cwd: this.workspaceDir }
+      );
 
-      // Get hash
-      const { stdout: hashRaw } = await execAsync('git rev-parse --short HEAD', { cwd: this.workspaceDir });
+      const { stdout: hashRaw } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], { cwd: this.workspaceDir });
       const hash = hashRaw.trim();
 
       if (this.onCommit) {
@@ -120,12 +106,14 @@ export class AutoCommitEngine {
     }
   }
 
-  /**
-   * Returns commit history for state rollbacks.
-   */
   public async getHistory(limit: number = 10): Promise<Array<{ hash: string; message: string; date: string }>> {
     try {
-      const { stdout } = await execAsync(`git log -n ${limit} --pretty=format:"%h|%s|%cd" --date=short`, { cwd: this.workspaceDir });
+      const n = Number.isFinite(limit) ? Math.min(Math.max(1, Math.floor(limit)), 100) : 10;
+      const { stdout } = await execFileAsync(
+        'git',
+        ['log', '-n', String(n), '--pretty=format:%h|%s|%cd', '--date=short'],
+        { cwd: this.workspaceDir }
+      );
       return stdout.split('\n').filter(Boolean).map(line => {
         const [hash, message, date] = line.split('|');
         return { hash, message, date };
@@ -135,12 +123,13 @@ export class AutoCommitEngine {
     }
   }
 
-  /**
-   * Rollback to a specific commit hash or recent checkpoint.
-   */
   public async rollback(hash: string): Promise<boolean> {
+    if (!/^[0-9a-f]{4,40}$/i.test(hash)) {
+      console.error('⚡ [HyperMemory :: AutoCommit] Rejected rollback: invalid hash');
+      return false;
+    }
     try {
-      await execAsync(`git reset --hard ${hash}`, { cwd: this.workspaceDir });
+      await execFileAsync('git', ['reset', '--hard', hash], { cwd: this.workspaceDir });
       console.log(`⚡ [HyperMemory :: AutoCommit] Successfully rolled back to ${hash}`);
       return true;
     } catch (err) {

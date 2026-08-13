@@ -33,7 +33,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/framesxsab/HyperMemory.git"
+    "url": "git+https://github.com/framesxsab/HyperMemory.git"
   },
   "engines": {
     "node": ">=18"
@@ -53,6 +53,6 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "vitest": "^4.1.10"
   }
 }
