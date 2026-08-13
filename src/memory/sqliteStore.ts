@@ -6,12 +6,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+export type MemoryStatus = 'active' | 'forgotten' | 'superseded';
+
 export interface MemoryRecord {
   id: string;
   category: 'architecture' | 'decision' | 'bug' | 'symbol' | 'general';
   content: string;
   timestamp: string;
   tags?: string[];
+  status?: MemoryStatus;
+  invalidAt?: string;
+  supersedes?: string;
 }
 
 export class SqliteStore {
@@ -52,10 +57,11 @@ export class SqliteStore {
     }
   }
 
-  public set(record: Omit<MemoryRecord, 'timestamp'>): MemoryRecord {
+  public set(record: Omit<MemoryRecord, 'timestamp'> & { timestamp?: string }): MemoryRecord {
     const fullRecord: MemoryRecord = {
       ...record,
-      timestamp: new Date().toISOString()
+      status: record.status ?? 'active',
+      timestamp: record.timestamp ?? new Date().toISOString()
     };
     this.memoryMap.set(fullRecord.id, fullRecord);
     this.saveStore();
@@ -77,6 +83,31 @@ export class SqliteStore {
 
   public getAll(): MemoryRecord[] {
     return Array.from(this.memoryMap.values());
+  }
+
+  public getActive(): MemoryRecord[] {
+    return this.getAll().filter((record) => (record.status ?? 'active') === 'active');
+  }
+
+  public forget(id: string): MemoryRecord | undefined {
+    const existing = this.memoryMap.get(id);
+    if (!existing) return undefined;
+    return this.set({
+      ...existing,
+      status: 'forgotten',
+      invalidAt: new Date().toISOString()
+    });
+  }
+
+  public supersede(id: string, successorId: string): MemoryRecord | undefined {
+    const existing = this.memoryMap.get(id);
+    if (!existing) return undefined;
+    return this.set({
+      ...existing,
+      status: 'superseded',
+      invalidAt: new Date().toISOString(),
+      tags: [...(existing.tags ?? []), `superseded-by:${successorId}`]
+    });
   }
 
   public clear(): void {

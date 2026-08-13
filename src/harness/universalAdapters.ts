@@ -1,10 +1,31 @@
 /**
  * HyperMemory — Universal IDE Rule Adapter Generator
- * Auto-generates and synchronizes rules across Cursor, Claude Code, Windsurf, Copilot, and Antigravity.
+ * Ingests native rule formats already on disk, then auto-injects a HyperMemory
+ * section (Cursor MDC, AGENTS.md, CLAUDE.md, Copilot, Windsurf, Claude JSON).
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+
+export type NativeRuleKind =
+  | 'cursor-mdc'
+  | 'agents-md'
+  | 'claude-md'
+  | 'claude-json'
+  | 'windsurf'
+  | 'copilot'
+  | 'antigravity-skill'
+  | 'cline';
+
+export interface NativeRuleFile {
+  kind: NativeRuleKind;
+  relativePath: string;
+  body: string;
+}
+
+export interface AdapterSyncOptions {
+  contextBlock?: string;
+}
 
 export interface AdapterSyncResult {
   cursor: boolean;
@@ -12,7 +33,53 @@ export interface AdapterSyncResult {
   windsurf: boolean;
   copilot: boolean;
   antigravity: boolean;
+  agents: boolean;
+  ingested: NativeRuleFile[];
   createdFiles: string[];
+}
+
+const START = '<!-- HYPERMEMORY:START -->';
+const END = '<!-- HYPERMEMORY:END -->';
+
+const PROTOCOL = `# HyperMemory AI Agent Harness Protocol
+- **State Harness**: Keep context headers under 1500 tokens. Read Memory.md on session start.
+- **Structural Knowledge**: Query Graphify (graph.json) before writing new modules. Re-use existing components.
+- **Ponytail YAGNI**: Default to NO for unnecessary features. Use standard libraries. Write minimal code.
+- **Auto-Commit Safety**: Work is auto-checkpointed every 3-5m under configured git author.
+`;
+
+function describeKind(kind: NativeRuleKind): string {
+  switch (kind) {
+    case 'cursor-mdc':
+      return 'Cursor MDC';
+    case 'agents-md':
+      return 'AGENTS.md';
+    case 'claude-md':
+      return 'CLAUDE.md';
+    case 'claude-json':
+      return '.claude.json';
+    case 'windsurf':
+      return 'Windsurf';
+    case 'copilot':
+      return 'Copilot';
+    case 'antigravity-skill':
+      return 'Antigravity skill';
+    case 'cline':
+      return 'Cline';
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+export function injectHypermemorySection(existing: string, inner: string): string {
+  const block = `${START}\n${inner.trim()}\n${END}`;
+  if (existing.includes(START) && existing.includes(END)) {
+    return existing.replace(new RegExp(`${START}[\\s\\S]*?${END}`), block);
+  }
+  if (!existing.trim()) return `${block}\n`;
+  return `${existing.trimEnd()}\n\n${block}\n`;
 }
 
 export class UniversalAdaptersEngine {
@@ -22,51 +89,63 @@ export class UniversalAdaptersEngine {
     this.workspaceDir = workspaceDir;
   }
 
-  /**
-   * Auto-generates rules files for all target IDE platforms in the workspace.
-   */
-  public syncAllAdapters(): AdapterSyncResult {
-    const createdFiles: string[] = [];
-
-    const basePrompt = `# HyperMemory AI Agent Harness Protocol
-- **State Harness**: Keep context headers under 1500 tokens. Read Memory.md on session start.
-- **Structural Knowledge**: Query Graphify (graph.json) before writing new modules. Re-use existing components.
-- **Ponytail YAGNI**: Default to NO for unnecessary features. Use standard libraries. Write minimal code.
-- **Auto-Commit Safety**: Work is auto-checkpointed every 3-5m under configured git author.
-`;
-
-    // 1. Cursor IDE (.cursor/rules/hypermemory.mdc)
-    const cursorDir = path.join(this.workspaceDir, '.cursor', 'rules');
-    fs.mkdirSync(cursorDir, { recursive: true });
-    const cursorPath = path.join(cursorDir, 'hypermemory.mdc');
-    fs.writeFileSync(cursorPath, `description: HyperMemory & Ponytail YAGNI agent rules\nglobs: "*"\n---\n${basePrompt}`, 'utf-8');
-    createdFiles.push(cursorPath);
-
-    // 2. Claude Code (.claude.json)
-    const claudePath = path.join(this.workspaceDir, '.claude.json');
-    if (!fs.existsSync(claudePath)) {
-      fs.writeFileSync(claudePath, JSON.stringify({ instructions: basePrompt }, null, 2), 'utf-8');
-      createdFiles.push(claudePath);
+  public ingestNativeRules(): NativeRuleFile[] {
+    const found: NativeRuleFile[] = [];
+    const cursorRulesDir = path.join(this.workspaceDir, '.cursor', 'rules');
+    if (fs.existsSync(cursorRulesDir)) {
+      for (const name of fs.readdirSync(cursorRulesDir)) {
+        if (!name.endsWith('.mdc')) continue;
+        const relativePath = path.join('.cursor', 'rules', name);
+        found.push({
+          kind: 'cursor-mdc',
+          relativePath,
+          body: this.readWorkspaceFile(relativePath)
+        });
+      }
     }
 
-    // 3. Windsurf (.windsurfrules)
-    const windsurfPath = path.join(this.workspaceDir, '.windsurfrules');
-    fs.writeFileSync(windsurfPath, basePrompt, 'utf-8');
-    createdFiles.push(windsurfPath);
+    const singles: Array<{ kind: NativeRuleKind; relativePath: string }> = [
+      { kind: 'agents-md', relativePath: 'AGENTS.md' },
+      { kind: 'claude-md', relativePath: 'CLAUDE.md' },
+      { kind: 'claude-json', relativePath: '.claude.json' },
+      { kind: 'windsurf', relativePath: '.windsurfrules' },
+      { kind: 'copilot', relativePath: path.join('.github', 'copilot-instructions.md') },
+      { kind: 'antigravity-skill', relativePath: path.join('.agents', 'skills', 'hypermemory', 'SKILL.md') },
+      { kind: 'cline', relativePath: '.clinerules' }
+    ];
 
-    // 4. GitHub Copilot (.github/copilot-instructions.md)
-    const copilotDir = path.join(this.workspaceDir, '.github');
-    fs.mkdirSync(copilotDir, { recursive: true });
-    const copilotPath = path.join(copilotDir, 'copilot-instructions.md');
-    fs.writeFileSync(copilotPath, basePrompt, 'utf-8');
-    createdFiles.push(copilotPath);
+    for (const entry of singles) {
+      if (!fs.existsSync(path.join(this.workspaceDir, entry.relativePath))) continue;
+      found.push({
+        kind: entry.kind,
+        relativePath: entry.relativePath,
+        body: this.readWorkspaceFile(entry.relativePath)
+      });
+    }
 
-    // 5. Antigravity / GSD (.agents/skills/hypermemory/SKILL.md)
-    const antigravityDir = path.join(this.workspaceDir, '.agents', 'skills', 'hypermemory');
-    fs.mkdirSync(antigravityDir, { recursive: true });
-    const antigravityPath = path.join(antigravityDir, 'SKILL.md');
-    fs.writeFileSync(antigravityPath, `---\nname: hypermemory\ndescription: Universal IDE Context Harness & Memory Engine\n---\n${basePrompt}`, 'utf-8');
-    createdFiles.push(antigravityPath);
+    return found;
+  }
+
+  /**
+   * Merges HyperMemory into native rule files. Preserves user text outside markers.
+   */
+  public syncAllAdapters(options: AdapterSyncOptions = {}): AdapterSyncResult {
+    const ingested = this.ingestNativeRules();
+    const createdFiles: string[] = [];
+    const inner = this.buildInjectBody(options.contextBlock);
+
+    createdFiles.push(this.writeCursorHypermemoryMdc(inner));
+    createdFiles.push(this.mergeMarkdown('AGENTS.md', inner));
+    createdFiles.push(this.mergeMarkdown('CLAUDE.md', inner));
+    createdFiles.push(this.mergeMarkdown('.windsurfrules', inner));
+    createdFiles.push(this.mergeMarkdown(path.join('.github', 'copilot-instructions.md'), inner, true));
+    createdFiles.push(this.mergeSkill(inner));
+    createdFiles.push(this.mergeClaudeJson(inner));
+
+    const clinePath = path.join(this.workspaceDir, '.clinerules');
+    if (fs.existsSync(clinePath)) {
+      createdFiles.push(this.mergeMarkdown('.clinerules', inner));
+    }
 
     return {
       cursor: true,
@@ -74,7 +153,78 @@ export class UniversalAdaptersEngine {
       windsurf: true,
       copilot: true,
       antigravity: true,
+      agents: true,
+      ingested,
       createdFiles
     };
   }
+
+  private buildInjectBody(contextBlock?: string): string {
+    const extra = contextBlock?.trim()
+      ? `\n## Auto-injected Context Block\n${contextBlock.trim()}\n`
+      : '';
+    return `${PROTOCOL}${extra}`;
+  }
+
+  private writeCursorHypermemoryMdc(inner: string): string {
+    const dir = path.join(this.workspaceDir, '.cursor', 'rules');
+    fs.mkdirSync(dir, { recursive: true });
+    const relativePath = path.join('.cursor', 'rules', 'hypermemory.mdc');
+    const body = `---
+description: HyperMemory & Ponytail YAGNI agent rules
+globs: "*"
+alwaysApply: true
+---
+${inner}`;
+    this.writeWorkspaceFile(relativePath, body);
+    return path.join(this.workspaceDir, relativePath);
+  }
+
+  private mergeMarkdown(relativePath: string, inner: string, ensureParent = false): string {
+    const abs = path.join(this.workspaceDir, relativePath);
+    if (ensureParent) fs.mkdirSync(path.dirname(abs), { recursive: true });
+    const existing = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf-8') : '';
+    this.writeWorkspaceFile(relativePath, injectHypermemorySection(existing, inner));
+    return abs;
+  }
+
+  private mergeSkill(inner: string): string {
+    const relativePath = path.join('.agents', 'skills', 'hypermemory', 'SKILL.md');
+    const abs = path.join(this.workspaceDir, relativePath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    const existing = fs.existsSync(abs)
+      ? fs.readFileSync(abs, 'utf-8')
+      : `---\nname: hypermemory\ndescription: Universal IDE Context Harness & Memory Engine\n---\n`;
+    this.writeWorkspaceFile(relativePath, injectHypermemorySection(existing, inner));
+    return abs;
+  }
+
+  private mergeClaudeJson(inner: string): string {
+    const relativePath = '.claude.json';
+    const abs = path.join(this.workspaceDir, relativePath);
+    let payload: { instructions?: string; [key: string]: unknown } = {};
+    if (fs.existsSync(abs)) {
+      try {
+        payload = JSON.parse(fs.readFileSync(abs, 'utf-8')) as typeof payload;
+      } catch {
+        payload = {};
+      }
+    }
+    const current = typeof payload.instructions === 'string' ? payload.instructions : '';
+    payload.instructions = injectHypermemorySection(current, inner);
+    this.writeWorkspaceFile(relativePath, `${JSON.stringify(payload, null, 2)}\n`);
+    return abs;
+  }
+
+  private readWorkspaceFile(relativePath: string): string {
+    return fs.readFileSync(path.join(this.workspaceDir, relativePath), 'utf-8');
+  }
+
+  private writeWorkspaceFile(relativePath: string, content: string): void {
+    const abs = path.join(this.workspaceDir, relativePath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, 'utf-8');
+  }
 }
+
+export { describeKind };

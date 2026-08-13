@@ -3,6 +3,8 @@
  * Formats terminal/IDE context state headers into rich, compressed prompts for AI agents.
  */
 
+import { HashAnchorEngine } from './hashAnchor.js';
+import { PonytailEngine, type PonytailIntensity } from './ponytail.js';
 import { TokenCompressor } from './tokenCompressor.js';
 
 export interface HarnessState {
@@ -16,25 +18,35 @@ export interface HarnessState {
   modifiedFiles: string[];
   recentDiff?: string;
   memorySummary?: string;
+  contextBlock?: string;
   graphifySummary?: string;
   tokenCeiling?: number;
+  activeFileContent?: string;
+  ponytailIntensity?: PonytailIntensity;
 }
 
 export class OhMyPiHarness {
   private tokenCeiling: number;
+  private ponytail: PonytailEngine;
 
-  constructor(tokenCeiling: number = 1500) {
+  constructor(tokenCeiling: number = 1500, ponytailIntensity: PonytailIntensity = 'full') {
     this.tokenCeiling = tokenCeiling;
+    this.ponytail = new PonytailEngine({ intensity: ponytailIntensity });
   }
 
   /**
    * Generates the structured Oh-My-Pi context header for AI agent prompt injection.
    */
   public generateHeader(state: HarnessState): string {
+    const intensity = state.ponytailIntensity;
+    const ponytail = intensity
+      ? new PonytailEngine({ intensity })
+      : this.ponytail;
+
     const activeFileStr = state.activeFile
       ? `${state.activeFile}${state.cursorLine ? ` (L${state.cursorLine}:C${state.cursorColumn || 1})` : ''}`
       : 'None';
-    
+
     const branchStr = state.gitBranch || 'main';
     const commitStr = state.lastCommitHash
       ? `${state.lastCommitHash.slice(0, 7)} (${state.lastCommitTime || 'recent'})`
@@ -45,27 +57,34 @@ export class OhMyPiHarness {
       : 'Clean';
 
     const compactDiff = TokenCompressor.formatCompactDiff(state.recentDiff || '', 10);
+    const memorySection = state.contextBlock || state.memorySummary || 'Initialized';
+
+    let hashline = '';
+    if (state.activeFile && state.activeFileContent) {
+      const lineCount = state.activeFileContent.split('\n').length;
+      hashline = HashAnchorEngine.formatHashline(state.activeFile, state.activeFileContent, 1, lineCount);
+    }
+
+    const summarizedFocus = state.activeFileContent
+      ? TokenCompressor.summarizeRead(state.activeFileContent, 16)
+      : '';
 
     const rawHeader = `⚡ [HYPERMEMORY :: OH-MY-PI + PONYTAIL HARNESS]
 ┌─ Workspace: ${state.workspaceName} | Branch: ${branchStr} | Checkpoint: ${commitStr}
 ├─ Active Focus: ${activeFileStr}
+├─ Hashline: ${hashline || 'n/a'}
 ├─ Modified Files: [${modifiedStr}]
 ├─ Structural Knowledge: ${state.graphifySummary || 'Graphify Ready'}
-├─ Temporal Memory: ${state.memorySummary || 'Initialized'}
+├─ Temporal Memory: ${memorySection}
 └─ Diff Snapshot:
 ${compactDiff}
-
-🎯 [PONYTAIL YAGNI DECISION LADDER]
-1. Does this feature need to exist at all? (Default NO unless requested)
-2. Re-use existing Graphify codebase components first.
-3. Use standard libraries — zero unnecessary dependencies.
-4. Write minimum working code. Zero fluff, zero over-engineering.
+${summarizedFocus ? `\n[SUMMARIZED READ]\n${summarizedFocus}\n` : ''}
+${ponytail.generatePonytailHeader()}
 
 <STATE_FOCUS>
 Ensure all edits maintain non-blocking execution, adhere to project Rules.md, and preserve persistent Memory.md state.
 </STATE_FOCUS>`;
 
-    // Compress to guarantee budget compliance
     return TokenCompressor.compressText(rawHeader, this.tokenCeiling);
   }
 }

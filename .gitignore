@@ -33,4 +33,10 @@ yarn-error.log*
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+!.vscode/mcp.json
 .idea/
+
+# Local scrape dumps (not product source)
+2026-08-13_*.json
+2026-08-13_*.csv
+

@@ -4,7 +4,7 @@
 > *Combining Supermemory's universal persistence, Graphify's structural AST graph, Oh-My-Pi's real-time prompt harness, Ponytail's YAGNI anti-bloat ladder, Universal IDE Adapters, and 3-5 minute hyperfrequent auto-commit checkpointing.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![CI](https://github.com/framesxsab/HyperMemory/actions/workflows/ci.yml/badge.svg)](https://github.com/framesxsab/HyperMemory/actions/workflows/ci.yml)
 [![Repository](https://img.shields.io/badge/GitHub-framesxsab%2FHyperMemory-blue.svg)](https://github.com/framesxsab/HyperMemory)
 
 ---
@@ -12,6 +12,8 @@
 ## 🌟 Why HyperMemory?
 
 When using AI coding assistants (Cursor, Claude Code, VS Code, Windsurf, Antigravity, GitHub Copilot), agents lose context across chat resets or waste token budgets re-reading whole codebases.
+
+**Add it in one flow:** `npx hypermemory setup` then reload the IDE. Agents get `hypermemory_*` MCP tools with no extra wiring.
 
 **HyperMemory** is the ultimate all-in-one context operating harness:
 
@@ -69,15 +71,49 @@ HyperMemory comes pre-structured with 6 core architectural blueprint files:
 
 ---
 
+## Add to a project (direct access)
+
+One flow. Agents get HyperMemory tools in Cursor, Claude Code, and VS Code.
+
+```bash
+npx hypermemory setup
+```
+
+That command:
+
+1. Injects native rules (`AGENTS.md`, Cursor MDC, `CLAUDE.md`, Copilot, Windsurf)
+2. Writes MCP access files (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) without removing other servers
+3. Initializes local memory + Graphify
+
+Then **reload the IDE** and enable the `hypermemory` MCP server. Agents can call:
+
+`hypermemory_get_context` · `hypermemory_remember` · `hypermemory_query` · `hypermemory_forget` · `hypermemory_context_block` · `hypermemory_inject_adapters` · `hypermemory_checkpoint`
+
+MCP-only (no full setup):
+
+```bash
+npx hypermemory connect
+npx hypermemory status
+```
+
+Claude Code (equivalent):
+
+```bash
+claude mcp add hypermemory -- npx -y hypermemory mcp
+```
+
+---
+
 ## ⚡ Quick Start & Usage
 
-### 1. Installation
+### 1. This repository (maintainers)
 
 ```bash
 git clone https://github.com/framesxsab/HyperMemory.git
 cd HyperMemory
 npm install
 npm run build
+npx hypermemory connect
 ```
 
 ### 2. One-Shot Setup on Any Project
@@ -113,6 +149,15 @@ npx hypermemory rollback <commit_hash>
 ```bash
 npx hypermemory mcp
 ```
+
+### 7. Tests and MemoryBench eval (CI)
+
+```bash
+npm test
+npm run eval
+```
+
+Local recall eval: ≥10 fixture facts, forgotten facts must not leak, active-fact recall ≥ 0.8. No AWS or SageMaker required.
 
 ---
 

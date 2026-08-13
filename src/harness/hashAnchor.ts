@@ -34,4 +34,12 @@ export class HashAnchorEngine {
     const hash = this.computeHash(content);
     return `[ANCHOR:${filePath}#L${startLine}:${hash}]\n${content}\n[/ANCHOR:${hash}]`;
   }
+
+  /**
+   * Oh-My-Pi hashline: path + line range + content hash for conflict-free patches.
+   */
+  public static formatHashline(filePath: string, content: string, startLine: number, endLine: number): string {
+    const hash = this.computeHash(content);
+    return `#H ${filePath} L${startLine}-${endLine} ${hash}`;
+  }
 }

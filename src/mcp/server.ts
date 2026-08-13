@@ -13,14 +13,17 @@ import {
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { OhMyPiHarness } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
+import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 
 export class HyperMemoryMcpServer {
   private server: Server;
   private supermemory: SupermemoryEngine;
   private harness: OhMyPiHarness;
   private autoCommit: AutoCommitEngine;
+  private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
+    this.workspaceDir = workspaceDir;
     this.supermemory = new SupermemoryEngine(workspaceDir);
     this.harness = new OhMyPiHarness(1500);
     this.autoCommit = new AutoCommitEngine({
@@ -95,6 +98,33 @@ export class HyperMemoryMcpServer {
               },
               required: ['query']
             }
+          },
+          {
+            name: 'hypermemory_forget',
+            description: 'Invalidate a memory by id (merge/forget). Forgotten facts drop out of Context Block.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: 'Memory record id' }
+              },
+              required: ['id']
+            }
+          },
+          {
+            name: 'hypermemory_context_block',
+            description: 'Return a token-packed Context Block of dated active facts for the Oh-My-Pi header.',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'hypermemory_inject_adapters',
+            description: 'Ingest native IDE rule files and auto-inject HyperMemory plus the current Context Block.',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -113,7 +143,8 @@ export class HyperMemoryMcpServer {
             activeFile,
             cursorLine,
             modifiedFiles: [],
-            memorySummary: this.supermemory.getSummary()
+            memorySummary: this.supermemory.getSummary(),
+            contextBlock: this.supermemory.getContextBlock()
           });
           return { content: [{ type: 'text', text: header }] };
         }
@@ -141,6 +172,34 @@ export class HyperMemoryMcpServer {
           const query = (args?.query as string) || '';
           const results = this.supermemory.query(query);
           return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        }
+
+        if (name === 'hypermemory_forget') {
+          const id = (args?.id as string) || '';
+          const forgotten = this.supermemory.forget(id);
+          return {
+            content: [{
+              type: 'text',
+              text: forgotten ? `Forgot memory [${forgotten.id}]` : `No memory found for id ${id}`
+            }]
+          };
+        }
+
+        if (name === 'hypermemory_context_block') {
+          return { content: [{ type: 'text', text: this.supermemory.getContextBlock() }] };
+        }
+
+        if (name === 'hypermemory_inject_adapters') {
+          const adapters = new UniversalAdaptersEngine(this.workspaceDir);
+          const result = adapters.syncAllAdapters({
+            contextBlock: this.supermemory.getContextBlock()
+          });
+          return {
+            content: [{
+              type: 'text',
+              text: `Injected ${result.createdFiles.length} adapter files. Ingested ${result.ingested.length} native rules.`
+            }]
+          };
         }
 
         throw new Error(`Unknown tool: ${name}`);

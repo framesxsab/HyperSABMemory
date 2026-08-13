@@ -46,4 +46,19 @@ export class TokenCompressor {
     const summaryTail = lines.slice(-maxLines / 2).join('\n');
     return `${summaryHead}\n... [+${lines.length - maxLines} lines omitted] ...\n${summaryTail}`;
   }
+
+  /**
+   * Summarized file read: keep head/tail lines instead of dumping the whole file.
+   */
+  public static summarizeRead(content: string, maxLines: number = 24): string {
+    if (!content) return '(empty)';
+    const lines = content.split('\n');
+    if (lines.length <= maxLines) return content;
+
+    const headCount = Math.ceil(maxLines * 0.66);
+    const tailCount = maxLines - headCount;
+    const head = lines.slice(0, headCount).join('\n');
+    const tail = lines.slice(-tailCount).join('\n');
+    return `${head}\n... [summarized read: ${lines.length - maxLines} lines omitted] ...\n${tail}`;
+  }
 }

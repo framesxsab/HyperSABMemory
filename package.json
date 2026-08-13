@@ -14,7 +14,9 @@
     "start": "node dist/cli/index.js start",
     "watch": "node dist/cli/index.js watch",
     "mcp": "node dist/cli/index.js mcp",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "vitest run tests/memorybench.test.ts",
+    "prepublishOnly": "npm test && npm run eval && npm run build"
   },
   "keywords": [
     "hypermemory",
@@ -29,6 +31,19 @@
   ],
   "author": "HyperMemory Open Source Community",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/framesxsab/HyperMemory.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "chokidar": "^4.0.1",

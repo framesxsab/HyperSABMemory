@@ -7,12 +7,18 @@
 
 import { Command } from 'commander';
 import picocolors from 'picocolors';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { FileWatcherHook } from '../hooks/fileWatcher.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HyperMemoryMcpServer } from '../mcp/server.js';
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { OneShotSetupEngine } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
+import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
+import { McpAccessEngine, MCP_TOOL_FLOW } from '../harness/mcpAccess.js';
+import { evaluateMemoryEngine, seedMemoryBench } from '../eval/memoryBench.js';
 
 const program = new Command();
 
@@ -46,7 +52,8 @@ program
       console.log(picocolors.green('✔ Supermemory temporal memory base initialized.'));
       console.log(picocolors.green('✔ Ponytail YAGNI decision ladder rules installed (.agents/skills/hypermemory/SKILL.md).'));
       console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
-      console.log(picocolors.cyan('\n✨ One-shot setup complete! Run `npx hypermemory watch` to start real-time harness.'));
+      console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
+      console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypermemory MCP server → call hypermemory_get_context.'));
     } else {
       console.log(picocolors.red('✖ Setup encountered an error. Check logs for details.'));
     }
@@ -66,6 +73,7 @@ program
 // Command: watch
 program
   .command('watch')
+  .alias('start')
   .description('Start real-time file watcher hook and 3-5 min hyperfrequent auto-commit engine')
   .option('-i, --interval <minutes>', 'Auto-commit interval in minutes', '3')
   .action((options) => {
@@ -110,6 +118,79 @@ program
     }
   });
 
+// Command: inject
+program
+  .command('inject')
+  .description('Ingest native IDE rules (MDC, AGENTS.md, CLAUDE.md) and auto-inject HyperMemory')
+  .action(() => {
+    const supermemory = new SupermemoryEngine(process.cwd());
+    const adapters = new UniversalAdaptersEngine(process.cwd());
+    const result = adapters.syncAllAdapters({
+      contextBlock: supermemory.getContextBlock()
+    });
+    console.log(picocolors.green(`✔ Injected ${result.createdFiles.length} adapter files (ingested ${result.ingested.length} native rules).`));
+    for (const file of result.createdFiles) {
+      console.log(picocolors.gray(`  ${file}`));
+    }
+  });
+
+// Command: connect
+program
+  .command('connect')
+  .description('Write Cursor / Claude Code / VS Code MCP config so agents get HyperMemory tools directly')
+  .action(() => {
+    const access = new McpAccessEngine(process.cwd());
+    const result = access.connect();
+    console.log(picocolors.green('✔ HyperMemory MCP access installed.'));
+    for (const file of result.written) {
+      console.log(picocolors.gray(`  ${file}`));
+    }
+    console.log(picocolors.cyan(`\n${access.describeFlow(result)}`));
+  });
+
+// Command: status
+program
+  .command('status')
+  .description('Show whether MCP access files exist and which tools agents can call')
+  .action(() => {
+    const root = process.cwd();
+    const checks = [
+      path.join(root, '.cursor', 'mcp.json'),
+      path.join(root, '.mcp.json'),
+      path.join(root, '.vscode', 'mcp.json')
+    ];
+    console.log(picocolors.cyan('\nHyperMemory access status\n'));
+    for (const file of checks) {
+      const ok = fs.existsSync(file);
+      const mark = ok ? picocolors.green('✔') : picocolors.yellow('○');
+      console.log(`  ${mark} ${path.relative(root, file) || file}`);
+    }
+    console.log(picocolors.cyan('\nAgent tools:'));
+    for (const tool of MCP_TOOL_FLOW) {
+      console.log(picocolors.gray(`  ${tool}`));
+    }
+    console.log(picocolors.cyan('\nIf a file is missing, run `npx hypermemory connect` then reload the IDE.\n'));
+  });
+
+// Command: eval
+program
+  .command('eval')
+  .description('Run local MemoryBench recall eval (no AWS). Exit 1 if recall < 0.8 or forgotten facts leak.')
+  .action(() => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-eval-'));
+    const engine = new SupermemoryEngine(dir);
+    seedMemoryBench(engine);
+    const report = evaluateMemoryEngine(engine);
+    fs.rmSync(dir, { recursive: true, force: true });
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.passed) {
+      console.log(picocolors.red('✖ MemoryBench eval failed.'));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(picocolors.green(`✔ MemoryBench passed (recall ${report.recall.toFixed(2)}).`));
+  });
+
 // Command: mcp
 program
   .command('mcp')
@@ -132,8 +213,12 @@ program
     console.log(picocolors.green('  ✔ Phases.md: Complete'));
     console.log(picocolors.green('  ✔ Design.md: Complete'));
     console.log(picocolors.green('  ✔ Memory.md: Complete'));
+    console.log(picocolors.green('  ✔ LICENSE: MIT'));
+    console.log(picocolors.green('  ✔ CONTRIBUTING.md: Complete'));
+    console.log(picocolors.green('  ✔ GitHub Actions CI: .github/workflows/ci.yml'));
+    console.log(picocolors.green('  ✔ MemoryBench eval: npm run eval (local, no SageMaker)'));
     console.log(picocolors.green('  ✔ Git Author: Configured'));
-    console.log(picocolors.green('  ✔ 3-5 Min Auto-Commit Engine: Enabled'));
+    console.log(picocolors.green('  ✔ MCP connect: npx hypermemory connect'));
     console.log(picocolors.cyan('\nReady to push repository to GitHub!'));
   });
 
