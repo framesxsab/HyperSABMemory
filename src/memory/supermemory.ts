@@ -47,8 +47,17 @@ export class SupermemoryEngine {
   /**
    * Searches persistent memory records by query (active facts only).
    */
-  public query(searchTerm: string): MemoryRecord[] {
-    return this.store.search(searchTerm).filter((record) => (record.status ?? 'active') === 'active');
+  public query(searchTerm: string, limit: number = 25): MemoryRecord[] {
+    return this.store.search(searchTerm)
+      .filter((record) => (record.status ?? 'active') === 'active')
+      .slice(0, limit);
+  }
+
+  /**
+   * Returns all active memory records (unranked) for corpus-level scoring.
+   */
+  public getActive(): MemoryRecord[] {
+    return this.store.getActive();
   }
 
   /**

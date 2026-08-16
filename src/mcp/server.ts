@@ -12,6 +12,7 @@ import {
 
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { GraphifyEngine } from '../memory/graphify.js';
+import { HybridSearchEngine } from '../memory/hybridSearch.js';
 import { OhMyPiHarness } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
@@ -24,6 +25,7 @@ export class HyperMemoryMcpServer {
   private harness: OhMyPiHarness;
   private autoCommit: AutoCommitEngine;
   private graphify: GraphifyEngine;
+  private hybridSearch: HybridSearchEngine;
   private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
@@ -34,6 +36,7 @@ export class HyperMemoryMcpServer {
       workspaceDir
     });
     this.graphify = new GraphifyEngine(workspaceDir);
+    this.hybridSearch = new HybridSearchEngine(workspaceDir);
 
     this.server = new Server(
       {
@@ -99,7 +102,8 @@ export class HyperMemoryMcpServer {
             inputSchema: {
               type: 'object',
               properties: {
-                query: { type: 'string', description: 'Search terms' }
+                query: { type: 'string', description: 'Search terms' },
+                limit: { type: 'number', description: 'Max results (default 10)' }
               },
               required: ['query']
             }
@@ -195,7 +199,8 @@ export class HyperMemoryMcpServer {
 
         if (name === 'hypermemory_query') {
           const query = (args?.query as string) || '';
-          const results = this.supermemory.query(query);
+          const limit = Number.isFinite(args?.limit) ? (args?.limit as number) : 10;
+          const results = this.hybridSearch.searchRecords(query, limit);
           return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
         }
 
