@@ -26,6 +26,8 @@ export class FileWatcherHook {
   private autoCommit: AutoCommitEngine;
   private modifiedFiles: Set<string> = new Set();
   private lastStateHeader: string = '';
+  private lastRememberAt: Map<string, number> = new Map();
+  private static readonly REMEMBER_COOLDOWN_MS = 30_000;
 
   constructor(options: FileWatcherOptions = {}) {
     this.workspaceDir = options.workspaceDir || process.cwd();
@@ -85,8 +87,13 @@ export class FileWatcherHook {
     const relativePath = path.relative(this.workspaceDir, filePath);
     this.modifiedFiles.add(relativePath);
 
-    // Record event in Supermemory
-    this.supermemory.remember('architecture', `File ${type}: ${relativePath}`);
+    // Debounce memory records: one architecture fact per file per 30s window
+    const now = Date.now();
+    const lastRemember = this.lastRememberAt.get(relativePath) ?? 0;
+    if (now - lastRemember >= FileWatcherHook.REMEMBER_COOLDOWN_MS) {
+      this.supermemory.remember('architecture', `File ${type}: ${relativePath}`);
+      this.lastRememberAt.set(relativePath, now);
+    }
 
     // Update state header
     const state: HarnessState = {
