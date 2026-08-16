@@ -11,15 +11,19 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { SupermemoryEngine } from '../memory/supermemory.js';
+import { GraphifyEngine } from '../memory/graphify.js';
 import { OhMyPiHarness } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class HyperMemoryMcpServer {
   private server: Server;
   private supermemory: SupermemoryEngine;
   private harness: OhMyPiHarness;
   private autoCommit: AutoCommitEngine;
+  private graphify: GraphifyEngine;
   private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
@@ -29,6 +33,7 @@ export class HyperMemoryMcpServer {
     this.autoCommit = new AutoCommitEngine({
       workspaceDir
     });
+    this.graphify = new GraphifyEngine(workspaceDir);
 
     this.server = new Server(
       {
@@ -136,15 +141,35 @@ export class HyperMemoryMcpServer {
 
       try {
         if (name === 'hypermemory_get_context') {
-          const activeFile = (args?.activeFile as string) || 'None';
+          const activeFile = (args?.activeFile as string) || '';
           const cursorLine = (args?.cursorLine as number) || 1;
+
+          let activeFileContent: string | undefined;
+          if (activeFile) {
+            const filePath = path.join(this.workspaceDir, activeFile);
+            if (fs.existsSync(filePath)) {
+              try {
+                activeFileContent = fs.readFileSync(filePath, 'utf-8').split('\n').slice(0, 200).join('\n');
+              } catch {
+                activeFileContent = undefined;
+              }
+            }
+          }
+
+          const snapshot = await this.autoCommit.getSnapshot();
           const header = this.harness.generateHeader({
-            workspaceName: 'HyperMemory',
-            activeFile,
+            workspaceName: path.basename(this.workspaceDir),
+            activeFile: activeFile || undefined,
             cursorLine,
-            modifiedFiles: [],
+            gitBranch: snapshot.gitBranch,
+            lastCommitHash: snapshot.lastCommitHash,
+            lastCommitTime: snapshot.lastCommitTime,
+            modifiedFiles: snapshot.modifiedFiles,
+            recentDiff: snapshot.recentDiff,
             memorySummary: this.supermemory.getSummary(),
-            contextBlock: this.supermemory.getContextBlock()
+            contextBlock: this.supermemory.getContextBlock(),
+            graphifySummary: this.graphify.getGraphSummary(),
+            activeFileContent
           });
           return { content: [{ type: 'text', text: header }] };
         }

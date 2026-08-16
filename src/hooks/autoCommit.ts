@@ -18,6 +18,14 @@ export interface AutoCommitOptions {
   onError?: (error: Error) => void;
 }
 
+export interface WorkspaceSnapshot {
+  gitBranch?: string;
+  lastCommitHash?: string;
+  lastCommitTime?: string;
+  modifiedFiles: string[];
+  recentDiff?: string;
+}
+
 export class AutoCommitEngine {
   private intervalMs: number;
   private workspaceDir: string;
@@ -121,6 +129,47 @@ export class AutoCommitEngine {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Gathers a lightweight live git snapshot for the Oh-My-Pi context header.
+   * Every call is independent (no shared state) and degrades to placeholders in
+   * non-git or failed-git workspaces.
+   */
+  public async getSnapshot(): Promise<WorkspaceSnapshot> {
+    const snapshot: WorkspaceSnapshot = { modifiedFiles: [] };
+
+    try {
+      const [{ stdout: branchRaw }, { stdout: hashRaw }, { stdout: timeRaw }] = await Promise.all([
+        execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: this.workspaceDir }),
+        execFileAsync('git', ['rev-parse', '--short', 'HEAD'], { cwd: this.workspaceDir }),
+        execFileAsync('git', ['log', '-1', '--format=%cd', '--date=short'], { cwd: this.workspaceDir })
+      ]);
+      snapshot.gitBranch = branchRaw.trim();
+      snapshot.lastCommitHash = hashRaw.trim();
+      snapshot.lastCommitTime = timeRaw.trim();
+    } catch {
+      // Not a git repo or git unavailable — degrade to placeholders
+    }
+
+    try {
+      const { stdout: statusRaw } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
+      snapshot.modifiedFiles = statusRaw
+        .split('\n')
+        .filter(Boolean)
+        .map(line => line.slice(3).trim());
+    } catch {
+      snapshot.modifiedFiles = [];
+    }
+
+    try {
+      const { stdout: diffRaw } = await execFileAsync('git', ['diff', '--stat'], { cwd: this.workspaceDir });
+      snapshot.recentDiff = diffRaw.trim().split('\n').slice(0, 10).join('\n') || undefined;
+    } catch {
+      snapshot.recentDiff = undefined;
+    }
+
+    return snapshot;
   }
 
   public async rollback(hash: string): Promise<boolean> {
