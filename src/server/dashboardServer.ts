@@ -26,7 +26,7 @@ export class DashboardServer {
     this.autoCommit = new AutoCommitEngine({
       workspaceDir
     });
-    this.hybridSearch = new HybridSearchEngine(workspaceDir);
+    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
   }
 
   /**

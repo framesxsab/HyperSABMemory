@@ -31,9 +31,9 @@ export class HybridSearchEngine {
   private supermemory: SupermemoryEngine;
   private graphify: GraphifyEngine;
 
-  constructor(workspaceDir: string = process.cwd()) {
-    this.supermemory = new SupermemoryEngine(workspaceDir);
-    this.graphify = new GraphifyEngine(workspaceDir);
+  constructor(workspaceDir: string = process.cwd(), supermemory?: SupermemoryEngine, graphify?: GraphifyEngine) {
+    this.supermemory = supermemory ?? new SupermemoryEngine(workspaceDir);
+    this.graphify = graphify ?? new GraphifyEngine(workspaceDir);
   }
 
   /**

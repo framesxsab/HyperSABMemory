@@ -36,7 +36,7 @@ export class HyperMemoryMcpServer {
       workspaceDir
     });
     this.graphify = new GraphifyEngine(workspaceDir);
-    this.hybridSearch = new HybridSearchEngine(workspaceDir);
+    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
 
     this.server = new Server(
       {
