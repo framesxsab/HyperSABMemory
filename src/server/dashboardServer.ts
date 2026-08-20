@@ -1,13 +1,20 @@
 /**
  * HyperMemory — Live Web Dashboard & Local API Server
  * Hosts a zero-latency Web Visualizer at http://localhost:4321
+ * Exposes status, hybrid search, git history, live Oh-My-Pi context header,
+ * Graphify graph data, and guarded rollback.
  */
 
 import * as http from 'http';
+import * as path from 'path';
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { GraphifyEngine } from '../memory/graphify.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { OhMyPiHarness } from '../harness/ohMyPi.js';
+import { TokenCompressor } from '../harness/tokenCompressor.js';
+
+const TOKEN_CEILING = 1500;
 
 export class DashboardServer {
   private port: number;
@@ -17,6 +24,7 @@ export class DashboardServer {
   private graphify: GraphifyEngine;
   private autoCommit: AutoCommitEngine;
   private hybridSearch: HybridSearchEngine;
+  private harness: OhMyPiHarness;
 
   constructor(port: number = 4321, workspaceDir: string = process.cwd()) {
     this.port = port;
@@ -27,12 +35,39 @@ export class DashboardServer {
       workspaceDir
     });
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
+    this.harness = new OhMyPiHarness(TOKEN_CEILING);
   }
 
   /**
-   * Starts the HTTP dashboard server.
+   * Builds a live Oh-My-Pi header (same shape as MCP hypermemory_get_context).
    */
-  public start(): Promise<void> {
+  private async buildLiveHeader(): Promise<string> {
+    const snapshot = await this.autoCommit.getSnapshot();
+    return this.harness.generateHeader({
+      workspaceName: path.basename(this.workspaceDir),
+      modifiedFiles: snapshot.modifiedFiles,
+      gitBranch: snapshot.gitBranch,
+      lastCommitHash: snapshot.lastCommitHash,
+      lastCommitTime: snapshot.lastCommitTime,
+      recentDiff: snapshot.recentDiff,
+      memorySummary: this.supermemory.getSummary(),
+      contextBlock: this.supermemory.getContextBlock(),
+      graphifySummary: this.graphify.getGraphSummary()
+    });
+  }
+
+  private readBody(req: http.IncomingMessage): Promise<string> {
+    return new Promise((resolve) => {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString('utf-8'); });
+      req.on('end', () => resolve(body));
+    });
+  }
+
+  /**
+   * Starts the HTTP dashboard server. Resolves with the bound port.
+   */
+  public start(): Promise<number> {
     return new Promise((resolve) => {
       this.server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', `http://localhost:${this.port}`);
@@ -77,6 +112,44 @@ export class DashboardServer {
           return;
         }
 
+        // Endpoint: /api/context (live Oh-My-Pi header + token meter)
+        if (url.pathname === '/api/context') {
+          const header = await this.buildLiveHeader();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            header,
+            tokens: TokenCompressor.estimateTokens(header),
+            ceiling: TOKEN_CEILING
+          }));
+          return;
+        }
+
+        // Endpoint: /api/graph (Graphify nodes + derived dependency edges)
+        if (url.pathname === '/api/graph') {
+          const data = this.graphify.getGraphData();
+          const edges = data.nodes.flatMap((node) =>
+            (node.dependencies ?? []).map((dep) => ({ source: node.name, target: dep }))
+          );
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ nodes: data.nodes, edges }));
+          return;
+        }
+
+        // Endpoint: POST /api/rollback (guarded; bound to 127.0.0.1 only)
+        if (url.pathname === '/api/rollback' && req.method === 'POST') {
+          const body = await this.readBody(req);
+          try {
+            const parsed = JSON.parse(body || '{}') as { hash?: string };
+            const ok = parsed.hash ? await this.autoCommit.rollback(parsed.hash) : false;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok }));
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Invalid request body' }));
+          }
+          return;
+        }
+
         // Endpoint: / (HTML Dashboard)
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!DOCTYPE html>
@@ -92,6 +165,16 @@ export class DashboardServer {
     .card { background: #161C2E; border: 1px solid #1E293B; border-radius: 8px; padding: 20px; }
     .card h3 { color: #00F0FF; margin-top: 0; }
     pre { background: #0F172A; padding: 12px; border-radius: 6px; overflow-x: auto; color: #38BDF8; font-size: 13px; }
+    .meter-wrap { background: #0F172A; border-radius: 6px; height: 14px; overflow: hidden; margin-top: 10px; }
+    .meter-bar { background: #00F0FF; height: 100%; width: 0%; transition: width 0.4s ease; }
+    .graph-list { list-style: none; padding: 0; margin: 0; max-height: 240px; overflow-y: auto; }
+    .graph-list li { padding: 6px 8px; border-bottom: 1px solid #1E293B; font-size: 13px; }
+    .graph-list .type { color: #00F0FF; font-size: 11px; text-transform: uppercase; margin-right: 6px; }
+    .history-list { list-style: none; padding: 0; margin: 0; max-height: 240px; overflow-y: auto; }
+    .history-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border-bottom: 1px solid #1E293B; font-size: 13px; }
+    .history-list code { color: #38BDF8; }
+    button.rollback { background: #7F1D1D; color: #FCA5A5; border: 1px solid #991B1B; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    button.rollback:hover { background: #991B1B; }
   </style>
 </head>
 <body>
@@ -101,8 +184,14 @@ export class DashboardServer {
   </div>
   <div class="card-grid">
     <div class="card">
+      <h3>⚡ Oh-My-Pi Token Meter</h3>
+      <p id="token-meter">Loading live context header...</p>
+      <div class="meter-wrap"><div class="meter-bar" id="token-bar"></div></div>
+    </div>
+    <div class="card">
       <h3>🕸️ Graphify Structural Graph</h3>
       <p id="graphify-status">Loading Graphify AST Nodes...</p>
+      <ul class="graph-list" id="graph-list"></ul>
     </div>
     <div class="card">
       <h3>🧠 Supermemory Persistent Base</h3>
@@ -110,7 +199,7 @@ export class DashboardServer {
     </div>
     <div class="card">
       <h3>🕒 Git Auto-Commit Timeline</h3>
-      <pre id="history-log">Fetching git checkpoints...</pre>
+      <ul class="history-list" id="history-log">Fetching git checkpoints...</ul>
     </div>
   </div>
   <script>
@@ -119,20 +208,65 @@ export class DashboardServer {
       const data = await res.json();
       document.getElementById('graphify-status').textContent = data.graphify;
       document.getElementById('supermemory-status').textContent = data.supermemory;
-
-      const histRes = await fetch('/api/history');
-      const history = await histRes.json();
-      document.getElementById('history-log').textContent = history.map(h => \`[\${h.hash}] \${h.message}\`).join('\\n');
+    }
+    async function loadContext() {
+      const res = await fetch('/api/context');
+      const data = await res.json();
+      document.getElementById('token-meter').textContent = '⚡ [' + data.tokens + ' / ' + data.ceiling + ' tokens]';
+      document.getElementById('token-bar').style.width = Math.min(100, (data.tokens / data.ceiling) * 100) + '%';
+    }
+    async function loadGraph() {
+      const res = await fetch('/api/graph');
+      const data = await res.json();
+      const list = document.getElementById('graph-list');
+      if (!data.nodes || data.nodes.length === 0) {
+        list.innerHTML = '<li>No graph.json found. Run <code>graphify .</code> to index.</li>';
+        return;
+      }
+      list.innerHTML = data.nodes.slice(0, 100).map(function (node) {
+        const deps = (node.dependencies || []).join(', ');
+        return '<li><span class="type">' + node.type + '</span>' + node.name + (deps ? ' <span style="color:#64748B">→ ' + deps + '</span>' : '') + '</li>';
+      }).join('');
+    }
+    async function loadHistory() {
+      const res = await fetch('/api/history');
+      const history = await res.json();
+      const list = document.getElementById('history-log');
+      if (!history || history.length === 0) {
+        list.innerHTML = '<li>No checkpoints yet.</li>';
+        return;
+      }
+      list.innerHTML = history.map(function (h) {
+        return '<li><span><code>' + h.hash + '</code> ' + h.message + ' <span style="color:#64748B">(' + h.date + ')</span></span>' +
+          '<button class="rollback" onclick="rollback(\'' + h.hash + '\')">↩ Rollback</button></li>';
+      }).join('');
+    }
+    async function rollback(hash) {
+      if (!confirm('Hard reset workspace to checkpoint ' + hash + '? This discards uncommitted changes.')) return;
+      const res = await fetch('/api/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hash: hash })
+      });
+      const data = await res.json();
+      alert(data.ok ? 'Rolled back to ' + hash : 'Rollback failed (invalid hash or git error).');
+      loadHistory();
     }
     loadData();
+    loadContext();
+    loadGraph();
+    loadHistory();
+    setInterval(loadContext, 5000);
   </script>
 </body>
 </html>`);
       });
 
       this.server.listen(this.port, '127.0.0.1', () => {
-        console.log(`⚡ [HyperMemory :: Dashboard] Server running at http://127.0.0.1:${this.port}`);
-        resolve();
+        const addr = this.server?.address();
+        const boundPort = typeof addr === 'object' && addr ? addr.port : this.port;
+        console.log(`⚡ [HyperMemory :: Dashboard] Server running at http://127.0.0.1:${boundPort}`);
+        resolve(boundPort);
       });
     });
   }

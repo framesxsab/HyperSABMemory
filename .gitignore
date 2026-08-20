@@ -40,3 +40,7 @@ Thumbs.db
 2026-08-13_*.json
 2026-08-13_*.csv
 
+# Local tooling state (OMO team config, Cursor hook state)
+.omo/
+.cursor/hooks/
+

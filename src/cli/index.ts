@@ -76,7 +76,9 @@ program
   .alias('start')
   .description('Start real-time file watcher hook and 3-5 min hyperfrequent auto-commit engine')
   .option('-i, --interval <minutes>', 'Auto-commit interval in minutes', '3')
-  .action((options) => {
+  .option('-d, --dashboard', 'Also launch the live web dashboard at http://localhost:4321')
+  .option('-p, --port <port>', 'Dashboard port (with --dashboard)', '4321')
+  .action(async (options) => {
     const minutes = parseInt(options.interval, 10);
     console.log(picocolors.cyan(`⚡ [HyperMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
     const hook = new FileWatcherHook({
@@ -84,6 +86,11 @@ program
       autoCommitIntervalMinutes: minutes
     });
     hook.start();
+    if (options.dashboard) {
+      const port = parseInt(options.port, 10);
+      const server = new DashboardServer(port, process.cwd());
+      await server.start();
+    }
   });
 
 // Command: checkpoint

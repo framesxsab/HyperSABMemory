@@ -51,11 +51,16 @@ npx hypermemory status
 
 ```bash
 npx hypermemory watch --interval 3    # file watcher + 3–5 min checkpoints
-npx hypermemory dashboard             # http://127.0.0.1:4321 (localhost only)
+npx hypermemory watch --dashboard     # watcher + live dashboard in one process
+npx hypermemory dashboard             # dashboard only — http://127.0.0.1:4321 (localhost only)
 npx hypermemory checkpoint "reason"   # manual snapshot
 npx hypermemory rollback <hash>       # hard reset to a checkpoint hash
 npx hypermemory mcp                   # stdio MCP server (used by the IDE)
 ```
+
+The dashboard shows a live Oh-My-Pi token meter, Graphify structural graph,
+Supermemory status, and a git checkpoint timeline with 1-click rollback
+(guarded — binds to `127.0.0.1` only).
 
 Checkpoints stay **local**. HyperMemory does not `git push`.
 
