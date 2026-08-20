@@ -19,6 +19,7 @@ export interface FileWatcherOptions {
 
 export class FileWatcherHook {
   private workspaceDir: string;
+  private options: FileWatcherOptions;
   private watcher: FSWatcher | null = null;
   private supermemory: SupermemoryEngine;
   private graphify: GraphifyEngine;
@@ -30,6 +31,7 @@ export class FileWatcherHook {
   private static readonly REMEMBER_COOLDOWN_MS = 30_000;
 
   constructor(options: FileWatcherOptions = {}) {
+    this.options = options;
     this.workspaceDir = options.workspaceDir || process.cwd();
     this.supermemory = new SupermemoryEngine(this.workspaceDir);
     this.graphify = new GraphifyEngine(this.workspaceDir);
@@ -38,6 +40,14 @@ export class FileWatcherHook {
       workspaceDir: this.workspaceDir,
       intervalMinutes: options.autoCommitIntervalMinutes || parseInt(process.env.HYPERMEMORY_COMMIT_INTERVAL || '3', 10)
     });
+  }
+
+  /**
+   * Matches a normalized (forward-slash) path against an ignore glob such as node_modules under any directory.
+   */
+  private matchesGlob(normalized: string, pattern: string): boolean {
+    const core = pattern.replace(/^\*\*\//, '').replace(/\/\*\*$/, '');
+    return normalized.includes(`/${core}/`) || normalized.endsWith(`/${core}`);
   }
 
   /**
@@ -53,7 +63,14 @@ export class FileWatcherHook {
     ];
 
     this.watcher = chokidar.watch(this.workspaceDir, {
-      ignored: defaultIgnored,
+      // Function matcher normalizes Windows backslashes so ignore globs actually match.
+      ignored: (filePath: string) => {
+        const normalized = filePath.split(path.sep).join('/');
+        if (defaultIgnored.some((pattern) => this.matchesGlob(normalized, pattern))) return true;
+        return (this.options.ignoredPatterns ?? []).some((pattern) =>
+          typeof pattern === 'string' ? normalized.includes(pattern) : pattern.test(normalized)
+        );
+      },
       persistent: true,
       ignoreInitial: true
     });
