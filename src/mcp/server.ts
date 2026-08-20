@@ -13,6 +13,7 @@ import {
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { GraphifyEngine } from '../memory/graphify.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { OhMyPiHarness } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
@@ -26,6 +27,7 @@ export class HyperMemoryMcpServer {
   private autoCommit: AutoCommitEngine;
   private graphify: GraphifyEngine;
   private hybridSearch: HybridSearchEngine;
+  private swarm: SwarmMeshEngine;
   private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
@@ -37,6 +39,7 @@ export class HyperMemoryMcpServer {
     });
     this.graphify = new GraphifyEngine(workspaceDir);
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
+    this.swarm = new SwarmMeshEngine(workspaceDir);
 
     this.server = new Server(
       {
@@ -134,6 +137,41 @@ export class HyperMemoryMcpServer {
               type: 'object',
               properties: {}
             }
+          },
+          {
+            name: 'hypermemory_broadcast',
+            description: 'Broadcast a fact or finding to the shared swarm mesh so parallel subagents stop duplicating work.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'The finding or fact to share' },
+                category: { type: 'string', description: 'Optional category tag' }
+              },
+              required: ['message']
+            }
+          },
+          {
+            name: 'hypermemory_claim_task',
+            description: 'Acquire or release an exclusive lock on a file so concurrent agents do not edit it simultaneously.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filePath: { type: 'string', description: 'File path relative to workspace' },
+                action: { type: 'string', enum: ['acquire', 'release'], description: 'acquire (default) or release the lock' },
+                ttlMinutes: { type: 'number', description: 'Lock lifetime in minutes (default 10)' }
+              },
+              required: ['filePath']
+            }
+          },
+          {
+            name: 'hypermemory_sync_swarm',
+            description: 'Return active swarm state: live file locks, recent broadcasts, and this caller session id.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                sessionId: { type: 'string', description: 'Optional explicit caller session id' }
+              }
+            }
           }
         ]
       };
@@ -228,6 +266,50 @@ export class HyperMemoryMcpServer {
             content: [{
               type: 'text',
               text: `Injected ${result.createdFiles.length} adapter files. Ingested ${result.ingested.length} native rules.`
+            }]
+          };
+        }
+
+        if (name === 'hypermemory_broadcast') {
+          const message = (args?.message as string) || '';
+          if (!message.trim()) {
+            return { content: [{ type: 'text', text: 'Error: message is required' }], isError: true };
+          }
+          const broadcast = this.swarm.broadcast(undefined, message, (args?.category as string) || undefined);
+          return {
+            content: [{
+              type: 'text',
+              text: `Broadcast [${broadcast.id}] shared to swarm: ${broadcast.message}`
+            }]
+          };
+        }
+
+        if (name === 'hypermemory_claim_task') {
+          const filePath = (args?.filePath as string) || '';
+          if (!filePath) {
+            return { content: [{ type: 'text', text: 'Error: filePath is required' }], isError: true };
+          }
+          const action = (args?.action as string) || 'acquire';
+          const ttlMs = Number.isFinite(args?.ttlMinutes) ? (args?.ttlMinutes as number) * 60_000 : undefined;
+          const result = action === 'release'
+            ? this.swarm.releaseFile(undefined, filePath)
+            : this.swarm.claimFile(undefined, filePath, ttlMs);
+          return {
+            content: [{
+              type: 'text',
+              text: result.ok
+                ? `Lock ${action === 'release' ? 'released' : 'acquired'} on ${filePath}`
+                : `Lock denied on ${filePath}: ${result.reason}${result.heldBy ? ` (held by ${result.heldBy})` : ''}`
+            }]
+          };
+        }
+
+        if (name === 'hypermemory_sync_swarm') {
+          const snapshot = this.swarm.sync((args?.sessionId as string) || undefined);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(snapshot, null, 2)
             }]
           };
         }

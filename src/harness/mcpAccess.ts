@@ -48,7 +48,10 @@ export const MCP_TOOL_FLOW = [
   'hypermemory_forget',
   'hypermemory_context_block',
   'hypermemory_inject_adapters',
-  'hypermemory_checkpoint'
+  'hypermemory_checkpoint',
+  'hypermemory_broadcast',
+  'hypermemory_claim_task',
+  'hypermemory_sync_swarm'
 ];
 
 export class McpAccessEngine {

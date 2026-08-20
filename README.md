@@ -46,6 +46,9 @@ npx hypermemory status
 | `hypermemory_context_block` | Packed dated facts for the prompt |
 | `hypermemory_inject_adapters` | Re-sync native rule files |
 | `hypermemory_checkpoint` | Git snapshot of the working tree |
+| `hypermemory_broadcast` | Share a finding with the swarm mesh (parallel subagents) |
+| `hypermemory_claim_task` | Acquire/release an exclusive file lock |
+| `hypermemory_sync_swarm` | Pull live locks + broadcasts + your session id |
 
 ## Everyday commands
 
