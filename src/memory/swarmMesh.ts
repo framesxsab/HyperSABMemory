@@ -1,5 +1,5 @@
 /**
- * HyperMemory — Swarm Shared Memory Mesh
+ * HyperSABMemory — Swarm Shared Memory Mesh
  * Shared cross-agent state (broadcasts + file locks) for parallel subagents,
  * persisted to a local JSON file. Zero dependencies, single-process MCP.
  */
@@ -57,7 +57,7 @@ export class SwarmMeshEngine {
   private now: () => Date;
 
   constructor(workspaceDir: string, options: SwarmMeshOptions = {}) {
-    this.swarmStatePath = path.join(workspaceDir, '.hypermemory', 'swarm_state.json');
+    this.swarmStatePath = path.join(workspaceDir, '.hypersabmemory', 'swarm_state.json');
     this.broadcastTtlMs = options.broadcastTtlMs ?? DEFAULT_BROADCAST_TTL_MS;
     this.lockTtlMs = options.lockTtlMs ?? DEFAULT_LOCK_TTL_MS;
     this.now = options.now ?? (() => new Date());
@@ -86,7 +86,7 @@ export class SwarmMeshEngine {
     try {
       fs.writeFileSync(this.swarmStatePath, JSON.stringify(this.state, null, 2), 'utf-8');
     } catch (err) {
-      console.error('[HyperMemory :: SwarmMesh] Failed to write swarm state:', err);
+      console.error('[HyperSABMemory :: SwarmMesh] Failed to write swarm state:', err);
     }
   }
 

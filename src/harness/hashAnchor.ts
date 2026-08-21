@@ -1,5 +1,5 @@
 /**
- * HyperMemory — Hash-Anchored Edit Engine (oh-my-pi baseline)
+ * HyperSABMemory — Hash-Anchored Edit Engine (context harness baseline)
  * Computes content hashes for files and blocks to ensure conflict-free, precise state edits.
  */
 
@@ -36,7 +36,7 @@ export class HashAnchorEngine {
   }
 
   /**
-   * Oh-My-Pi hashline: path + line range + content hash for conflict-free patches.
+   * Context harness hashline: path + line range + content hash for conflict-free patches.
    */
   public static formatHashline(filePath: string, content: string, startLine: number, endLine: number): string {
     const hash = this.computeHash(content);

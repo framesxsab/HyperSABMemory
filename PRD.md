@@ -1,9 +1,9 @@
-# HyperMemory — Product Requirements Document (PRD)
+# HyperSABMemory — Product Requirements Document (PRD)
 
 ## 1. Product Vision & Overview
-**HyperMemory** is an open-source, high-efficiency IDE context harness and persistent memory engine designed for AI coding assistants (Cursor, VS Code, Antigravity, Windsurf, Claude Code, etc.). 
+**HyperSABMemory** is an open-source, high-efficiency IDE context harness and persistent memory engine designed for AI coding assistants (Cursor, VS Code, Antigravity, Windsurf, Claude Code, etc.). 
 
-It takes **Supermemory** as its core reference architecture for persistent, multi-session memory and marries it with **[can1357/oh-my-pi](https://github.com/can1357/oh-my-pi)** as the baseline reference for real-time state harness, hash-anchored edits, and optimized agent tool calling. The goal is to maximize AI agent focus, provide instant context recovery after file edits or context window wipes, and minimize unnecessary token usage across session shifts.
+It takes proven temporal-memory-store designs as its core reference architecture for persistent, multi-session memory and marries it with **[can1357/oh-my-pi](https://github.com/can1357/oh-my-pi)** as the baseline reference for real-time state harness, hash-anchored edits, and optimized agent tool calling. The goal is to maximize AI agent focus, provide instant context recovery after file edits or context window wipes, and minimize unnecessary token usage across session shifts.
 
 ---
 
@@ -16,15 +16,15 @@ It takes **Supermemory** as its core reference architecture for persistent, mult
 
 ## 3. Key Functional Requirements
 
-### FR-1: Oh-My-Pi State Harness Engine
+### FR-1: State Harness Engine
 - **Dynamic Context Header**: Injects compressed state headers (active file, cursor line, git diff, modified tokens, key architectural focus) into the agent context window.
 - **Token Budget Compression**: Enforces strict token ceilings (< 1500 tokens) for harness prompts, compressing file states dynamically.
 - **Focus Anchor**: Prevents agents from drifting away from the primary file/task being modified.
 
-### FR-2: Supermemory Persistent Memory Layer
+### FR-2: Persistent Temporal Memory Layer
 - **Local-First Knowledge Graph & Vector Store**: Stores code symbols, semantic memories, architectural decisions, and bug history locally using fast SQLite / vector search.
 - **Universal Session Handoff**: Preserves project state (`Memory.md` + database) across IDE restarts, branch switches, and chat resets.
-- **MCP Server Protocol**: Exposes standardized tools (`hypermemory_get_context`, `hypermemory_remember`, `hypermemory_search`) for any MCP-compliant client.
+- **MCP Server Protocol**: Exposes standardized tools (`hypersabmemory_get_context`, `hypersabmemory_remember`, `hypersabmemory_search`) for any MCP-compliant client.
 
 ### FR-3: Automatic Event Hooks ("After Every File Edit")
 - **File Watcher Hook**: Listens for file save, edit, and create events.
@@ -32,7 +32,7 @@ It takes **Supermemory** as its core reference architecture for persistent, mult
 - **Incremental Diff Tracking**: Tracks modified lines and updates symbol index incrementally.
 
 ### FR-4: Open Source Publication & CLI
-- **HyperMemory CLI**: Command-line tools (`hypermemory init`, `hypermemory status`, `hypermemory watch`, `hypermemory mcp`).
+- **HyperSABMemory CLI**: Command-line tools (`hypersabmemory init`, `hypersabmemory status`, `hypersabmemory watch`, `hypersabmemory mcp`).
 - **NPM & GitHub Distribution**: Standard package setup, badges, CI/CD GitHub Actions, contributing guidelines, MIT license.
 
 ---

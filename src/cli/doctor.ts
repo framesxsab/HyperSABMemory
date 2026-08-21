@@ -36,7 +36,7 @@ async function checkInsideWorkTree(cwd: string): Promise<DoctorCheck> {
 }
 
 function checkStoreParseable(cwd: string): DoctorCheck {
-  const storePath = path.join(cwd, '.hypermemory', 'memory_store.json');
+  const storePath = path.join(cwd, '.hypersabmemory', 'memory_store.json');
   if (!fs.existsSync(storePath)) {
     return { name: 'store', ok: true, detail: 'no store yet (created on first remember)' };
   }
@@ -69,7 +69,7 @@ function checkMcpConfigs(cwd: string): DoctorCheck {
   return {
     name: 'mcp-configs',
     ok: true,
-    detail: present.length > 0 ? present.join(', ') : 'none yet — run `npx hypermemory connect`'
+    detail: present.length > 0 ? present.join(', ') : 'none yet — run `npx hypersabmemory connect`'
   };
 }
 

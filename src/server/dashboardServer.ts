@@ -1,17 +1,17 @@
 /**
- * HyperMemory — Live Web Dashboard & Local API Server
+ * HyperSABMemory — Live Web Dashboard & Local API Server
  * Hosts a zero-latency Web Visualizer at http://localhost:4321
- * Exposes status, hybrid search, git history, live Oh-My-Pi context header,
- * Graphify graph data, and guarded rollback.
+ * Exposes status, hybrid search, git history, live context harness header,
+ * structural graph data, and guarded rollback.
  */
 
 import * as http from 'http';
 import * as path from 'path';
-import { SupermemoryEngine } from '../memory/supermemory.js';
-import { GraphifyEngine } from '../memory/graphify.js';
+import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
+import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
-import { OhMyPiHarness } from '../harness/ohMyPi.js';
+import { ContextHarness } from '../harness/contextHarness.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 
 const TOKEN_CEILING = 1500;
@@ -20,26 +20,26 @@ export class DashboardServer {
   private port: number;
   private workspaceDir: string;
   private server: http.Server | null = null;
-  private supermemory: SupermemoryEngine;
-  private graphify: GraphifyEngine;
+  private memory: TemporalMemoryEngine;
+  private graph: StructuralGraphEngine;
   private autoCommit: AutoCommitEngine;
   private hybridSearch: HybridSearchEngine;
-  private harness: OhMyPiHarness;
+  private harness: ContextHarness;
 
   constructor(port: number = 4321, workspaceDir: string = process.cwd()) {
     this.port = port;
     this.workspaceDir = workspaceDir;
-    this.supermemory = new SupermemoryEngine(workspaceDir);
-    this.graphify = new GraphifyEngine(workspaceDir);
+    this.memory = new TemporalMemoryEngine(workspaceDir);
+    this.graph = new StructuralGraphEngine(workspaceDir);
     this.autoCommit = new AutoCommitEngine({
       workspaceDir
     });
-    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
-    this.harness = new OhMyPiHarness(TOKEN_CEILING);
+    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
+    this.harness = new ContextHarness(TOKEN_CEILING);
   }
 
   /**
-   * Builds a live Oh-My-Pi header (same shape as MCP hypermemory_get_context).
+   * Builds a live context harness header (same shape as MCP hypersabmemory_get_context).
    */
   private async buildLiveHeader(): Promise<string> {
     const snapshot = await this.autoCommit.getSnapshot();
@@ -50,9 +50,9 @@ export class DashboardServer {
       lastCommitHash: snapshot.lastCommitHash,
       lastCommitTime: snapshot.lastCommitTime,
       recentDiff: snapshot.recentDiff,
-      memorySummary: this.supermemory.getSummary(),
-      contextBlock: this.supermemory.getContextBlock(),
-      graphifySummary: this.graphify.getGraphSummary()
+      memorySummary: this.memory.getSummary(),
+      contextBlock: this.memory.getContextBlock(),
+      structuralGraphSummary: this.graph.getGraphSummary()
     });
   }
 
@@ -88,8 +88,8 @@ export class DashboardServer {
           res.end(JSON.stringify({
             status: 'online',
             workspace: this.workspaceDir,
-            graphify: this.graphify.getGraphSummary(),
-            supermemory: this.supermemory.getSummary(),
+            graph: this.graph.getGraphSummary(),
+            memory: this.memory.getSummary(),
             timestamp: new Date().toISOString()
           }));
           return;
@@ -112,7 +112,7 @@ export class DashboardServer {
           return;
         }
 
-        // Endpoint: /api/context (live Oh-My-Pi header + token meter)
+        // Endpoint: /api/context (live context harness header + token meter)
         if (url.pathname === '/api/context') {
           const header = await this.buildLiveHeader();
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -124,9 +124,9 @@ export class DashboardServer {
           return;
         }
 
-        // Endpoint: /api/graph (Graphify nodes + derived dependency edges)
+        // Endpoint: /api/graph (structural graph nodes + derived dependency edges)
         if (url.pathname === '/api/graph') {
-          const data = this.graphify.getGraphData();
+          const data = this.graph.getGraphData();
           const edges = data.nodes.flatMap((node) =>
             (node.dependencies ?? []).map((dep) => ({ source: node.name, target: dep }))
           );
@@ -156,7 +156,7 @@ export class DashboardServer {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>⚡ HyperMemory Dashboard</title>
+  <title>⚡ HyperSABMemory Dashboard</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0B0F19; color: #E2E8F0; margin: 0; padding: 20px; }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1E293B; padding-bottom: 15px; margin-bottom: 20px; }
@@ -179,23 +179,23 @@ export class DashboardServer {
 </head>
 <body>
   <div class="header">
-    <h1>⚡ HyperMemory Live Dashboard</h1>
+    <h1>⚡ HyperSABMemory Live Dashboard</h1>
     <span class="badge">SYSTEM ONLINE</span>
   </div>
   <div class="card-grid">
     <div class="card">
-      <h3>⚡ Oh-My-Pi Token Meter</h3>
+      <h3>⚡ Context Harness Token Meter</h3>
       <p id="token-meter">Loading live context header...</p>
       <div class="meter-wrap"><div class="meter-bar" id="token-bar"></div></div>
     </div>
     <div class="card">
-      <h3>🕸️ Graphify Structural Graph</h3>
-      <p id="graphify-status">Loading Graphify AST Nodes...</p>
+      <h3>🕸️ Structural Knowledge Graph</h3>
+      <p id="graph-status">Loading structural graph nodes...</p>
       <ul class="graph-list" id="graph-list"></ul>
     </div>
     <div class="card">
-      <h3>🧠 Supermemory Persistent Base</h3>
-      <p id="supermemory-status">Loading Supermemory Log...</p>
+      <h3>🧠 Temporal Memory Store</h3>
+      <p id="memory-status">Loading memory log...</p>
     </div>
     <div class="card">
       <h3>🕒 Git Auto-Commit Timeline</h3>
@@ -206,8 +206,8 @@ export class DashboardServer {
     async function loadData() {
       const res = await fetch('/api/status');
       const data = await res.json();
-      document.getElementById('graphify-status').textContent = data.graphify;
-      document.getElementById('supermemory-status').textContent = data.supermemory;
+      document.getElementById('graph-status').textContent = data.graph;
+      document.getElementById('memory-status').textContent = data.memory;
     }
     async function loadContext() {
       const res = await fetch('/api/context');
@@ -220,7 +220,7 @@ export class DashboardServer {
       const data = await res.json();
       const list = document.getElementById('graph-list');
       if (!data.nodes || data.nodes.length === 0) {
-        list.innerHTML = '<li>No graph.json found. Run <code>graphify .</code> to index.</li>';
+        list.innerHTML = '<li>No graph.json found yet. The structural knowledge graph appears here once indexed.</li>';
         return;
       }
       list.innerHTML = data.nodes.slice(0, 100).map(function (node) {
@@ -265,7 +265,7 @@ export class DashboardServer {
       this.server.listen(this.port, '127.0.0.1', () => {
         const addr = this.server?.address();
         const boundPort = typeof addr === 'object' && addr ? addr.port : this.port;
-        console.log(`⚡ [HyperMemory :: Dashboard] Server running at http://127.0.0.1:${boundPort}`);
+        console.log(`⚡ [HyperSABMemory :: Dashboard] Server running at http://127.0.0.1:${boundPort}`);
         resolve(boundPort);
       });
     });

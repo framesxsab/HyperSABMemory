@@ -1,10 +1,10 @@
 /**
- * HyperMemory — Oh-My-Pi State Harness Engine
+ * HyperSABMemory — Context State Harness Engine
  * Formats terminal/IDE context state headers into rich, compressed prompts for AI agents.
  */
 
 import { HashAnchorEngine } from './hashAnchor.js';
-import { PonytailEngine, type PonytailIntensity } from './ponytail.js';
+import { MinimalChangeEngine, type MinimalChangeIntensity } from './minimalChange.js';
 import { TokenCompressor } from './tokenCompressor.js';
 
 export interface HarnessState {
@@ -19,29 +19,29 @@ export interface HarnessState {
   recentDiff?: string;
   memorySummary?: string;
   contextBlock?: string;
-  graphifySummary?: string;
+  structuralGraphSummary?: string;
   tokenCeiling?: number;
   activeFileContent?: string;
-  ponytailIntensity?: PonytailIntensity;
+  minimalChangeIntensity?: MinimalChangeIntensity;
 }
 
-export class OhMyPiHarness {
+export class ContextHarness {
   private tokenCeiling: number;
-  private ponytail: PonytailEngine;
+  private minimalChange: MinimalChangeEngine;
 
-  constructor(tokenCeiling: number = 1500, ponytailIntensity: PonytailIntensity = 'full') {
+  constructor(tokenCeiling: number = 1500, minimalChangeIntensity: MinimalChangeIntensity = 'full') {
     this.tokenCeiling = tokenCeiling;
-    this.ponytail = new PonytailEngine({ intensity: ponytailIntensity });
+    this.minimalChange = new MinimalChangeEngine({ intensity: minimalChangeIntensity });
   }
 
   /**
-   * Generates the structured Oh-My-Pi context header for AI agent prompt injection.
+   * Generates the structured context harness header for AI agent prompt injection.
    */
   public generateHeader(state: HarnessState): string {
-    const intensity = state.ponytailIntensity;
-    const ponytail = intensity
-      ? new PonytailEngine({ intensity })
-      : this.ponytail;
+    const intensity = state.minimalChangeIntensity;
+    const rules = intensity
+      ? new MinimalChangeEngine({ intensity })
+      : this.minimalChange;
 
     const activeFileStr = state.activeFile
       ? `${state.activeFile}${state.cursorLine ? ` (L${state.cursorLine}:C${state.cursorColumn || 1})` : ''}`
@@ -69,17 +69,17 @@ export class OhMyPiHarness {
       ? TokenCompressor.summarizeRead(state.activeFileContent, 16)
       : '';
 
-    const rawHeader = `⚡ [HYPERMEMORY :: OH-MY-PI + PONYTAIL HARNESS]
+    const rawHeader = `⚡ [HYPERSABMEMORY :: CONTEXT HARNESS]
 ┌─ Workspace: ${state.workspaceName} | Branch: ${branchStr} | Checkpoint: ${commitStr}
 ├─ Active Focus: ${activeFileStr}
 ├─ Hashline: ${hashline || 'n/a'}
 ├─ Modified Files: [${modifiedStr}]
-├─ Structural Knowledge: ${state.graphifySummary || 'Graphify Ready'}
+├─ Structural Knowledge: ${state.structuralGraphSummary || 'Structural knowledge graph ready'}
 ├─ Temporal Memory: ${memorySection}
 └─ Diff Snapshot:
 ${compactDiff}
 ${summarizedFocus ? `\n[SUMMARIZED READ]\n${summarizedFocus}\n` : ''}
-${ponytail.generatePonytailHeader()}
+${rules.generateMinimalChangeHeader()}
 
 <STATE_FOCUS>
 Ensure all edits maintain non-blocking execution, adhere to project Rules.md, and preserve persistent Memory.md state.

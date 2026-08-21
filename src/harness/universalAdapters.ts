@@ -1,6 +1,6 @@
 /**
- * HyperMemory — Universal IDE Rule Adapter Generator
- * Ingests native rule formats already on disk, then auto-injects a HyperMemory
+ * HyperSABMemory — Universal IDE Rule Adapter Generator
+ * Ingests native rule formats already on disk, then auto-injects a HyperSABMemory
  * section (Cursor MDC, AGENTS.md, CLAUDE.md, Copilot, Windsurf, Claude JSON).
  */
 
@@ -38,13 +38,13 @@ export interface AdapterSyncResult {
   createdFiles: string[];
 }
 
-const START = '<!-- HYPERMEMORY:START -->';
-const END = '<!-- HYPERMEMORY:END -->';
+const START = '<!-- HYPERSABMEMORY:START -->';
+const END = '<!-- HYPERSABMEMORY:END -->';
 
-const PROTOCOL = `# HyperMemory AI Agent Harness Protocol
+const PROTOCOL = `# HyperSABMemory AI Agent Harness Protocol
 - **State Harness**: Keep context headers under 1500 tokens. Read Memory.md on session start.
-- **Structural Knowledge**: Query Graphify (graph.json) before writing new modules. Re-use existing components.
-- **Ponytail YAGNI**: Default to NO for unnecessary features. Use standard libraries. Write minimal code.
+- **Structural Knowledge**: Query the structural knowledge graph (graph.json) before writing new modules. Re-use existing components.
+- **Minimal-Change Rules**: Default to NO for unnecessary features. Use standard libraries. Write minimal code.
 - **Auto-Commit Safety**: Work is auto-checkpointed every 3-5m under configured git author.
 `;
 
@@ -73,7 +73,7 @@ function describeKind(kind: NativeRuleKind): string {
   }
 }
 
-export function injectHypermemorySection(existing: string, inner: string): string {
+export function injectHypersabmemorySection(existing: string, inner: string): string {
   const block = `${START}\n${inner.trim()}\n${END}`;
   if (existing.includes(START) && existing.includes(END)) {
     return existing.replace(new RegExp(`${START}[\\s\\S]*?${END}`), block);
@@ -110,7 +110,7 @@ export class UniversalAdaptersEngine {
       { kind: 'claude-json', relativePath: '.claude.json' },
       { kind: 'windsurf', relativePath: '.windsurfrules' },
       { kind: 'copilot', relativePath: path.join('.github', 'copilot-instructions.md') },
-      { kind: 'antigravity-skill', relativePath: path.join('.agents', 'skills', 'hypermemory', 'SKILL.md') },
+      { kind: 'antigravity-skill', relativePath: path.join('.agents', 'skills', 'hypersabmemory', 'SKILL.md') },
       { kind: 'cline', relativePath: '.clinerules' }
     ];
 
@@ -127,14 +127,14 @@ export class UniversalAdaptersEngine {
   }
 
   /**
-   * Merges HyperMemory into native rule files. Preserves user text outside markers.
+   * Merges HyperSABMemory into native rule files. Preserves user text outside markers.
    */
   public syncAllAdapters(options: AdapterSyncOptions = {}): AdapterSyncResult {
     const ingested = this.ingestNativeRules();
     const createdFiles: string[] = [];
     const inner = this.buildInjectBody(options.contextBlock);
 
-    createdFiles.push(this.writeCursorHypermemoryMdc(inner));
+    createdFiles.push(this.writeCursorHypersabmemoryMdc(inner));
     createdFiles.push(this.mergeMarkdown('AGENTS.md', inner));
     createdFiles.push(this.mergeMarkdown('CLAUDE.md', inner));
     createdFiles.push(this.mergeMarkdown('.windsurfrules', inner));
@@ -166,12 +166,12 @@ export class UniversalAdaptersEngine {
     return `${PROTOCOL}${extra}`;
   }
 
-  private writeCursorHypermemoryMdc(inner: string): string {
+  private writeCursorHypersabmemoryMdc(inner: string): string {
     const dir = path.join(this.workspaceDir, '.cursor', 'rules');
     fs.mkdirSync(dir, { recursive: true });
-    const relativePath = path.join('.cursor', 'rules', 'hypermemory.mdc');
+    const relativePath = path.join('.cursor', 'rules', 'hypersabmemory.mdc');
     const body = `---
-description: HyperMemory & Ponytail YAGNI agent rules
+description: HyperSABMemory agent rules
 globs: "*"
 alwaysApply: true
 ---
@@ -184,18 +184,18 @@ ${inner}`;
     const abs = path.join(this.workspaceDir, relativePath);
     if (ensureParent) fs.mkdirSync(path.dirname(abs), { recursive: true });
     const existing = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf-8') : '';
-    this.writeWorkspaceFile(relativePath, injectHypermemorySection(existing, inner));
+    this.writeWorkspaceFile(relativePath, injectHypersabmemorySection(existing, inner));
     return abs;
   }
 
   private mergeSkill(inner: string): string {
-    const relativePath = path.join('.agents', 'skills', 'hypermemory', 'SKILL.md');
+    const relativePath = path.join('.agents', 'skills', 'hypersabmemory', 'SKILL.md');
     const abs = path.join(this.workspaceDir, relativePath);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     const existing = fs.existsSync(abs)
       ? fs.readFileSync(abs, 'utf-8')
-      : `---\nname: hypermemory\ndescription: Universal IDE Context Harness & Memory Engine\n---\n`;
-    this.writeWorkspaceFile(relativePath, injectHypermemorySection(existing, inner));
+      : `---\nname: hypersabmemory\ndescription: Universal IDE Context Harness & Memory Engine\n---\n`;
+    this.writeWorkspaceFile(relativePath, injectHypersabmemorySection(existing, inner));
     return abs;
   }
 
@@ -211,7 +211,7 @@ ${inner}`;
       }
     }
     const current = typeof payload.instructions === 'string' ? payload.instructions : '';
-    payload.instructions = injectHypermemorySection(current, inner);
+    payload.instructions = injectHypersabmemorySection(current, inner);
     this.writeWorkspaceFile(relativePath, `${JSON.stringify(payload, null, 2)}\n`);
     return abs;
   }

@@ -1,6 +1,6 @@
 /**
- * HyperMemory — Zep-style Context Block
- * Packs dated active facts into one string for the Oh-My-Pi token budget.
+ * HyperSABMemory — Zep-style Context Block
+ * Packs dated active facts into one string for the context harness token budget.
  * Selection is relevance-ranked (recency decay x category weight x noise penalty),
  * rendered chronologically.
  */
@@ -61,7 +61,7 @@ export function buildContextBlock(records: MemoryRecord[], projectSummary?: stri
     // Render chronological regardless of ranking order.
     .sort((a, b) => a.record.timestamp.localeCompare(b.record.timestamp));
 
-  const summary = projectSummary?.trim() || 'HyperMemory local-first harness';
+  const summary = projectSummary?.trim() || 'HyperSABMemory local-first harness';
   const facts = ranked.length === 0
     ? '- (none)'
     : ranked

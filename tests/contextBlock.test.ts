@@ -24,7 +24,7 @@ function noiseFact(i: number, msAgo: number): MemoryRecord {
   };
 }
 
-describe('HyperMemory — Noise-aware Context Block (P6)', () => {
+describe('HyperSABMemory — Noise-aware Context Block (P6)', () => {
   it('ranks a fresh decision above fresh watcher noise and evicts noise, not the decision', () => {
     const records: MemoryRecord[] = [
       ...Array.from({ length: 8 }, (_, i) => noiseFact(i, HOUR_MS)),

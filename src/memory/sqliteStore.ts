@@ -1,5 +1,5 @@
 /**
- * HyperMemory — Local Memory Store (Supermemory Base)
+ * HyperSABMemory — Local Memory Store (Temporal Memory Base)
  * Fast, lightweight key-value & document memory storage for AI agent state persistence.
  */
 
@@ -23,7 +23,7 @@ export class SqliteStore {
   private storagePath: string;
   private memoryMap: Map<string, MemoryRecord> = new Map();
 
-  constructor(baseDir: string = '.hypermemory') {
+  constructor(baseDir: string = '.hypersabmemory') {
     this.storagePath = path.join(baseDir, 'memory_store.json');
     this.ensureStorageDir(baseDir);
     this.loadStore();
@@ -45,17 +45,17 @@ export class SqliteStore {
     // 2) Interrupted atomic write (.tmp holds a complete payload only if the
     //    process died between write and rename; partial writes fail JSON.parse)
     if (this.tryLoadFrom(tmpPath)) {
-      console.warn(`[HyperMemory :: SqliteStore] Primary store unreadable — recovered from ${tmpPath}`);
+      console.warn(`[HyperSABMemory :: SqliteStore] Primary store unreadable — recovered from ${tmpPath}`);
       return;
     }
 
     // 3) Post-save mirror of the last known-good state
     if (this.tryLoadFrom(bakPath)) {
-      console.warn(`[HyperMemory :: SqliteStore] Primary store unreadable — recovered from ${bakPath}`);
+      console.warn(`[HyperSABMemory :: SqliteStore] Primary store unreadable — recovered from ${bakPath}`);
       return;
     }
 
-    console.warn('[HyperMemory :: SqliteStore] No readable memory store found — starting clean.');
+    console.warn('[HyperSABMemory :: SqliteStore] No readable memory store found — starting clean.');
     this.memoryMap.clear();
   }
 
@@ -94,7 +94,7 @@ export class SqliteStore {
       } catch {
         // Non-atomic fallback rather than losing the save entirely.
         fs.writeFileSync(this.storagePath, payload, 'utf-8');
-        console.warn('[HyperMemory :: SqliteStore] Atomic rename failed — wrote store directly.');
+        console.warn('[HyperSABMemory :: SqliteStore] Atomic rename failed — wrote store directly.');
       }
 
       try {
@@ -103,7 +103,7 @@ export class SqliteStore {
         // Mirror failure is non-fatal.
       }
     } catch (err) {
-      console.error('[HyperMemory :: SqliteStore] Failed to write memory store:', err);
+      console.error('[HyperSABMemory :: SqliteStore] Failed to write memory store:', err);
     }
   }
 

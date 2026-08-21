@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-describe('HyperMemory — Privacy Hardening (P9)', () => {
+describe('HyperSABMemory — Privacy Hardening (P9)', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-privacy-'));
   fs.writeFileSync(path.join(dir, 'real.ts'), 'export const ok = true;', 'utf-8');
 

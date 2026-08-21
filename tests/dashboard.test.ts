@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { DashboardServer } from '../src/server/dashboardServer.js';
 
-describe('HyperMemory — Dashboard Server API', () => {
+describe('HyperSABMemory — Dashboard Server API', () => {
   let server: DashboardServer;
   let port: number;
   let dir: string;
@@ -26,7 +26,7 @@ describe('HyperMemory — Dashboard Server API', () => {
     const res = await fetch(`${baseUrl}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
-    expect(await res.text()).toContain('HyperMemory');
+    expect(await res.text()).toContain('HyperSABMemory');
   });
 
   it('returns online status from /api/status', async () => {
@@ -35,7 +35,7 @@ describe('HyperMemory — Dashboard Server API', () => {
     const data = await res.json();
     expect(data.status).toBe('online');
     expect(data.workspace).toBe(dir);
-    expect(typeof data.supermemory).toBe('string');
+    expect(typeof data.memory).toBe('string');
   });
 
   it('returns an array from /api/search', async () => {
@@ -57,7 +57,7 @@ describe('HyperMemory — Dashboard Server API', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(typeof data.header).toBe('string');
-    expect(data.header).toContain('HYPERMEMORY');
+    expect(data.header).toContain('HYPERSABMEMORY');
     expect(typeof data.tokens).toBe('number');
     expect(data.tokens).toBeGreaterThan(0);
     expect(data.ceiling).toBe(1500);

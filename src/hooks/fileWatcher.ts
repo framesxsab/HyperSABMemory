@@ -1,15 +1,15 @@
 /**
- * HyperMemory — Real-Time File Watcher & Event Hook
- * Automatically triggers state re-synthesis, Oh-My-Pi harness header update,
+ * HyperSABMemory — Real-Time File Watcher & Event Hook
+ * Automatically triggers state re-synthesis, context harness header update,
  * and Memory.md syncing after every file edit or save.
  */
 
 import chokidar, { FSWatcher } from 'chokidar';
 import * as path from 'path';
-import { SupermemoryEngine } from '../memory/supermemory.js';
-import { GraphifyEngine } from '../memory/graphify.js';
+import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
+import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { formatFileEventFact } from '../memory/contextBlock.js';
-import { OhMyPiHarness, HarnessState } from '../harness/ohMyPi.js';
+import { ContextHarness, HarnessState } from '../harness/contextHarness.js';
 import { AutoCommitEngine } from './autoCommit.js';
 
 export interface FileWatcherOptions {
@@ -22,9 +22,9 @@ export class FileWatcherHook {
   private workspaceDir: string;
   private options: FileWatcherOptions;
   private watcher: FSWatcher | null = null;
-  private supermemory: SupermemoryEngine;
-  private graphify: GraphifyEngine;
-  private harness: OhMyPiHarness;
+  private memory: TemporalMemoryEngine;
+  private graph: StructuralGraphEngine;
+  private harness: ContextHarness;
   private autoCommit: AutoCommitEngine;
   private modifiedFiles: Set<string> = new Set();
   private lastStateHeader: string = '';
@@ -34,12 +34,12 @@ export class FileWatcherHook {
   constructor(options: FileWatcherOptions = {}) {
     this.options = options;
     this.workspaceDir = options.workspaceDir || process.cwd();
-    this.supermemory = new SupermemoryEngine(this.workspaceDir);
-    this.graphify = new GraphifyEngine(this.workspaceDir);
-    this.harness = new OhMyPiHarness(1500);
+    this.memory = new TemporalMemoryEngine(this.workspaceDir);
+    this.graph = new StructuralGraphEngine(this.workspaceDir);
+    this.harness = new ContextHarness(1500);
     this.autoCommit = new AutoCommitEngine({
       workspaceDir: this.workspaceDir,
-      intervalMinutes: options.autoCommitIntervalMinutes || parseInt(process.env.HYPERMEMORY_COMMIT_INTERVAL || '3', 10)
+      intervalMinutes: options.autoCommitIntervalMinutes || parseInt(process.env.HYPERSABMEMORY_COMMIT_INTERVAL || '3', 10)
     });
   }
 
@@ -59,7 +59,7 @@ export class FileWatcherHook {
       '**/node_modules/**',
       '**/.git/**',
       '**/dist/**',
-      '**/.hypermemory/**',
+      '**/.hypersabmemory/**',
       '**/Memory.md'
     ];
 
@@ -84,7 +84,7 @@ export class FileWatcherHook {
     // Start 3-5 min hyperfrequent auto-commit engine
     this.autoCommit.start();
 
-    console.log(`⚡ [HyperMemory :: FileWatcher] Active on ${this.workspaceDir}`);
+    console.log(`⚡ [HyperSABMemory :: FileWatcher] Active on ${this.workspaceDir}`);
   }
 
   /**
@@ -109,7 +109,7 @@ export class FileWatcherHook {
     const now = Date.now();
     const lastRemember = this.lastRememberAt.get(relativePath) ?? 0;
     if (now - lastRemember >= FileWatcherHook.REMEMBER_COOLDOWN_MS) {
-      this.supermemory.remember('architecture', formatFileEventFact(type, relativePath));
+      this.memory.remember('architecture', formatFileEventFact(type, relativePath));
       this.lastRememberAt.set(relativePath, now);
     }
 
@@ -118,16 +118,16 @@ export class FileWatcherHook {
       workspaceName: path.basename(this.workspaceDir),
       activeFile: relativePath,
       modifiedFiles: Array.from(this.modifiedFiles),
-      memorySummary: this.supermemory.getSummary(),
-      graphifySummary: this.graphify.getGraphSummary()
+      memorySummary: this.memory.getSummary(),
+      structuralGraphSummary: this.graph.getGraphSummary()
     };
 
     this.lastStateHeader = this.harness.generateHeader(state);
-    console.log(`⚡ [HyperMemory :: Hook] Re-synthesized state after edit on [${relativePath}]`);
+    console.log(`⚡ [HyperSABMemory :: Hook] Re-synthesized state after edit on [${relativePath}]`);
   }
 
   /**
-   * Gets the latest Oh-My-Pi context header snapshot.
+   * Gets the latest context harness header snapshot.
    */
   public getLatestHeader(): string {
     return this.lastStateHeader;

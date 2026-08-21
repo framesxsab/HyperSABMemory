@@ -1,6 +1,6 @@
 /**
- * HyperMemory — Token Compressor Utility
- * Ensures Oh-My-Pi context headers never exceed specified token ceilings.
+ * HyperSABMemory — Token Compressor Utility
+ * Ensures context harness headers never exceed specified token ceilings.
  */
 
 export interface CompressionOptions {
@@ -31,7 +31,7 @@ export class TokenCompressor {
 
     const maxChars = maxTokens * this.CHARS_PER_TOKEN;
     const truncated = text.slice(0, maxChars - 100);
-    return `${truncated}\n... [HyperMemory: Compressed ${currentTokens - maxTokens} tokens] ...`;
+    return `${truncated}\n... [HyperSABMemory: Compressed ${currentTokens - maxTokens} tokens] ...`;
   }
 
   /**

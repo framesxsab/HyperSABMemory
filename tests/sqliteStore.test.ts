@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-describe('HyperMemory — Crash-safe Memory Store (P8)', () => {
+describe('HyperSABMemory — Crash-safe Memory Store (P8)', () => {
   const dirs: string[] = [];
 
   function tmpDir(): string {

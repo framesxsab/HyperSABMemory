@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * HyperMemory — CLI Entry Point
+ * HyperSABMemory — CLI Entry Point
  * Command Line Interface for initialization, real-time watcher, auto-commits, and MCP server.
  */
 
@@ -11,10 +11,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { FileWatcherHook } from '../hooks/fileWatcher.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
-import { HyperMemoryMcpServer } from '../mcp/server.js';
-import { SupermemoryEngine } from '../memory/supermemory.js';
+import { HyperSABMemoryMcpServer } from '../mcp/server.js';
+import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { OneShotSetupEngine } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
@@ -26,11 +28,33 @@ import { parseIntervalMinutes } from './cliUtils.js';
 import { registerMemoryCommands } from './memoryCommands.js';
 import { runDoctor } from './doctor.js';
 
+const execFileAsync = promisify(execFile);
+
+// Official semver grammar (semver.org appendix), anchored both ends.
+const STRICT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
+function newestMtimeMs(dir: string): number {
+  let newest = 0;
+  const visit = (current: string): void => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+      } else if (entry.isFile()) {
+        const mtimeMs = fs.statSync(full).mtimeMs;
+        if (mtimeMs > newest) newest = mtimeMs;
+      }
+    }
+  };
+  visit(dir);
+  return newest;
+}
+
 const program = new Command();
 
 program
-  .name('hypermemory')
-  .description('Open-source IDE context harness & persistent memory engine inspired by Supermemory, Oh-My-Pi, Graphify & Ponytail')
+  .name('hypersabmemory')
+  .description('Open-source IDE context harness & persistent memory engine')
   .version(getPackageVersion());
 
 // Command: dashboard
@@ -44,22 +68,21 @@ program
     await server.start();
   });
 
-// Command: setup / ponytail (One-shot installer)
+// Command: setup (One-shot installer)
 program
   .command('setup')
-  .alias('ponytail')
-  .description('One-shot setup: Installs Graphify + Supermemory + Oh-My-Pi + Ponytail YAGNI rules + 3-5m Auto-Commits')
+  .description('One-shot setup: Installs IDE adapters + temporal memory store + structural knowledge graph rules + 3-5m Auto-Commits')
   .action(async () => {
-    console.log(picocolors.cyan('\n🚀 [HyperMemory :: One-Shot Setup] Deploying complete ecosystem...'));
+    console.log(picocolors.cyan('\n🚀 [HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
     const result = await setupEngine.executeSetup();
     if (result.success) {
-      console.log(picocolors.green('✔ Graphify structural knowledge layer integrated.'));
-      console.log(picocolors.green('✔ Supermemory temporal memory base initialized.'));
-      console.log(picocolors.green('✔ Ponytail YAGNI decision ladder rules installed (.agents/skills/hypermemory/SKILL.md).'));
+      console.log(picocolors.green('✔ Structural knowledge graph integrated.'));
+      console.log(picocolors.green('✔ Temporal memory store initialized.'));
+      console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
       console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
       console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
-      console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypermemory MCP server → call hypermemory_get_context.'));
+      console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypersabmemory MCP server → call hypersabmemory_get_context.'));
     } else {
       console.log(picocolors.red('✖ Setup encountered an error. Check logs for details.'));
     }
@@ -68,12 +91,12 @@ program
 // Command: init
 program
   .command('init')
-  .description('Initialize HyperMemory environment and core blueprint docs in current directory')
+  .description('Initialize HyperSABMemory environment and core blueprint docs in current directory')
   .action(() => {
-    console.log(picocolors.cyan('⚡ [HyperMemory] Initializing IDE context harness & Supermemory base...'));
-    const supermemory = new SupermemoryEngine(process.cwd());
-    supermemory.remember('architecture', 'Initialized HyperMemory workspace environment.');
-    console.log(picocolors.green('✔ Initialized .hypermemory/ store and Memory.md state log.'));
+    console.log(picocolors.cyan('⚡ [HyperSABMemory] Initializing IDE context harness & temporal memory store...'));
+    const engine = new TemporalMemoryEngine(process.cwd());
+    engine.remember('architecture', 'Initialized HyperSABMemory workspace environment.');
+    console.log(picocolors.green('✔ Initialized .hypersabmemory/ store and Memory.md state log.'));
   });
 
 // Command: watch
@@ -91,7 +114,7 @@ program
       process.exitCode = 1;
       return;
     }
-    console.log(picocolors.cyan(`⚡ [HyperMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
+    console.log(picocolors.cyan(`⚡ [HyperSABMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
     const hook = new FileWatcherHook({
       workspaceDir: process.cwd(),
       autoCommitIntervalMinutes: minutes
@@ -138,11 +161,11 @@ program
       console.log(picocolors.yellow('ℹ No checkpoints found in this workspace.'));
       return;
     }
-    console.log(picocolors.cyan('\nHyperMemory checkpoints\n'));
+    console.log(picocolors.cyan('\nHyperSABMemory checkpoints\n'));
     for (const entry of entries) {
       console.log(`  ${picocolors.green(entry.hash)}  ${entry.date}  ${entry.message}`);
     }
-    console.log(picocolors.gray(`\nPreview a rollback with: hypermemory diff <hash>`));
+    console.log(picocolors.gray(`\nPreview a rollback with: hypersabmemory diff <hash>`));
   });
 
 // Command: diff
@@ -215,12 +238,12 @@ program
 // Command: inject
 program
   .command('inject')
-  .description('Ingest native IDE rules (MDC, AGENTS.md, CLAUDE.md) and auto-inject HyperMemory')
+  .description('Ingest native IDE rules (MDC, AGENTS.md, CLAUDE.md) and auto-inject HyperSABMemory')
   .action(() => {
-    const supermemory = new SupermemoryEngine(process.cwd());
+    const engine = new TemporalMemoryEngine(process.cwd());
     const adapters = new UniversalAdaptersEngine(process.cwd());
     const result = adapters.syncAllAdapters({
-      contextBlock: supermemory.getContextBlock()
+      contextBlock: engine.getContextBlock()
     });
     console.log(picocolors.green(`✔ Injected ${result.createdFiles.length} adapter files (ingested ${result.ingested.length} native rules).`));
     for (const file of result.createdFiles) {
@@ -231,11 +254,11 @@ program
 // Command: connect
 program
   .command('connect')
-  .description('Write Cursor / Claude Code / VS Code MCP config so agents get HyperMemory tools directly')
+  .description('Write Cursor / Claude Code / VS Code MCP config so agents get HyperSABMemory tools directly')
   .action(() => {
     const access = new McpAccessEngine(process.cwd());
     const result = access.connect();
-    console.log(picocolors.green('✔ HyperMemory MCP access installed.'));
+    console.log(picocolors.green('✔ HyperSABMemory MCP access installed.'));
     for (const file of result.written) {
       console.log(picocolors.gray(`  ${file}`));
     }
@@ -253,7 +276,7 @@ program
       path.join(root, '.mcp.json'),
       path.join(root, '.vscode', 'mcp.json')
     ];
-    console.log(picocolors.cyan('\nHyperMemory access status\n'));
+    console.log(picocolors.cyan('\nHyperSABMemory access status\n'));
     for (const file of checks) {
       const ok = fs.existsSync(file);
       const mark = ok ? picocolors.green('✔') : picocolors.yellow('○');
@@ -263,7 +286,7 @@ program
     for (const tool of MCP_TOOL_FLOW) {
       console.log(picocolors.gray(`  ${tool}`));
     }
-    console.log(picocolors.cyan('\nIf a file is missing, run `npx hypermemory connect` then reload the IDE.\n'));
+    console.log(picocolors.cyan('\nIf a file is missing, run `npx hypersabmemory connect` then reload the IDE.\n'));
   });
 
 // Command: eval
@@ -272,7 +295,7 @@ program
   .description('Run local MemoryBench recall eval (no AWS). Exit 1 if recall < 0.8 or forgotten facts leak.')
   .action(() => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-eval-'));
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     seedMemoryBench(engine);
     const report = evaluateMemoryEngine(engine);
     const hybrid = new HybridSearchEngine(dir, engine);
@@ -293,30 +316,79 @@ program
   .command('mcp')
   .description('Launch Model Context Protocol (MCP) stdio server for AI agents')
   .action(async () => {
-    const server = new HyperMemoryMcpServer(process.cwd());
+    const server = new HyperSABMemoryMcpServer(process.cwd());
     await server.start();
   });
 
 // Command: publish
 program
   .command('publish')
-  .description('Check open source publication readiness for https://github.com/framesxsab/HyperMemory')
-  .action(() => {
-    console.log(picocolors.cyan('\n🚀 HyperMemory — Open Source Publication Checklist'));
-    console.log(picocolors.gray('Target Repo: https://github.com/framesxsab/HyperMemory\n'));
-    console.log(picocolors.green('  ✔ PRD.md: Complete'));
-    console.log(picocolors.green('  ✔ Architecture.md: Complete'));
-    console.log(picocolors.green('  ✔ Rules.md: Complete'));
-    console.log(picocolors.green('  ✔ Phases.md: Complete'));
-    console.log(picocolors.green('  ✔ Design.md: Complete'));
-    console.log(picocolors.green('  ✔ Memory.md: Complete'));
-    console.log(picocolors.green('  ✔ LICENSE: MIT'));
-    console.log(picocolors.green('  ✔ CONTRIBUTING.md: Complete'));
-    console.log(picocolors.green('  ✔ GitHub Actions CI: .github/workflows/ci.yml'));
-    console.log(picocolors.green('  ✔ MemoryBench eval: npm run eval (local, no SageMaker)'));
-    console.log(picocolors.green('  ✔ Git Author: Configured'));
-    console.log(picocolors.green('  ✔ MCP connect: npx hypermemory connect'));
-    console.log(picocolors.cyan('\nReady to push repository to GitHub!'));
+  .description('Check open source publication readiness for https://github.com/framesxsab/HyperSABMemory')
+  .action(async () => {
+    console.log(picocolors.cyan('\n🚀 HyperSABMemory — Publication Readiness Checklist'));
+    console.log(picocolors.gray('Target Repo: https://github.com/framesxsab/HyperSABMemory\n'));
+
+    let hardFailures = 0;
+    const reportCheck = (ok: boolean, label: string, detail: string): void => {
+      const mark = ok ? picocolors.green('✔') : picocolors.red('✘');
+      console.log(`  ${mark} ${label}: ${detail}`);
+      if (!ok) hardFailures += 1;
+    };
+
+    // Check 1: git working tree clean
+    let treeClean = false;
+    let treeDetail: string;
+    try {
+      const { stdout } = await execFileAsync('git', ['status', '--porcelain'], { cwd: process.cwd() });
+      treeClean = stdout.trim().length === 0;
+      treeDetail = treeClean ? 'clean' : `${stdout.trim().split('\n').length} uncommitted file(s)`;
+    } catch {
+      treeDetail = 'not a git repository or git unavailable';
+    }
+    reportCheck(treeClean, 'Git working tree', treeDetail);
+
+    // Check 2: dist/ exists and is at least as new as src/
+    const distDir = path.join(process.cwd(), 'dist');
+    const srcDir = path.join(process.cwd(), 'src');
+    let distFresh = false;
+    let distDetail: string;
+    if (!fs.existsSync(distDir)) {
+      distDetail = 'dist/ missing — run `npm run build`';
+    } else {
+      const distNewest = newestMtimeMs(distDir);
+      const srcNewest = fs.existsSync(srcDir) ? newestMtimeMs(srcDir) : 0;
+      distFresh = distNewest >= srcNewest;
+      distDetail = distFresh ? 'dist/ is up to date with src/' : 'dist/ is stale — run `npm run build`';
+    }
+    reportCheck(distFresh, 'Build output', distDetail);
+
+    // Check 3: package.json version parses as strict semver
+    let versionOk = false;
+    let versionDetail: string;
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')) as { version?: unknown };
+      const version = typeof pkg.version === 'string' ? pkg.version : '';
+      versionOk = STRICT_SEMVER.test(version);
+      versionDetail = versionOk ? version : `"${version || 'missing'}" is not strict semver (MAJOR.MINOR.PATCH)`;
+    } catch {
+      versionDetail = 'package.json unreadable or invalid JSON';
+    }
+    reportCheck(versionOk, 'package.json version', versionDetail);
+
+    // Check 4: npm registry identity (best-effort, non-fatal)
+    try {
+      const { stdout } = await execFileAsync('npm', ['whoami'], { cwd: process.cwd() });
+      console.log(`  ${picocolors.green('✔')} npm identity: logged in as ${stdout.trim()}`);
+    } catch {
+      console.log(`  ${picocolors.yellow('○')} npm identity: not authenticated (or offline) — run \`npm login\` before publishing`);
+    }
+
+    if (hardFailures > 0) {
+      console.log(picocolors.red(`\n✖ ${hardFailures} hard check(s) failed. Fix the items above before publishing.`));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(picocolors.green('\n✔ All hard checks passed. Ready to publish.'));
   });
 
 // Command: doctor
@@ -325,9 +397,9 @@ program
   .description('Read-only health check: git, work tree, memory store, MCP configs, dashboard port')
   .action(async () => {
     const report = await runDoctor(process.cwd());
-    console.log(picocolors.cyan('\nHyperMemory doctor\n'));
+    console.log(picocolors.cyan('\nHyperSABMemory doctor\n'));
     for (const check of report.checks) {
-      const mark = check.ok ? picocolors.green('✔') : picocolors.red('✖');
+      const mark = check.ok ? picocolors.green('✔') : picocolors.red('✘');
       console.log(`  ${mark} ${check.name}: ${check.detail}`);
     }
     if (!report.ok) {

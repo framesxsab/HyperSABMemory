@@ -1,5 +1,5 @@
 /**
- * HyperMemory — Supermemory Persistent Memory Layer
+ * HyperSABMemory — Temporal Persistent Memory Layer
  * Serves as the persistent reference memory engine, maintaining cross-session state,
  * semantic memory indexing, and live Memory.md context synchronization.
  */
@@ -9,12 +9,12 @@ import * as path from 'path';
 import { buildContextBlock } from './contextBlock.js';
 import { SqliteStore, MemoryRecord } from './sqliteStore.js';
 
-export class SupermemoryEngine {
+export class TemporalMemoryEngine {
   private store: SqliteStore;
   private memoryFilePath: string;
 
   constructor(workspaceDir: string = '.') {
-    const memoryDir = path.join(workspaceDir, '.hypermemory');
+    const memoryDir = path.join(workspaceDir, '.hypersabmemory');
     this.store = new SqliteStore(memoryDir);
     this.memoryFilePath = path.join(workspaceDir, 'Memory.md');
   }
@@ -103,7 +103,7 @@ export class SupermemoryEngine {
 
       let content = fs.readFileSync(this.memoryFilePath, 'utf-8');
 
-      const sectionHeader = '## Persistent Supermemory Index';
+      const sectionHeader = '## Persistent Memory Index';
       const newSection = `${sectionHeader}\n${recordsFormatted || 'No records logged yet.'}`;
 
       if (content.includes(sectionHeader)) {
@@ -114,7 +114,7 @@ export class SupermemoryEngine {
 
       fs.writeFileSync(this.memoryFilePath, content, 'utf-8');
     } catch (err) {
-      console.error('[HyperMemory :: SupermemoryEngine] Failed to sync Memory.md:', err);
+      console.error('[HyperSABMemory :: TemporalMemoryEngine] Failed to sync Memory.md:', err);
     }
   }
 }

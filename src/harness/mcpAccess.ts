@@ -1,6 +1,6 @@
 /**
- * HyperMemory — Direct MCP access for Cursor, Claude Code, and VS Code.
- * Merges a hypermemory server entry into native MCP config files without wiping other servers.
+ * HyperSABMemory — Direct MCP access for Cursor, Claude Code, and VS Code.
+ * Merges a hypersabmemory server entry into native MCP config files without wiping other servers.
  */
 
 import * as fs from 'fs';
@@ -38,20 +38,20 @@ export function resolveMcpLaunch(workspaceDir: string): McpLaunch {
   if (fs.existsSync(localBin)) {
     return { command: 'node', args: ['dist/cli/index.js', 'mcp'] };
   }
-  return { command: 'npx', args: ['-y', 'hypermemory', 'mcp'] };
+  return { command: 'npx', args: ['-y', 'hypersabmemory', 'mcp'] };
 }
 
 export const MCP_TOOL_FLOW = [
-  'hypermemory_get_context',
-  'hypermemory_remember',
-  'hypermemory_query',
-  'hypermemory_forget',
-  'hypermemory_context_block',
-  'hypermemory_inject_adapters',
-  'hypermemory_checkpoint',
-  'hypermemory_broadcast',
-  'hypermemory_claim_task',
-  'hypermemory_sync_swarm'
+  'hypersabmemory_get_context',
+  'hypersabmemory_remember',
+  'hypersabmemory_query',
+  'hypersabmemory_forget',
+  'hypersabmemory_context_block',
+  'hypersabmemory_inject_adapters',
+  'hypersabmemory_checkpoint',
+  'hypersabmemory_broadcast',
+  'hypersabmemory_claim_task',
+  'hypersabmemory_sync_swarm'
 ];
 
 export class McpAccessEngine {
@@ -118,7 +118,7 @@ Launch: ${result.launch.command} ${result.launch.args.join(' ')}`;
     const bucket = (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key]))
       ? { ...(payload[key] as Record<string, unknown>) }
       : {};
-    bucket.hypermemory = { command: launch.command, args: launch.args, ...extra };
+    bucket.hypersabmemory = { command: launch.command, args: launch.args, ...extra };
     payload[key] = bucket;
     fs.writeFileSync(abs, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
     return abs;

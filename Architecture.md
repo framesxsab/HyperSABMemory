@@ -1,8 +1,8 @@
-# HyperMemory — System Architecture & Flow
+# HyperSABMemory — System Architecture & Flow
 
 ## 1. High-Level Architecture
 
-HyperMemory sits as a high-performance middleware between the IDE / Editor environment, the local filesystem, and the AI agent session.
+HyperSABMemory sits as a high-performance middleware between the IDE / Editor environment, the local filesystem, and the AI agent session.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -13,10 +13,10 @@ HyperMemory sits as a high-performance middleware between the IDE / Editor envir
                  File Events & State │ Agent Prompt Queries / MCP Tools
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           HYPERMEMORY ENGINE                            │
+│                           HYPERSABMEMORY ENGINE                            │
 │                                                                         │
 │  ┌─────────────────────────────┐       ┌─────────────────────────────┐  │
-│  │     Oh-My-Pi Harness        │       │   Supermemory Base Engine   │  │
+│  │     Context Harness        │       │   Temporal Memory Store Engine   │  │
 │  │                             │       │                             │  │
 │  │ - State Compressor          │       │ - Local Vector / SQLite Store│ │
 │  │ - Token Budget Manager      │ ◄───► │ - Entity & Context Graph    │  │
@@ -36,7 +36,7 @@ HyperMemory sits as a high-performance middleware between the IDE / Editor envir
 │                            OUTPUT ARTIFACTS                             │
 │       • Memory.md (Live Context Log for AI Agents)                      │
 │       • MCP Server JSON-RPC Protocol (Tool Bindings)                    │
-│       • HyperMemory CLI Context Snapshots                               │
+│       • HyperSABMemory CLI Context Snapshots                               │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,7 +45,7 @@ HyperMemory sits as a high-performance middleware between the IDE / Editor envir
 ## 2. Directory & Module Structure
 
 ```
-hypermemory/
+hypersabmemory/
 ├── PRD.md                       # Product Requirements Document
 ├── Architecture.md              # System Architecture & Technical Specifications
 ├── Rules.md                     # AI Agent Operating Rules & Constraints
@@ -57,11 +57,11 @@ hypermemory/
 ├── tsconfig.json                # TypeScript Strict Compiler Options
 ├── src/
 │   ├── index.ts                 # Main Library Export Entry Point
-│   ├── harness/                 # Oh-My-Pi Context Harness & State Compressor
+│   ├── harness/                 # context-harness Context Harness & State Compressor
 │   │   ├── ohMyPi.ts            # Dynamic Prompt & State Harness Formatter
 │   │   └── tokenCompressor.ts   # Token Ceiling & State Truncation Utilities
-│   ├── memory/                  # Supermemory Base Persistent Storage
-│   │   ├── supermemory.ts       # Supermemory Core Manager
+│   ├── memory/                  # Temporal Memory Store Persistent Storage
+│   │   ├── temporalMemory.ts       # Temporal Memory Core Manager
 │   │   ├── sqliteStore.ts       # Local SQLite / Key-Value Memory Store
 │   │   └── graphIndexer.ts      # Project Symbol & Relationship Graph
 │   ├── hooks/                   # Real-time Event System
@@ -81,7 +81,7 @@ hypermemory/
 ## 3. Technology Stack
 
 - **Language**: TypeScript (Node.js ES2022 / CommonJS dual build)
-- **State Harness Engine**: Custom Oh-My-Pi AST & state compression algorithm
+- **State Harness Engine**: Custom context-harness AST & state compression algorithm
 - **Persistent Storage**: Local SQLite (`better-sqlite3` / in-memory fallback) + JSON file store
 - **File System Hook**: `chokidar` high-performance watcher
 - **Agent Integration**: `@modelcontextprotocol/sdk` (Model Context Protocol standard)
@@ -95,5 +95,5 @@ hypermemory/
 1. **File Edit Event**: Developer or AI edits a file and saves.
 2. **Hook Trigger**: `fileWatcher.ts` catches the change event within < 10ms.
 3. **Diff & AST Analysis**: `ohMyPi.ts` calculates line delta, active symbol focus, and token usage.
-4. **Memory Graph Update**: `supermemory.ts` updates symbol relationships and saves high-level summary into `Memory.md` and local SQLite store.
+4. **Memory Graph Update**: `temporalMemory.ts` updates symbol relationships and saves high-level summary into `Memory.md` and local SQLite store.
 5. **Context Header Generation**: When AI agent calls MCP tool or starts next prompt turn, `ohMyPi.ts` provides a compact state snapshot header (< 1000 tokens) ready for context injection.

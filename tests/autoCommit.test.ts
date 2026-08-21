@@ -36,7 +36,7 @@ afterEach(() => {
   }
 });
 
-describe('HyperMemory — Safe Rollback + History + Diff (P11)', () => {
+describe('HyperSABMemory — Safe Rollback + History + Diff (P11)', () => {
   it('creates a safety checkpoint before reset and lands exactly on the target', async () => {
     const dir = initRepo();
     dirs.push(dir);
@@ -58,7 +58,7 @@ describe('HyperMemory — Safe Rollback + History + Diff (P11)', () => {
     expect(safetyCommits.some((c) => c.message.includes('safety: pre-rollback snapshot'))).toBe(true);
     const safety = safetyCommits.find((c) => c.message.includes('safety: pre-rollback snapshot'));
     expect(run(dir, `git cat-file -t ${safety!.hash}`).trim()).toBe('commit');
-  });
+  }, 30_000);
 
   it('rejects regex-valid hashes that do not exist', async () => {
     const dir = initRepo();

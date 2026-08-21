@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  HyperMemoryMcpServer,
+  HyperSABMemoryMcpServer,
   mapGraphHitsToRecords,
   selectQueryRecords,
   QuerySource
 } from '../src/mcp/server.js';
-import { SupermemoryEngine } from '../src/memory/supermemory.js';
+import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine, HybridSearchResult } from '../src/memory/hybridSearch.js';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -25,15 +25,15 @@ afterEach(() => {
   }
 });
 
-function seedMemoryFixture(dir: string): { supermemory: SupermemoryEngine; hybrid: HybridSearchEngine } {
-  const supermemory = new SupermemoryEngine(dir);
-  supermemory.remember('decision', 'Use BM25 plus RRF fusion for hybrid search');
-  supermemory.remember('bug', 'Watcher debounce was noisy before the fix');
-  const hybrid = new HybridSearchEngine(dir, supermemory);
-  return { supermemory, hybrid };
+function seedMemoryFixture(dir: string): { memory: TemporalMemoryEngine; hybrid: HybridSearchEngine } {
+  const memory = new TemporalMemoryEngine(dir);
+  memory.remember('decision', 'Use BM25 plus RRF fusion for hybrid search');
+  memory.remember('bug', 'Watcher debounce was noisy before the fix');
+  const hybrid = new HybridSearchEngine(dir, memory);
+  return { memory, hybrid };
 }
 
-describe('HyperMemory — Hybrid MCP Query (P7)', () => {
+describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
   it('keeps source "memory" byte-identical to the pre-change searchRecords output', () => {
     const dir = tmpDir();
     const { hybrid } = seedMemoryFixture(dir);
@@ -54,16 +54,16 @@ describe('HyperMemory — Hybrid MCP Query (P7)', () => {
     expect(JSON.stringify(all)).toBe(JSON.stringify(memory));
   });
 
-  it('maps graphify hits onto synthetic MemoryRecord shape with graph_ ids', () => {
+  it('maps graph hits onto synthetic MemoryRecord shape with graph_ ids', () => {
     const hits: HybridSearchResult[] = [
       {
         score: 1,
-        source: 'graphify',
+        source: 'graph',
         title: '[CLASS] SqliteStore',
         snippet: 'AST Node: SqliteStore (class) | Dependencies: fs',
         category: 'class'
       },
-      { score: 1, source: 'supermemory', title: '[DECISION] m1', snippet: 'memory leg hit' }
+      { score: 1, source: 'memory', title: '[DECISION] m1', snippet: 'memory leg hit' }
     ];
 
     const records = mapGraphHitsToRecords(hits);
@@ -76,14 +76,14 @@ describe('HyperMemory — Hybrid MCP Query (P7)', () => {
 
   it('caps the combined array at limit with memory first, graph filling the rest', () => {
     const dir = tmpDir();
-    const supermemory = new SupermemoryEngine(dir);
-    supermemory.remember('decision', 'alpha symbol naming convention');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'alpha symbol naming convention');
     const graphJson = path.join(dir, 'graph.json');
     fs.writeFileSync(graphJson, JSON.stringify({
       nodes: [{ id: 'n1', type: 'function', name: 'alphaSymbolHelper' }]
     }));
 
-    const hybrid = new HybridSearchEngine(dir, supermemory);
+    const hybrid = new HybridSearchEngine(dir, memory);
 
     const combined = selectQueryRecords(hybrid, 'symbol', 2, 'all');
     expect(combined.length).toBeLessThanOrEqual(2);
@@ -98,6 +98,6 @@ describe('HyperMemory — Hybrid MCP Query (P7)', () => {
 
   it('constructs the MCP server over a temp workspace without throwing', () => {
     const dir = tmpDir();
-    expect(() => new HyperMemoryMcpServer(dir)).not.toThrow();
+    expect(() => new HyperSABMemoryMcpServer(dir)).not.toThrow();
   });
 });

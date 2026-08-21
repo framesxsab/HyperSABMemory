@@ -1,11 +1,11 @@
 {
-  "name": "hypermemory",
+  "name": "hypersabmemory",
   "version": "1.2.0",
-  "description": "Open-source IDE context harness and persistent memory engine inspired by Supermemory and Oh-My-Pi",
+  "description": "Open-source IDE context harness and persistent memory engine for AI coding agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "hypermemory": "dist/cli/index.js"
+    "hypersabmemory": "dist/cli/index.js"
   },
   "type": "module",
   "scripts": {
@@ -19,21 +19,30 @@
     "prepublishOnly": "npm test && npm run eval && npm run build"
   },
   "keywords": [
-    "hypermemory",
-    "supermemory",
-    "oh-my-pi",
+    "hypersabmemory",
     "mcp",
-    "ide-harness",
-    "context-window",
+    "model-context-protocol",
     "ai-agent",
+    "coding-agent",
+    "agent-memory",
+    "context-window",
+    "context-harness",
     "git-checkpoint",
-    "auto-commit"
+    "ide",
+    "cursor",
+    "claude-code",
+    "windsurf",
+    "vscode"
   ],
-  "author": "HyperMemory Open Source Community",
+  "author": "framesxsab",
   "license": "MIT",
+  "homepage": "https://github.com/framesxsab/HyperSABMemory#readme",
+  "bugs": {
+    "url": "https://github.com/framesxsab/HyperSABMemory/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/framesxsab/HyperMemory.git"
+    "url": "git+https://github.com/framesxsab/HyperSABMemory.git"
   },
   "engines": {
     "node": ">=18"

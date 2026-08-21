@@ -1,6 +1,6 @@
 /**
- * HyperMemory — Model Context Protocol (MCP) Server
- * Exposes HyperMemory context harness and Supermemory tools to AI coding agents via MCP standard.
+ * HyperSABMemory — Model Context Protocol (MCP) Server
+ * Exposes the HyperSABMemory context harness and temporal memory tools to AI coding agents via MCP standard.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -10,12 +10,12 @@ import {
   ListToolsRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { SupermemoryEngine } from '../memory/supermemory.js';
-import { GraphifyEngine } from '../memory/graphify.js';
+import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
+import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { MemoryRecord } from '../memory/sqliteStore.js';
-import { OhMyPiHarness } from '../harness/ohMyPi.js';
+import { ContextHarness } from '../harness/contextHarness.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { getPackageVersion } from '../version.js';
@@ -25,12 +25,12 @@ import * as path from 'path';
 export type QuerySource = 'memory' | 'graph' | 'all';
 
 /**
- * Maps graphify structural hits onto synthetic MemoryRecord shape so the MCP
+ * Maps structural knowledge graph hits onto synthetic MemoryRecord shape so the MCP
  * query response stays MemoryRecord-compatible. Response-only: never persisted.
  */
 export function mapGraphHitsToRecords(hits: HybridSearchResult[]): MemoryRecord[] {
   return hits
-    .filter((hit) => hit.source === 'graphify')
+    .filter((hit) => hit.source === 'graph')
     .map((hit) => {
       const idx = hit.title.indexOf('] ');
       const name = idx >= 0 ? hit.title.slice(idx + 2) : hit.title;
@@ -78,30 +78,30 @@ export function resolveActiveFilePath(workspaceDir: string, activeFile: string):
   return resolved;
 }
 
-export class HyperMemoryMcpServer {
+export class HyperSABMemoryMcpServer {
   private server: Server;
-  private supermemory: SupermemoryEngine;
-  private harness: OhMyPiHarness;
+  private memory: TemporalMemoryEngine;
+  private harness: ContextHarness;
   private autoCommit: AutoCommitEngine;
-  private graphify: GraphifyEngine;
+  private graph: StructuralGraphEngine;
   private hybridSearch: HybridSearchEngine;
   private swarm: SwarmMeshEngine;
   private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
     this.workspaceDir = workspaceDir;
-    this.supermemory = new SupermemoryEngine(workspaceDir);
-    this.harness = new OhMyPiHarness(1500);
+    this.memory = new TemporalMemoryEngine(workspaceDir);
+    this.harness = new ContextHarness(1500);
     this.autoCommit = new AutoCommitEngine({
       workspaceDir
     });
-    this.graphify = new GraphifyEngine(workspaceDir);
-    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.supermemory, this.graphify);
+    this.graph = new StructuralGraphEngine(workspaceDir);
+    this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
     this.swarm = new SwarmMeshEngine(workspaceDir);
 
     this.server = new Server(
       {
-        name: 'hypermemory-mcp',
+        name: 'hypersabmemory-mcp',
         version: getPackageVersion()
       },
       {
@@ -120,8 +120,8 @@ export class HyperMemoryMcpServer {
       return {
         tools: [
           {
-            name: 'hypermemory_get_context',
-            description: 'Get active Oh-My-Pi state harness header and token-compressed context snapshot.',
+            name: 'hypersabmemory_get_context',
+            description: 'Get active context harness state header and token-compressed context snapshot.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -131,8 +131,8 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_remember',
-            description: 'Save a persistent architectural memory or key decision into Supermemory base.',
+            name: 'hypersabmemory_remember',
+            description: 'Save a persistent architectural memory or key decision into the temporal memory store.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -148,7 +148,7 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_checkpoint',
+            name: 'hypersabmemory_checkpoint',
             description: 'Trigger an immediate hyperfrequent git checkpoint commit.',
             inputSchema: {
               type: 'object',
@@ -158,8 +158,8 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_query',
-            description: 'Search persistent Supermemory store for relevant decisions or symbols.',
+            name: 'hypersabmemory_query',
+            description: 'Search the persistent temporal memory store for relevant decisions or symbols.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -175,7 +175,7 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_forget',
+            name: 'hypersabmemory_forget',
             description: 'Invalidate a memory by id (merge/forget). Forgotten facts drop out of Context Block.',
             inputSchema: {
               type: 'object',
@@ -186,23 +186,23 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_context_block',
-            description: 'Return a token-packed Context Block of dated active facts for the Oh-My-Pi header.',
+            name: 'hypersabmemory_context_block',
+            description: 'Return a token-packed Context Block of dated active facts for the context harness header.',
             inputSchema: {
               type: 'object',
               properties: {}
             }
           },
           {
-            name: 'hypermemory_inject_adapters',
-            description: 'Ingest native IDE rule files and auto-inject HyperMemory plus the current Context Block.',
+            name: 'hypersabmemory_inject_adapters',
+            description: 'Ingest native IDE rule files and auto-inject HyperSABMemory plus the current Context Block.',
             inputSchema: {
               type: 'object',
               properties: {}
             }
           },
           {
-            name: 'hypermemory_broadcast',
+            name: 'hypersabmemory_broadcast',
             description: 'Broadcast a fact or finding to the shared swarm mesh so parallel subagents stop duplicating work.',
             inputSchema: {
               type: 'object',
@@ -214,7 +214,7 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_claim_task',
+            name: 'hypersabmemory_claim_task',
             description: 'Acquire or release an exclusive lock on a file so concurrent agents do not edit it simultaneously.',
             inputSchema: {
               type: 'object',
@@ -227,7 +227,7 @@ export class HyperMemoryMcpServer {
             }
           },
           {
-            name: 'hypermemory_sync_swarm',
+            name: 'hypersabmemory_sync_swarm',
             description: 'Return active swarm state: live file locks, recent broadcasts, and this caller session id.',
             inputSchema: {
               type: 'object',
@@ -245,7 +245,7 @@ export class HyperMemoryMcpServer {
       const { name, arguments: args } = request.params;
 
       try {
-        if (name === 'hypermemory_get_context') {
+        if (name === 'hypersabmemory_get_context') {
           const activeFile = (args?.activeFile as string) || '';
           const cursorLine = (args?.cursorLine as number) || 1;
 
@@ -271,23 +271,23 @@ export class HyperMemoryMcpServer {
             lastCommitTime: snapshot.lastCommitTime,
             modifiedFiles: snapshot.modifiedFiles,
             recentDiff: snapshot.recentDiff,
-            memorySummary: this.supermemory.getSummary(),
-            contextBlock: this.supermemory.getContextBlock(),
-            graphifySummary: this.graphify.getGraphSummary(),
+            memorySummary: this.memory.getSummary(),
+            contextBlock: this.memory.getContextBlock(),
+            structuralGraphSummary: this.graph.getGraphSummary(),
             activeFileContent
           });
           return { content: [{ type: 'text', text: header }] };
         }
 
-        if (name === 'hypermemory_remember') {
+        if (name === 'hypersabmemory_remember') {
           const category = (args?.category as any) || 'general';
           const content = (args?.content as string) || '';
           const tags = (args?.tags as string[]) || [];
-          const record = this.supermemory.remember(category, content, tags);
+          const record = this.memory.remember(category, content, tags);
           return { content: [{ type: 'text', text: `Saved memory ID [${record.id}]: ${record.content}` }] };
         }
 
-        if (name === 'hypermemory_checkpoint') {
+        if (name === 'hypersabmemory_checkpoint') {
           const reason = (args?.reason as string) || 'Manual MCP Checkpoint';
           const result = await this.autoCommit.createCheckpoint(reason);
           return {
@@ -298,7 +298,7 @@ export class HyperMemoryMcpServer {
           };
         }
 
-        if (name === 'hypermemory_query') {
+        if (name === 'hypersabmemory_query') {
           const query = (args?.query as string) || '';
           const limit = Number.isFinite(args?.limit) ? (args?.limit as number) : 10;
           const source = (args?.source as QuerySource) || 'all';
@@ -306,9 +306,9 @@ export class HyperMemoryMcpServer {
           return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
         }
 
-        if (name === 'hypermemory_forget') {
+        if (name === 'hypersabmemory_forget') {
           const id = (args?.id as string) || '';
-          const forgotten = this.supermemory.forget(id);
+          const forgotten = this.memory.forget(id);
           return {
             content: [{
               type: 'text',
@@ -317,14 +317,14 @@ export class HyperMemoryMcpServer {
           };
         }
 
-        if (name === 'hypermemory_context_block') {
-          return { content: [{ type: 'text', text: this.supermemory.getContextBlock() }] };
+        if (name === 'hypersabmemory_context_block') {
+          return { content: [{ type: 'text', text: this.memory.getContextBlock() }] };
         }
 
-        if (name === 'hypermemory_inject_adapters') {
+        if (name === 'hypersabmemory_inject_adapters') {
           const adapters = new UniversalAdaptersEngine(this.workspaceDir);
           const result = adapters.syncAllAdapters({
-            contextBlock: this.supermemory.getContextBlock()
+            contextBlock: this.memory.getContextBlock()
           });
           return {
             content: [{
@@ -334,7 +334,7 @@ export class HyperMemoryMcpServer {
           };
         }
 
-        if (name === 'hypermemory_broadcast') {
+        if (name === 'hypersabmemory_broadcast') {
           const message = (args?.message as string) || '';
           if (!message.trim()) {
             return { content: [{ type: 'text', text: 'Error: message is required' }], isError: true };
@@ -348,7 +348,7 @@ export class HyperMemoryMcpServer {
           };
         }
 
-        if (name === 'hypermemory_claim_task') {
+        if (name === 'hypersabmemory_claim_task') {
           const filePath = (args?.filePath as string) || '';
           if (!filePath) {
             return { content: [{ type: 'text', text: 'Error: filePath is required' }], isError: true };
@@ -368,7 +368,7 @@ export class HyperMemoryMcpServer {
           };
         }
 
-        if (name === 'hypermemory_sync_swarm') {
+        if (name === 'hypersabmemory_sync_swarm') {
           const snapshot = this.swarm.sync((args?.sessionId as string) || undefined);
           return {
             content: [{

@@ -1,53 +1,53 @@
 /**
- * HyperMemory — Ponytail Harness & YAGNI Decision Ladder
- * Enforces lazy senior developer YAGNI principles (DietrichGebert/ponytail spec)
+ * HyperSABMemory — Minimal-Change Rules Engine
+ * Enforces lazy senior developer YAGNI principles
  * to eliminate code bloat, reduce token usage, and enforce minimal code generation.
  */
 
-export type PonytailIntensity = 'lite' | 'full' | 'ultra';
+export type MinimalChangeIntensity = 'lite' | 'full' | 'ultra';
 
-export interface PonytailOptions {
+export interface MinimalChangeOptions {
   enabled?: boolean;
   strictYagni?: boolean;
-  intensity?: PonytailIntensity;
+  intensity?: MinimalChangeIntensity;
 }
 
-export class PonytailEngine {
+export class MinimalChangeEngine {
   private enabled: boolean;
   private strictYagni: boolean;
-  private intensity: PonytailIntensity;
+  private intensity: MinimalChangeIntensity;
 
-  constructor(options: PonytailOptions = {}) {
+  constructor(options: MinimalChangeOptions = {}) {
     this.enabled = options.enabled ?? true;
     this.strictYagni = options.strictYagni ?? true;
     this.intensity = options.intensity ?? 'full';
   }
 
   /**
-   * Generates the concise Ponytail YAGNI decision prompt block for agent headers.
+   * Generates the concise minimal-change rules prompt block for agent headers.
    */
-  public generatePonytailHeader(): string {
+  public generateMinimalChangeHeader(): string {
     if (!this.enabled) return '';
 
     switch (this.intensity) {
       case 'lite':
-        return `🎯 [PONYTAIL YAGNI :: lite]
-Reuse Graphify components. No new deps. Minimum working code.`;
+        return `🎯 [MINIMAL-CHANGE RULES :: lite]
+Reuse structural knowledge graph components. No new deps. Minimum working code.`;
       case 'full':
-        return `🎯 [PONYTAIL YAGNI DECISION LADDER]
+        return `🎯 [MINIMAL-CHANGE RULES]
 1. Does this feature need to exist at all? (Default to NO unless requested)
-2. Does it already exist in Graphify codebase graph? (REUSE first)
+2. Does it already exist in the structural knowledge graph? (REUSE first)
 3. Can standard library or existing dependency cover it? (NO new npm packages)
 4. Can it be written in < 15 lines of clear, typed code?
 5. Write ONLY the minimum working code. Zero fluff, zero over-engineering.`;
       case 'ultra':
-        return `🎯 [PONYTAIL YAGNI DECISION LADDER :: ultra]
+        return `🎯 [MINIMAL-CHANGE RULES :: ultra]
 1. Does this feature need to exist at all? (Default to NO unless requested)
-2. Does it already exist in Graphify codebase graph? (REUSE first)
+2. Does it already exist in the structural knowledge graph? (REUSE first)
 3. Can standard library or existing dependency cover it? (NO new npm packages)
 4. Can it be written in < 15 lines of clear, typed code?
 5. Write ONLY the minimum working code. Zero fluff, zero over-engineering.
-6. Inject this ladder into every subagent. Harvest deferred shortcuts as debt.
+6. Inject these rules into every subagent. Harvest deferred shortcuts as debt.
 7. Strict: ${this.strictYagni ? 'ON' : 'OFF'}`;
       default: {
         const _exhaustive: never = this.intensity;

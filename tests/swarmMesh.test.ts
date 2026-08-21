@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SwarmMeshEngine } from '../src/memory/swarmMesh.js';
 
-describe('HyperMemory — Swarm Shared Memory Mesh', () => {
+describe('HyperSABMemory — Swarm Shared Memory Mesh', () => {
   function makeDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'hm-swarm-'));
   }

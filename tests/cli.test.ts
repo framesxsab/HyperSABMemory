@@ -3,7 +3,7 @@ import { getPackageVersion } from '../src/version.js';
 import { parseIntervalMinutes } from '../src/cli/cliUtils.js';
 import { runDoctor } from '../src/cli/doctor.js';
 import { registerMemoryCommands } from '../src/cli/memoryCommands.js';
-import { SupermemoryEngine } from '../src/memory/supermemory.js';
+import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { Command } from 'commander';
 import { execSync } from 'child_process';
@@ -25,7 +25,7 @@ afterEach(() => {
   }
 });
 
-describe('HyperMemory — CLI completeness + bugfix sweep (P12)', () => {
+describe('HyperSABMemory — CLI completeness + bugfix sweep (P12)', () => {
   it('reports the real package version, never a hardcoded literal', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf-8')
@@ -45,7 +45,7 @@ describe('HyperMemory — CLI completeness + bugfix sweep (P12)', () => {
 
   it('clamps limit at the engine level in both search paths', () => {
     const dir = tmpDir();
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     engine.remember('decision', 'clamp probe fact');
     const hybrid = new HybridSearchEngine(dir, engine);
 
@@ -57,7 +57,7 @@ describe('HyperMemory — CLI completeness + bugfix sweep (P12)', () => {
 
   it('rejects empty or whitespace-only remember content', () => {
     const dir = tmpDir();
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     expect(() => engine.remember('decision', '')).toThrow();
     expect(() => engine.remember('decision', '   ')).toThrow();
   });
@@ -68,21 +68,21 @@ describe('HyperMemory — CLI completeness + bugfix sweep (P12)', () => {
     process.chdir(dir);
     try {
       const program = new Command();
-      program.name('hypermemory-test');
+      program.name('hypersabmemory-test');
       registerMemoryCommands(program);
 
-      program.parse(['node', 'hypermemory-test', 'remember', 'P12 round trip fact', '--category', 'decision']);
-      const engine = new SupermemoryEngine(dir);
+      program.parse(['node', 'hypersabmemory-test', 'remember', 'P12 round trip fact', '--category', 'decision']);
+      const engine = new TemporalMemoryEngine(dir);
       const all = engine.getActive();
       expect(all.some((r) => r.content === 'P12 round trip fact')).toBe(true);
 
       const id = all.find((r) => r.content === 'P12 round trip fact')!.id;
-      program.parse(['node', 'hypermemory-test', 'forget', id]);
-      const afterForget = new SupermemoryEngine(dir);
+      program.parse(['node', 'hypersabmemory-test', 'forget', id]);
+      const afterForget = new TemporalMemoryEngine(dir);
       expect(afterForget.getActive().some((r) => r.id === id)).toBe(false);
 
-      expect(() => program.parse(['node', 'hypermemory-test', 'list'])).not.toThrow();
-      expect(() => program.parse(['node', 'hypermemory-test', 'recall'])).not.toThrow();
+      expect(() => program.parse(['node', 'hypersabmemory-test', 'list'])).not.toThrow();
+      expect(() => program.parse(['node', 'hypersabmemory-test', 'recall'])).not.toThrow();
     } finally {
       process.chdir(cwd);
     }

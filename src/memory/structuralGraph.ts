@@ -1,7 +1,7 @@
 /**
- * HyperMemory — Graphify Structural Knowledge Integration (Graphify-Labs/graphify)
- * Integrates Graphify codebase structural knowledge graphs (graph.json, GRAPH_REPORT.md)
- * with Supermemory temporal decisions into a unified AI agent context harness.
+ * HyperSABMemory — Structural Knowledge Graph Integration
+ * Integrates codebase structural knowledge graphs (graph.json, GRAPH_REPORT.md)
+ * with temporal decisions into a unified AI agent context harness.
  */
 
 import * as fs from 'fs';
@@ -18,13 +18,13 @@ export interface GraphNode {
   dependencies?: string[];
 }
 
-export interface GraphifyData {
+export interface StructuralGraphData {
   nodes: GraphNode[];
   reportSummary?: string;
   lastUpdated?: string;
 }
 
-export class GraphifyEngine {
+export class StructuralGraphEngine {
   private workspaceDir: string;
   private graphJsonPath: string;
   private reportPath: string;
@@ -36,17 +36,17 @@ export class GraphifyEngine {
   }
 
   /**
-   * Checks if Graphify data exists in the current workspace.
+   * Checks if structural graph data exists in the current workspace.
    */
   public hasGraph(): boolean {
     return fs.existsSync(this.graphJsonPath) || fs.existsSync(this.reportPath);
   }
 
   /**
-   * Reads and parses local Graphify graph.json or GRAPH_REPORT.md.
+   * Reads and parses local graph.json or GRAPH_REPORT.md.
    */
-  public getGraphData(): GraphifyData {
-    const data: GraphifyData = { nodes: [] };
+  public getGraphData(): StructuralGraphData {
+    const data: StructuralGraphData = { nodes: [] };
 
     try {
       if (fs.existsSync(this.graphJsonPath)) {
@@ -68,27 +68,33 @@ export class GraphifyEngine {
   }
 
   /**
-   * Generates a compact structural graph summary string for Oh-My-Pi context header.
+   * Generates a compact structural graph summary string for the context harness header.
    */
   public getGraphSummary(): string {
     if (!this.hasGraph()) {
-      return 'Graphify: Not initialized (Run `graphify .` to generate structural graph)';
+      return 'Structural knowledge graph: not initialized (no graph.json found yet)';
     }
 
     const data = this.getGraphData();
     const nodeCount = data.nodes.length;
-    return `Graphify: ${nodeCount} structural nodes mapped | ${data.reportSummary ? 'Report indexed' : 'Graph active'}`;
+    return `Structural knowledge graph: ${nodeCount} nodes mapped | ${data.reportSummary ? 'Report indexed' : 'Graph active'}`;
   }
 
   /**
-   * Attempts to execute Graphify CLI update.
+   * Attempts a best-effort external structural graph index refresh.
+   * The indexer command can be provided via HYPERSABMEMORY_GRAPH_INDEX_CMD;
+   * without it this degrades to false (graph.json stays as-is).
    */
   public async updateGraph(): Promise<boolean> {
+    const command = process.env.HYPERSABMEMORY_GRAPH_INDEX_CMD;
+    if (!command) {
+      return false;
+    }
     try {
-      await execAsync('graphify .', { cwd: this.workspaceDir });
+      await execAsync(command, { cwd: this.workspaceDir });
       return true;
     } catch {
-      // Return false if graphify CLI is not installed globally
+      // Return false if the configured indexer is not available
       return false;
     }
   }

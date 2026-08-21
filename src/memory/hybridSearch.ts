@@ -1,16 +1,16 @@
 /**
- * HyperMemory — Quad-Hybrid Search Engine
- * Combines Graphify AST structural nodes, Supermemory temporal records,
+ * HyperSABMemory — Quad-Hybrid Search Engine
+ * Combines structural knowledge graph nodes, temporal memory records,
  * and BM25 token matching into a unified Reciprocal Rank Fusion (RRF) search pipeline.
  */
 
-import { SupermemoryEngine } from './supermemory.js';
-import { GraphifyEngine, GraphNode } from './graphify.js';
+import { TemporalMemoryEngine } from './temporalMemory.js';
+import { StructuralGraphEngine, GraphNode } from './structuralGraph.js';
 import { MemoryRecord } from './sqliteStore.js';
 
 export interface HybridSearchResult {
   score: number;
-  source: 'graphify' | 'supermemory';
+  source: 'graph' | 'memory';
   title: string;
   snippet: string;
   category?: string;
@@ -32,12 +32,12 @@ function clampLimit(limit: number): number {
 }
 
 export class HybridSearchEngine {
-  private supermemory: SupermemoryEngine;
-  private graphify: GraphifyEngine;
+  private memory: TemporalMemoryEngine;
+  private graph: StructuralGraphEngine;
 
-  constructor(workspaceDir: string = process.cwd(), supermemory?: SupermemoryEngine, graphify?: GraphifyEngine) {
-    this.supermemory = supermemory ?? new SupermemoryEngine(workspaceDir);
-    this.graphify = graphify ?? new GraphifyEngine(workspaceDir);
+  constructor(workspaceDir: string = process.cwd(), memory?: TemporalMemoryEngine, graph?: StructuralGraphEngine) {
+    this.memory = memory ?? new TemporalMemoryEngine(workspaceDir);
+    this.graph = graph ?? new StructuralGraphEngine(workspaceDir);
   }
 
   /**
@@ -60,7 +60,7 @@ export class HybridSearchEngine {
     const qLower = query.toLowerCase().trim();
     if (!qLower) return [];
 
-    const records = this.supermemory.getActive();
+    const records = this.memory.getActive();
     const stats = this.corpusStats(records);
     const queryTokens = this.tokenize(qLower);
 
@@ -78,7 +78,7 @@ export class HybridSearchEngine {
   }
 
   private scoreMemoryLeg(qLower: string): HybridSearchResult[] {
-    const records = this.supermemory.getActive();
+    const records = this.memory.getActive();
     const stats = this.corpusStats(records);
     const queryTokens = this.tokenize(qLower);
 
@@ -91,7 +91,7 @@ export class HybridSearchEngine {
 
       results.push({
         score,
-        source: 'supermemory',
+        source: 'memory',
         title: `[${record.category.toUpperCase()}] ${record.id}`,
         snippet: record.content,
         category: record.category
@@ -101,7 +101,7 @@ export class HybridSearchEngine {
   }
 
   private scoreGraphLeg(qLower: string): HybridSearchResult[] {
-    const graphData = this.graphify.getGraphData();
+    const graphData = this.graph.getGraphData();
     const results: HybridSearchResult[] = [];
 
     for (const node of graphData.nodes) {
@@ -111,7 +111,7 @@ export class HybridSearchEngine {
 
       results.push({
         score: 1,
-        source: 'graphify',
+        source: 'graph',
         title: `[${node.type.toUpperCase()}] ${node.name}`,
         snippet: `AST Node: ${node.name} (${node.type}) ${node.dependencies ? `| Dependencies: ${node.dependencies.join(', ')}` : ''}`,
         category: node.type

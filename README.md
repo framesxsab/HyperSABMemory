@@ -1,104 +1,165 @@
-# HyperMemory
+# HyperSABMemory
 
-Local-first **IDE context harness** and **persistent memory** for AI coding agents (Cursor, Claude Code, VS Code, Windsurf, Copilot).
+The first **git-native context harness and memory engine for AI coding agents**.
 
-Agents forget work across chat resets and burn tokens re-reading the repo. HyperMemory keeps a compact harness header, a local memory store, and MCP tools so the next session starts with the same facts.
+Agents forget work across chat resets and burn tokens re-reading your repo on every session. HyperSABMemory fixes this at the workspace level: a token-budgeted context header, a local temporal memory store, automatic git checkpoints with safe rollback, and a persistent decision log. Local-first, no telemetry, no cloud.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/framesxsab/HyperMemory/actions/workflows/ci.yml/badge.svg)](https://github.com/framesxsab/HyperMemory/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/hypermemory.svg)](https://www.npmjs.com/package/hypermemory)
+[![CI](https://github.com/framesxsab/HyperSABMemory/actions/workflows/ci.yml/badge.svg)](https://github.com/framesxsab/HyperSABMemory/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/hypersabmemory.svg)](https://www.npmjs.com/package/hypersabmemory)
+
+## Why it is different
+
+Most agent-memory tools store chat facts in a cloud or a sidecar database. HyperSABMemory treats the *workspace itself* as the memory:
+
+| Capability | What you get |
+|---|---|
+| Git-native checkpoints | Automatic snapshots every few minutes while you work, with read-only diff preview and guarded rollback |
+| Persistent decision log | Dated decisions, bug facts, and architecture notes that survive across sessions and IDEs |
+| Token-ceiling context block | A hard 1500-token budget on injected context, enforced by tests |
+| Structural knowledge graph | AST-level map of your codebase so agents reuse existing components instead of rewriting them |
+| Swarm coordination | File locks and broadcasts for parallel subagents working the same repo |
+
+Nothing here requires an account, an API key, or network access after install.
 
 ## Install in any project
 
 Requires Node 18+.
 
 ```bash
-npx hypermemory setup
+npx hypersabmemory setup
 ```
 
 That command:
 
 1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
-2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers
-3. Initializes local memory under `.hypermemory/` (gitignored)
+2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
+3. Initializes local memory under `.hypersabmemory/` (gitignored)
 
-Then **reload the IDE** and **enable** the `hypermemory` MCP server:
+Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
-- **Cursor:** Settings → MCP → turn on **hypermemory**
-- **Claude Code:** `claude mcp add hypermemory -- npx -y hypermemory mcp`
+- **Cursor:** Settings > MCP > turn on **hypersabmemory**
+- **Claude Code:** `claude mcp add hypersabmemory -- npx -y hypersabmemory mcp`
 - **VS Code:** reload; check `.vscode/mcp.json`
 
 MCP-only (no full setup):
 
 ```bash
-npx hypermemory connect
-npx hypermemory status
+npx hypersabmemory connect
+npx hypersabmemory status
 ```
 
-### Agent tools
+## Agent tools
 
 | Tool | What it does |
 |---|---|
-| `hypermemory_get_context` | Oh-My-Pi harness header + Context Block (< 1500 tokens) |
-| `hypermemory_remember` | Save a decision / architecture / bug fact |
-| `hypermemory_query` | Search active memories |
-| `hypermemory_forget` | Invalidate a fact (dropped from Context Block) |
-| `hypermemory_context_block` | Packed dated facts for the prompt |
-| `hypermemory_inject_adapters` | Re-sync native rule files |
-| `hypermemory_checkpoint` | Git snapshot of the working tree |
-| `hypermemory_broadcast` | Share a finding with the swarm mesh (parallel subagents) |
-| `hypermemory_claim_task` | Acquire/release an exclusive file lock |
-| `hypermemory_sync_swarm` | Pull live locks + broadcasts + your session id |
+| `hypersabmemory_get_context` | Harness header + Context Block (< 1500 tokens) |
+| `hypersabmemory_remember` | Save a decision / architecture / bug fact |
+| `hypersabmemory_query` | Search active memories |
+| `hypersabmemory_forget` | Invalidate a fact (dropped from Context Block) |
+| `hypersabmemory_context_block` | Packed dated facts for the prompt |
+| `hypersabmemory_inject_adapters` | Re-sync native rule files |
+| `hypersabmemory_checkpoint` | Git snapshot of the working tree |
+| `hypersabmemory_broadcast` | Share a finding with parallel subagents |
+| `hypersabmemory_claim_task` | Acquire/release an exclusive file lock |
+| `hypersabmemory_sync_swarm` | Pull live locks + broadcasts + your session id |
 
 ## Everyday commands
 
 ```bash
-npx hypermemory watch --interval 3    # file watcher + 3–5 min checkpoints
-npx hypermemory watch --dashboard     # watcher + live dashboard in one process
-npx hypermemory dashboard             # dashboard only — http://127.0.0.1:4321 (localhost only)
-npx hypermemory checkpoint "reason"   # manual snapshot
-npx hypermemory history -n 10         # list recent checkpoints
-npx hypermemory diff <hash>           # preview what a rollback would change (read-only)
-npx hypermemory rollback <hash>       # safety-checkpointed reset to a checkpoint hash
-npx hypermemory remember "fact"       # save a memory from the terminal
-npx hypermemory list -q "search"      # list / recall active memories
-npx hypermemory forget <id>           # invalidate a memory by id
-npx hypermemory doctor                # read-only health check (git, store, MCP configs)
-npx hypermemory mcp                   # stdio MCP server (used by the IDE)
+npx hypersabmemory watch --interval 3    # file watcher + periodic checkpoints
+npx hypersabmemory watch --dashboard     # watcher + live dashboard in one process
+npx hypersabmemory dashboard             # dashboard only - http://127.0.0.1:4321 (localhost only)
+npx hypersabmemory checkpoint "reason"   # manual snapshot
+npx hypersabmemory history -n 10         # list recent checkpoints
+npx hypersabmemory diff <hash>           # preview what a rollback would change (read-only)
+npx hypersabmemory rollback <hash>       # safety-checkpointed reset to a checkpoint hash
+npx hypersabmemory remember "fact"       # save a memory from the terminal
+npx hypersabmemory list -q "search"      # list / recall active memories
+npx hypersabmemory forget <id>           # invalidate a memory by id
+npx hypersabmemory doctor                # read-only health check (git, store, MCP configs)
+npx hypersabmemory publish               # real pre-flight release checks (tree, dist, version)
+npx hypersabmemory mcp                   # stdio MCP server (used by the IDE)
 ```
 
-The dashboard shows a live Oh-My-Pi token meter, Graphify structural graph,
-Supermemory status, and a git checkpoint timeline with 1-click rollback
-(guarded — binds to `127.0.0.1` only).
+The live dashboard shows a token meter for the context block, the structural graph state,
+memory-store status, and a git checkpoint timeline with 1-click rollback.
+It binds to `127.0.0.1` only.
 
-Checkpoints stay **local**. HyperMemory does not `git push`.
+Checkpoints stay **local**. HyperSABMemory never runs `git push`.
+
+## Benchmarked in the open
+
+Recall is gated by a local benchmark (`npm run eval`) with published thresholds and
+deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate on
+every push.
+
+| Gate | Threshold |
+|---|---|
+| Active-fact recall | >= 0.80 required |
+| Forgotten-fact leaks into results | must be 0 |
+| Forgotten-fact leaks into Context Block | must be 0 |
+| Retrieval paths gated | direct engine, keyword index, fused memory+graph |
+| Header size under worst-case state | <= 1500 tokens enforced |
+
+The fixture includes both active and deliberately forgotten facts, so invalidation is
+tested, not assumed. Run it yourself: `npm run eval`.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph IDE["Your editor (Cursor / Claude Code / VS Code / Windsurf / Copilot)"]
+        MCP["MCP stdio server"]
+        RULES["Injected rule files"]
+    end
+    subgraph CORE["HyperSABMemory core (local)"]
+        HARNESS["Context harness<br/>(<= 1500-token header)"]
+        MEM["Temporal memory store<br/>(facts, merge, forget)"]
+        GRAPH["Structural knowledge graph<br/>(AST summary)"]
+        FUSION["Hybrid search<br/>(keyword + graph fusion)"]
+        SWARM["Swarm mesh<br/>(locks + broadcasts)"]
+    end
+    subgraph GIT["Your repository"]
+        SNAP["Auto checkpoints<br/>(git commits, never pushed)"]
+    end
+    MCP --> HARNESS
+    HARNESS --> MEM
+    HARNESS --> GRAPH
+    MEM --> FUSION
+    GRAPH --> FUSION
+    MCP --> SWARM
+    WATCHER["File watcher"] --> SNAP
+    WATCHER --> GRAPH
+    SNAP --> ROLLBACK["Diff preview + guarded rollback"]
+```
+
+## Positioning
+
+HyperSABMemory is local-first infrastructure, not a hosted memory API. If you want a
+cloud memory layer for chat products, look at mem0 or Zep. If you want your coding
+agent to stop re-learning your repo every session, with checkpoints you can roll back,
+this is built for that.
 
 ## Develop this repo
 
 ```bash
-git clone https://github.com/framesxsab/HyperMemory.git
-cd HyperMemory
+git clone https://github.com/framesxsab/HyperSABMemory.git
+cd HyperSABMemory
 npm install
 npm test
 npm run eval
 npm run build
 ```
 
-`npm run eval` is a local MemoryBench-style recall gate (no AWS). CI runs the same on every push.
+CI runs the full matrix (Ubuntu + Windows, Node 18/20/22) plus the recall gate on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## What it includes
-
-- **Oh-My-Pi harness** — hashline edits, summarized reads, token ceiling
-- **Supermemory-style store** — local JSON facts with merge/forget
-- **Graphify-style AST summary** — `graph.json`
-- **Ponytail YAGNI** — lite / full / ultra intensity in the harness
-- **Universal adapters** — Cursor, Claude, Windsurf, Copilot, Antigravity
-
-Blueprint docs in this repo: [`PRD.md`](./PRD.md), [`Architecture.md`](./Architecture.md), [`Rules.md`](./Rules.md), [`Phases.md`](./Phases.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Blueprint docs: [Architecture.md](./Architecture.md), [PRD.md](./PRD.md), [Rules.md](./Rules.md), [Phases.md](./Phases.md).
 
 ## Privacy
 
-Default is **local-first**: memory lives in `.hypermemory/` and `Memory.md`. No telemetry. The dashboard binds to `127.0.0.1` only.
+Default is **local-first**: memory lives in `.hypersabmemory/` and your own git history.
+No telemetry. No outbound calls after install. The dashboard binds to `127.0.0.1` only.
 
 ## License
 

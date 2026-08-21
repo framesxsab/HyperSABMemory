@@ -1,22 +1,22 @@
-# HyperMemory — AI Agent Rules & Boundaries
+# HyperSABMemory — AI Agent Rules & Boundaries
 
 ## 1. Core Principles for AI Agents
 
-When interacting with or extending HyperMemory, AI coding agents must strictly obey the following rules:
+When interacting with or extending HyperSABMemory, AI coding agents must strictly obey the following rules:
 
 ### R-1: Never Corrupt State or Block IDE Execution
 - File watcher hooks, state synthesis, and auto-commit tasks **MUST NEVER** throw uncaught errors or block the main thread.
 - If a file write or diff analysis fails, log silently to internal diagnostics and return the previous valid context snapshot.
 
 ### R-2: Hyperfrequent Auto-Commit & Checkpointing (3-5 Min Interval)
-- HyperMemory includes an active Auto-Commit & Git Checkpoint engine.
-- Every 3-5 minutes (or on significant file save milestones), staged changes are automatically checkpointed with concise micro-commit messages (e.g., `hypermemory(snapshot): auto-checkpoint [active_file]`).
+- HyperSABMemory includes an active Auto-Commit & Git Checkpoint engine.
+- Every 3-5 minutes (or on significant file save milestones), staged changes are automatically checkpointed with concise micro-commit messages (e.g., `hypersabmemory(snapshot): auto-checkpoint [active_file]`).
 - Provides bulletproof rollback safety so developers and agents can revert to exact historical states at any minute.
 
 - 
 
 ### R-3: Strict Token Ceilings (< 1500 Tokens)
-- Generated Oh-My-Pi context headers must stay within the 1500 token limit by default.
+- Generated context-harness context headers must stay within the 1500 token limit by default.
 - If the active file context or git diff exceeds token budget, apply lossy compression (summarize diffs, truncate old stack traces, collapse whitespace).
 
 

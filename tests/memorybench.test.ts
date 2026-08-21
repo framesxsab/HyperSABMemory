@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { SupermemoryEngine } from '../src/memory/supermemory.js';
+import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
-import { OhMyPiHarness, HarnessState } from '../src/harness/ohMyPi.js';
+import { ContextHarness, HarnessState } from '../src/harness/contextHarness.js';
 import { TokenCompressor } from '../src/harness/tokenCompressor.js';
 import {
   MEMORYBENCH_FIXTURE,
@@ -15,13 +15,13 @@ import {
   seedMemoryBench
 } from '../src/eval/memoryBench.js';
 
-describe('HyperMemory — MemoryBench local eval (OSS)', () => {
+describe('HyperSABMemory — MemoryBench local eval (OSS)', () => {
   it('meets recall ≥ 0.8 on active facts and leaks zero forgotten facts', () => {
     expect(MEMORYBENCH_FIXTURE.length).toBeGreaterThanOrEqual(10);
     expect(MEMORYBENCH_FIXTURE.some((c) => c.status === 'forgotten')).toBe(true);
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-'));
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     seedMemoryBench(engine);
     const report = evaluateMemoryEngine(engine);
 
@@ -36,7 +36,7 @@ describe('HyperMemory — MemoryBench local eval (OSS)', () => {
 
   it('gates the shipped BM25 searchRecords path with the same fixture and threshold', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-sr-'));
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     seedMemoryBench(engine);
     const hybrid = new HybridSearchEngine(dir, engine);
 
@@ -49,9 +49,9 @@ describe('HyperMemory — MemoryBench local eval (OSS)', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('gates the fused supermemory+graphify search path deterministically', () => {
+  it('gates the fused memory+graph search path deterministically', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-fuse-'));
-    const engine = new SupermemoryEngine(dir);
+    const engine = new TemporalMemoryEngine(dir);
     seedMemoryBench(engine);
     const hybrid = new HybridSearchEngine(dir, engine);
 
@@ -64,12 +64,12 @@ describe('HyperMemory — MemoryBench local eval (OSS)', () => {
   });
 
   it('holds the hard 1500-token header ceiling across empty, typical and worst-case states', () => {
-    const harness = new OhMyPiHarness(1500);
+    const harness = new ContextHarness(1500);
 
-    const empty: HarnessState = { workspaceName: 'hypermemory', modifiedFiles: [] };
+    const empty: HarnessState = { workspaceName: 'hypersabmemory', modifiedFiles: [] };
 
     const typical: HarnessState = {
-      workspaceName: 'hypermemory',
+      workspaceName: 'hypersabmemory',
       activeFile: 'src/mcp/server.ts',
       cursorLine: 42,
       gitBranch: 'main',
@@ -78,12 +78,12 @@ describe('HyperMemory — MemoryBench local eval (OSS)', () => {
       modifiedFiles: ['src/mcp/server.ts', 'src/hooks/autoCommit.ts'],
       recentDiff: ' src/mcp/server.ts | 12 ++++++++\n 1 file changed',
       memorySummary: 'Harness decisions and bug facts.',
-      contextBlock: '[CONTEXT BLOCK]\nSummary: HyperMemory local-first harness\nFacts:\n- 2026-08-21 [decision] Ship P10 eval gates',
-      graphifySummary: 'Graphify: 128 structural nodes mapped | Graph active'
+      contextBlock: '[CONTEXT BLOCK]\nSummary: HyperSABMemory local-first harness\nFacts:\n- 2026-08-21 [decision] Ship P10 eval gates',
+      structuralGraphSummary: 'Structural knowledge graph: 128 nodes mapped | Graph active'
     };
 
     const worst: HarnessState = {
-      workspaceName: 'hypermemory-worst-case-workspace',
+      workspaceName: 'hypersabmemory-worst-case-workspace',
       activeFile: 'src/deeply/nested/path/worst-case-file.ts',
       cursorLine: 9999,
       gitBranch: 'feature/very-long-branch-name',
@@ -93,7 +93,7 @@ describe('HyperMemory — MemoryBench local eval (OSS)', () => {
       recentDiff: 'd'.repeat(10000),
       memorySummary: 'm'.repeat(2000),
       contextBlock: 'c'.repeat(4000),
-      graphifySummary: 'g'.repeat(2000),
+      structuralGraphSummary: 'g'.repeat(2000),
       activeFileContent: Array.from({ length: 200 }, (_, i) => `line ${i} ${'x'.repeat(40)}`).join('\n')
     };
 

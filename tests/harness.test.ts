@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { OhMyPiHarness } from '../src/harness/ohMyPi.js';
+import { ContextHarness } from '../src/harness/contextHarness.js';
 import { TokenCompressor } from '../src/harness/tokenCompressor.js';
 import { HashAnchorEngine } from '../src/harness/hashAnchor.js';
-import { GraphifyEngine } from '../src/memory/graphify.js';
-import { PonytailEngine } from '../src/harness/ponytail.js';
+import { StructuralGraphEngine } from '../src/memory/structuralGraph.js';
+import { MinimalChangeEngine } from '../src/harness/minimalChange.js';
 import { UniversalAdaptersEngine } from '../src/harness/universalAdapters.js';
 import { McpAccessEngine } from '../src/harness/mcpAccess.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
@@ -14,17 +14,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
+describe('HyperSABMemory — Context Harness Tests', () => {
   it('should generate compressed state header', () => {
-    const harness = new OhMyPiHarness(1500);
+    const harness = new ContextHarness(1500);
     const header = harness.generateHeader({
-      workspaceName: 'HyperMemory',
+      workspaceName: 'HyperSABMemory',
       activeFile: 'src/index.ts',
       modifiedFiles: ['src/hooks/autoCommit.ts'],
       memorySummary: 'Unit test execution'
     });
 
-    expect(header).toContain('HYPERMEMORY :: OH-MY-PI + PONYTAIL HARNESS');
+    expect(header).toContain('HYPERSABMEMORY :: CONTEXT HARNESS');
     expect(header).toContain('src/index.ts');
   });
 
@@ -42,16 +42,16 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
     expect(HashAnchorEngine.verifyAnchor('different content', hash)).toBe(false);
   });
 
-  it('should format Graphify structural knowledge summary', () => {
-    const graphify = new GraphifyEngine(process.cwd());
-    const summary = graphify.getGraphSummary();
-    expect(summary).toContain('Graphify');
+  it('should format structural knowledge graph summary', () => {
+    const graph = new StructuralGraphEngine(process.cwd());
+    const summary = graph.getGraphSummary();
+    expect(summary).toContain('Structural knowledge graph');
   });
 
-  it('should format Ponytail YAGNI decision ladder header', () => {
-    const ponytail = new PonytailEngine({ enabled: true });
-    const header = ponytail.generatePonytailHeader();
-    expect(header).toContain('PONYTAIL YAGNI DECISION LADDER');
+  it('should format minimal-change rules header', () => {
+    const rules = new MinimalChangeEngine({ enabled: true });
+    const header = rules.generateMinimalChangeHeader();
+    expect(header).toContain('MINIMAL-CHANGE RULES');
   });
 
   it('should generate universal IDE rules across Cursor, Windsurf, Copilot, and Claude Code', () => {
@@ -72,12 +72,12 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
 
     const agents = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
     expect(agents).toContain('Keep shipping.');
-    expect(agents).toContain('HYPERMEMORY:START');
+    expect(agents).toContain('HYPERSABMEMORY:START');
     expect(agents).toContain('Local first');
 
     adapters.syncAllAdapters({ contextBlock: '[CONTEXT BLOCK]\nFacts:\n- updated' });
     const agents2 = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
-    expect(agents2.split('HYPERMEMORY:START').length).toBe(2);
+    expect(agents2.split('HYPERSABMEMORY:START').length).toBe(2);
     expect(agents2).toContain('Keep shipping.');
 
     fs.rmSync(dir, { recursive: true, force: true });
@@ -85,20 +85,20 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
 
   it('should execute Quad-Hybrid search query', () => {
     const hybrid = new HybridSearchEngine(process.cwd());
-    const results = hybrid.search('HyperMemory');
+    const results = hybrid.search('HyperSABMemory');
     expect(Array.isArray(results)).toBe(true);
   });
 
   it('should emit hashline and summarized read in the harness header', () => {
-    const harness = new OhMyPiHarness(1500);
+    const harness = new ContextHarness(1500);
     const content = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n');
     const header = harness.generateHeader({
-      workspaceName: 'HyperMemory',
-      activeFile: 'src/harness/ohMyPi.ts',
+      workspaceName: 'HyperSABMemory',
+      activeFile: 'src/harness/contextHarness.ts',
       modifiedFiles: [],
       activeFileContent: content
     });
-    expect(header).toContain('#H src/harness/ohMyPi.ts');
+    expect(header).toContain('#H src/harness/contextHarness.ts');
     expect(header).toContain('summarized read');
   });
 
@@ -138,7 +138,7 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('should merge HyperMemory into Cursor, Claude, and VS Code MCP configs', () => {
+  it('should merge HyperSABMemory into Cursor, Claude, and VS Code MCP configs', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-mcp-'));
     fs.mkdirSync(path.join(dir, '.cursor'), { recursive: true });
     fs.writeFileSync(path.join(dir, '.cursor', 'mcp.json'), JSON.stringify({
@@ -151,18 +151,18 @@ describe('HyperMemory — Oh-My-Pi Harness Tests', () => {
 
     const cursor = JSON.parse(fs.readFileSync(path.join(dir, '.cursor', 'mcp.json'), 'utf-8'));
     expect(cursor.mcpServers.other.command).toBe('echo');
-    expect(cursor.mcpServers.hypermemory.args).toContain('mcp');
-    expect(cursor.mcpServers.hypermemory.args.some((a: string) => a.includes('dist/cli/index.js') || a === 'hypermemory')).toBe(true);
+    expect(cursor.mcpServers.hypersabmemory.args).toContain('mcp');
+    expect(cursor.mcpServers.hypersabmemory.args.some((a: string) => a.includes('dist/cli/index.js') || a === 'hypersabmemory')).toBe(true);
 
     const claude = JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf-8'));
-    expect(claude.mcpServers.hypermemory.command).toBeTruthy();
+    expect(claude.mcpServers.hypersabmemory.command).toBeTruthy();
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('should render Ponytail ultra intensity with subagent inject', () => {
-    const ponytail = new PonytailEngine({ intensity: 'ultra' });
-    expect(ponytail.generatePonytailHeader()).toContain('subagent');
+  it('should render minimal-change ultra intensity with subagent inject', () => {
+    const rules = new MinimalChangeEngine({ intensity: 'ultra' });
+    expect(rules.generateMinimalChangeHeader()).toContain('subagent');
   });
 
   it('should reject rollback hashes that are not git object ids', async () => {

@@ -5,11 +5,11 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { AutoCommitEngine } from '../src/hooks/autoCommit.js';
-import { OhMyPiHarness } from '../src/harness/ohMyPi.js';
+import { ContextHarness } from '../src/harness/contextHarness.js';
 
 const execFileAsync = promisify(execFile);
 
-describe('HyperMemory — Live-State get_context', () => {
+describe('HyperSABMemory — Live-State get_context', () => {
   let dir: string;
 
   beforeAll(async () => {
@@ -44,7 +44,7 @@ describe('HyperMemory — Live-State get_context', () => {
     const engine = new AutoCommitEngine({ workspaceDir: dir });
     const snapshot = await engine.getSnapshot();
 
-    const harness = new OhMyPiHarness(1500);
+    const harness = new ContextHarness(1500);
     const header = harness.generateHeader({
       workspaceName: path.basename(dir),
       activeFile: 'dirty.txt',

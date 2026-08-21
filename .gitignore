@@ -1,4 +1,4 @@
-# HyperMemory Git Ignore Rules
+# HyperSABMemory Git Ignore Rules
 
 # Dependencies & Build Outputs
 node_modules/
@@ -7,6 +7,7 @@ build/
 *.tsbuildinfo
 
 # Local Database & Cache Stores
+.hypersabmemory/
 .hypermemory/
 graphify-out/
 *.db
@@ -33,8 +34,21 @@ yarn-error.log*
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
-!.vscode/mcp.json
 .idea/
+
+# Generated adapter outputs (written by `hypersabmemory setup` into user repos;
+# dogfooding artifacts in this repo — never commit them)
+AGENTS.md
+CLAUDE.md
+.claude.json
+.claude/
+.mcp.json
+.windsurfrules
+.cursor/
+Memory.md
+
+# Internal planning / research notes
+.planning/
 
 # Local scrape dumps (not product source)
 2026-08-13_*.json
