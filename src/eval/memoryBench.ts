@@ -5,6 +5,7 @@
 
 import { MemoryRecord } from '../memory/sqliteStore.js';
 import { SupermemoryEngine } from '../memory/supermemory.js';
+import { HybridSearchEngine } from '../memory/hybridSearch.js';
 
 export const RECALL_THRESHOLD = 0.8;
 
@@ -90,4 +91,44 @@ export function seedMemoryBench(engine: SupermemoryEngine, cases: MemoryBenchCas
 
 export function evaluateMemoryEngine(engine: SupermemoryEngine): MemoryBenchReport {
   return scoreMemoryBench((q) => engine.query(q), engine.getContextBlock());
+}
+
+/**
+ * Gates the SHIPPED MCP query path (BM25 searchRecords), not just the
+ * substring fallback — keeps the eval from testing a dead path.
+ */
+export function evaluateSearchRecordsPath(hybrid: HybridSearchEngine, contextBlock: string): MemoryBenchReport {
+  return scoreMemoryBench((q) => hybrid.searchRecords(q), contextBlock);
+}
+
+export interface FusionPathReport {
+  recall: number;
+  forgottenLeaks: number;
+  passed: boolean;
+}
+
+/**
+ * Gates the fused supermemory+graphify search() leg. Graph leg is empty in a
+ * tmp fixture dir, so supermemory hits alone decide recall deterministically.
+ */
+export function evaluateFusionPath(hybrid: HybridSearchEngine): FusionPathReport {
+  const active = MEMORYBENCH_FIXTURE.filter((c) => c.status === 'active');
+  const forgotten = MEMORYBENCH_FIXTURE.filter((c) => c.status === 'forgotten');
+
+  let recalled = 0;
+  for (const item of active) {
+    const hits = hybrid.search(item.query);
+    if (hits.some((h) => h.source === 'supermemory' && h.snippet.toLowerCase().includes(item.query.toLowerCase()))) {
+      recalled += 1;
+    }
+  }
+
+  let forgottenLeaks = 0;
+  for (const item of forgotten) {
+    const hits = hybrid.search(item.query);
+    if (hits.some((h) => h.source === 'supermemory')) forgottenLeaks += 1;
+  }
+
+  const recall = active.length === 0 ? 1 : recalled / active.length;
+  return { recall, forgottenLeaks, passed: recall >= RECALL_THRESHOLD && forgottenLeaks === 0 };
 }

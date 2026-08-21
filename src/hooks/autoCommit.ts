@@ -26,6 +26,14 @@ export interface WorkspaceSnapshot {
   recentDiff?: string;
 }
 
+export type CheckpointStatus = 'committed' | 'clean' | 'not-a-repo' | 'failed';
+
+export interface CheckpointResult {
+  committed: boolean;
+  status: CheckpointStatus;
+  hash?: string;
+}
+
 export class AutoCommitEngine {
   private intervalMs: number;
   private workspaceDir: string;
@@ -74,13 +82,19 @@ export class AutoCommitEngine {
     }
   }
 
-  public async createCheckpoint(customReason?: string): Promise<{ committed: boolean; hash?: string }> {
+  public async createCheckpoint(customReason?: string): Promise<CheckpointResult> {
     try {
+      try {
+        await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir });
+      } catch {
+        return { committed: false, status: 'not-a-repo' };
+      }
+
       await this.configureGitIdentity();
 
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
       if (!status.trim()) {
-        return { committed: false };
+        return { committed: false, status: 'clean' };
       }
 
       await execFileAsync('git', ['add', '-A'], { cwd: this.workspaceDir });
@@ -105,12 +119,12 @@ export class AutoCommitEngine {
       }
 
       console.log(`⚡ [HyperMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
-      return { committed: true, hash };
+      return { committed: true, status: 'committed', hash };
     } catch (err) {
       if (this.onError && err instanceof Error) {
         this.onError(err);
       }
-      return { committed: false };
+      return { committed: false, status: 'failed' };
     }
   }
 
@@ -172,12 +186,40 @@ export class AutoCommitEngine {
     return snapshot;
   }
 
+  public async getDiffBetween(hashA: string, hashB: string = 'HEAD'): Promise<{ nameStatus: string; stat: string } | null> {
+    try {
+      const [{ stdout: nameStatus }, { stdout: statRaw }] = await Promise.all([
+        execFileAsync('git', ['diff', '--name-status', hashA, hashB], { cwd: this.workspaceDir }),
+        execFileAsync('git', ['diff', '--stat', hashA, hashB], { cwd: this.workspaceDir })
+      ]);
+      return {
+        nameStatus: nameStatus.trim(),
+        stat: statRaw.trim().split('\n').slice(0, 50).join('\n')
+      };
+    } catch {
+      return null;
+    }
+  }
+
   public async rollback(hash: string): Promise<boolean> {
     if (!/^[0-9a-f]{4,40}$/i.test(hash)) {
       console.error('⚡ [HyperMemory :: AutoCommit] Rejected rollback: invalid hash');
       return false;
     }
     try {
+      await execFileAsync('git', ['cat-file', '-e', `${hash}^{commit}`], { cwd: this.workspaceDir });
+    } catch {
+      console.error(`⚡ [HyperMemory :: AutoCommit] Rejected rollback: unknown commit ${hash}`);
+      return false;
+    }
+    try {
+      // Safety checkpoint runs BEFORE the destructive reset so uncommitted work
+      // stays recoverable via the dangling commit (reflog/objects).
+      try {
+        await this.createCheckpoint('safety: pre-rollback snapshot');
+      } catch (safetyErr) {
+        console.warn('⚡ [HyperMemory :: AutoCommit] Safety checkpoint failed — proceeding with rollback.', safetyErr);
+      }
       await execFileAsync('git', ['reset', '--hard', hash], { cwd: this.workspaceDir });
       console.log(`⚡ [HyperMemory :: AutoCommit] Successfully rolled back to ${hash}`);
       return true;

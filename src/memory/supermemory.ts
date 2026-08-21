@@ -24,6 +24,9 @@ export class SupermemoryEngine {
    * Duplicate/overlapping active facts are superseded (merge/forget).
    */
   public remember(category: MemoryRecord['category'], content: string, tags: string[] = []): MemoryRecord {
+    if (!content || !content.trim()) {
+      throw new Error('content must be a non-empty string');
+    }
     const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const record = this.store.set({ id, category, content, tags, status: 'active' });
 

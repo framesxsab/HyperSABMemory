@@ -10,6 +10,7 @@ import picocolors from 'picocolors';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as readline from 'readline/promises';
 import { FileWatcherHook } from '../hooks/fileWatcher.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HyperMemoryMcpServer } from '../mcp/server.js';
@@ -18,14 +19,19 @@ import { OneShotSetupEngine } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine, MCP_TOOL_FLOW } from '../harness/mcpAccess.js';
-import { evaluateMemoryEngine, seedMemoryBench } from '../eval/memoryBench.js';
+import { evaluateMemoryEngine, evaluateSearchRecordsPath, evaluateFusionPath, seedMemoryBench } from '../eval/memoryBench.js';
+import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { getPackageVersion } from '../version.js';
+import { parseIntervalMinutes } from './cliUtils.js';
+import { registerMemoryCommands } from './memoryCommands.js';
+import { runDoctor } from './doctor.js';
 
 const program = new Command();
 
 program
   .name('hypermemory')
   .description('Open-source IDE context harness & persistent memory engine inspired by Supermemory, Oh-My-Pi, Graphify & Ponytail')
-  .version('1.0.0');
+  .version(getPackageVersion());
 
 // Command: dashboard
 program
@@ -79,7 +85,12 @@ program
   .option('-d, --dashboard', 'Also launch the live web dashboard at http://localhost:4321')
   .option('-p, --port <port>', 'Dashboard port (with --dashboard)', '4321')
   .action(async (options) => {
-    const minutes = parseInt(options.interval, 10);
+    const minutes = parseIntervalMinutes(options.interval);
+    if (minutes === null) {
+      console.log(picocolors.red('✖ Invalid --interval: use a number of minutes >= 1 (e.g. --interval 3).'));
+      process.exitCode = 1;
+      return;
+    }
     console.log(picocolors.cyan(`⚡ [HyperMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
     const hook = new FileWatcherHook({
       workspaceDir: process.cwd(),
@@ -105,23 +116,99 @@ program
     const result = await autoCommit.createCheckpoint(reason);
     if (result.committed) {
       console.log(picocolors.green(`✔ Created checkpoint [${result.hash}]`));
+    } else if (result.status === 'not-a-repo') {
+      console.log(picocolors.yellow('ℹ Not a git repository — checkpoint skipped.'));
+    } else if (result.status === 'failed') {
+      console.log(picocolors.red('✖ Checkpoint failed. Check logs for details.'));
+      process.exitCode = 1;
     } else {
       console.log(picocolors.yellow('ℹ No uncommitted changes detected.'));
+    }
+  });
+
+// Command: history
+program
+  .command('history')
+  .description('List recent checkpoints')
+  .option('-n, --limit <count>', 'How many checkpoints to show', '10')
+  .action(async (options) => {
+    const autoCommit = new AutoCommitEngine({ workspaceDir: process.cwd() });
+    const entries = await autoCommit.getHistory(parseInt(options.limit, 10));
+    if (entries.length === 0) {
+      console.log(picocolors.yellow('ℹ No checkpoints found in this workspace.'));
+      return;
+    }
+    console.log(picocolors.cyan('\nHyperMemory checkpoints\n'));
+    for (const entry of entries) {
+      console.log(`  ${picocolors.green(entry.hash)}  ${entry.date}  ${entry.message}`);
+    }
+    console.log(picocolors.gray(`\nPreview a rollback with: hypermemory diff <hash>`));
+  });
+
+// Command: diff
+program
+  .command('diff')
+  .description('Preview what a rollback between two checkpoints would change (read-only)')
+  .argument('<hashA>', 'Base commit hash')
+  .argument('[hashB]', 'Target commit hash (defaults to HEAD)')
+  .action(async (hashA, hashB) => {
+    const autoCommit = new AutoCommitEngine({ workspaceDir: process.cwd() });
+    const result = await autoCommit.getDiffBetween(hashA, hashB);
+    if (!result) {
+      console.log(picocolors.red(`✖ Could not diff ${hashA}${hashB ? `..${hashB}` : ''} (unknown hash or not a git repo).`));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(picocolors.cyan(`\nChanges ${hashA} -> ${hashB ?? 'HEAD'}\n`));
+    console.log(picocolors.gray(result.nameStatus || '(no textual differences)'));
+    if (result.stat && result.stat !== result.nameStatus) {
+      console.log('');
+      console.log(picocolors.gray(result.stat));
     }
   });
 
 // Command: rollback
 program
   .command('rollback')
-  .description('Rollback workspace to a previous checkpoint commit')
+  .description('Rollback workspace to a previous checkpoint commit (creates a safety checkpoint first)')
   .argument('<hash>', 'Commit hash to revert to')
-  .action(async (hash) => {
+  .option('--yes', 'Skip interactive confirmation', false)
+  .action(async (hash, options) => {
     const autoCommit = new AutoCommitEngine({ workspaceDir: process.cwd() });
+
+    const preview = await autoCommit.getDiffBetween(hash);
+    const snapshot = await autoCommit.getSnapshot();
+    console.log(picocolors.cyan(`\nRollback to ${hash} would move the workspace to that checkpoint.`));
+    if (preview && preview.nameStatus) {
+      console.log(picocolors.cyan('\nFiles changed since then:'));
+      console.log(picocolors.gray(preview.nameStatus));
+    } else {
+      console.log(picocolors.yellow('ℹ No textual differences between HEAD and the target.'));
+    }
+    console.log(picocolors.cyan(`\n${snapshot.modifiedFiles.length} uncommitted file(s) will be captured in a safety checkpoint first.\n`));
+
+    if (!process.stdin.isTTY && !options.yes) {
+      console.log(picocolors.red('✖ Non-interactive shell detected. Re-run with --yes to proceed without a prompt.'));
+      process.exitCode = 1;
+      return;
+    }
+
+    if (!options.yes) {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const answer = (await rl.question('Proceed with rollback? [y/N] ')).trim().toLowerCase();
+      rl.close();
+      if (answer !== 'y' && answer !== 'yes') {
+        console.log(picocolors.yellow('ℹ Rollback aborted.'));
+        return;
+      }
+    }
+
     const success = await autoCommit.rollback(hash);
     if (success) {
       console.log(picocolors.green(`✔ Rolled back to checkpoint ${hash}`));
     } else {
       console.log(picocolors.red(`✖ Failed to rollback to checkpoint ${hash}`));
+      process.exitCode = 1;
     }
   });
 
@@ -188,14 +275,17 @@ program
     const engine = new SupermemoryEngine(dir);
     seedMemoryBench(engine);
     const report = evaluateMemoryEngine(engine);
+    const hybrid = new HybridSearchEngine(dir, engine);
+    const searchRecordsPath = evaluateSearchRecordsPath(hybrid, engine.getContextBlock());
+    const fusionPath = evaluateFusionPath(hybrid);
     fs.rmSync(dir, { recursive: true, force: true });
-    console.log(JSON.stringify(report, null, 2));
-    if (!report.passed) {
+    console.log(JSON.stringify({ ...report, searchRecordsPath, fusionPath }, null, 2));
+    if (!report.passed || !searchRecordsPath.passed || !fusionPath.passed) {
       console.log(picocolors.red('✖ MemoryBench eval failed.'));
       process.exitCode = 1;
       return;
     }
-    console.log(picocolors.green(`✔ MemoryBench passed (recall ${report.recall.toFixed(2)}).`));
+    console.log(picocolors.green(`✔ MemoryBench passed (recall ${report.recall.toFixed(2)}, shipped-path ${searchRecordsPath.recall.toFixed(2)}, fusion ${fusionPath.recall.toFixed(2)}).`));
   });
 
 // Command: mcp
@@ -228,5 +318,26 @@ program
     console.log(picocolors.green('  ✔ MCP connect: npx hypermemory connect'));
     console.log(picocolors.cyan('\nReady to push repository to GitHub!'));
   });
+
+// Command: doctor
+program
+  .command('doctor')
+  .description('Read-only health check: git, work tree, memory store, MCP configs, dashboard port')
+  .action(async () => {
+    const report = await runDoctor(process.cwd());
+    console.log(picocolors.cyan('\nHyperMemory doctor\n'));
+    for (const check of report.checks) {
+      const mark = check.ok ? picocolors.green('✔') : picocolors.red('✖');
+      console.log(`  ${mark} ${check.name}: ${check.detail}`);
+    }
+    if (!report.ok) {
+      console.log(picocolors.red('\n✖ Issues found above.'));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(picocolors.green('\n✔ All checks passed.'));
+  });
+
+registerMemoryCommands(program);
 
 program.parse(process.argv);

@@ -27,6 +27,10 @@ const BM25_B = 0.75;
 const RRF_K = 60;
 const SUBSTRING_BOOST = 0.5;
 
+function clampLimit(limit: number): number {
+  return Number.isFinite(limit) ? Math.min(Math.max(1, Math.floor(limit)), 100) : 10;
+}
+
 export class HybridSearchEngine {
   private supermemory: SupermemoryEngine;
   private graphify: GraphifyEngine;
@@ -46,7 +50,7 @@ export class HybridSearchEngine {
     const memoryLeg = this.scoreMemoryLeg(qLower);
     const graphLeg = this.scoreGraphLeg(qLower);
 
-    return this.fuseRRF([memoryLeg, graphLeg], limit);
+    return this.fuseRRF([memoryLeg, graphLeg], clampLimit(limit));
   }
 
   /**
@@ -69,7 +73,7 @@ export class HybridSearchEngine {
       })
       .filter(entry => entry.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
+      .slice(0, clampLimit(limit))
       .map(entry => entry.record);
   }
 

@@ -72,9 +72,9 @@ export class DashboardServer {
       this.server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', `http://localhost:${this.port}`);
 
-        // CORS Headers
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        // No CORS headers on purpose: the dashboard is a localhost-only,
+        // same-origin surface (127.0.0.1 bind); wildcard would let any
+        // website's JS read local workspace data via the browser.
 
         if (req.method === 'OPTIONS') {
           res.writeHead(200);

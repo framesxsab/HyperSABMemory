@@ -57,7 +57,13 @@ npx hypermemory watch --interval 3    # file watcher + 3–5 min checkpoints
 npx hypermemory watch --dashboard     # watcher + live dashboard in one process
 npx hypermemory dashboard             # dashboard only — http://127.0.0.1:4321 (localhost only)
 npx hypermemory checkpoint "reason"   # manual snapshot
-npx hypermemory rollback <hash>       # hard reset to a checkpoint hash
+npx hypermemory history -n 10         # list recent checkpoints
+npx hypermemory diff <hash>           # preview what a rollback would change (read-only)
+npx hypermemory rollback <hash>       # safety-checkpointed reset to a checkpoint hash
+npx hypermemory remember "fact"       # save a memory from the terminal
+npx hypermemory list -q "search"      # list / recall active memories
+npx hypermemory forget <id>           # invalidate a memory by id
+npx hypermemory doctor                # read-only health check (git, store, MCP configs)
 npx hypermemory mcp                   # stdio MCP server (used by the IDE)
 ```
 

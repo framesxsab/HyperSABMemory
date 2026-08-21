@@ -8,6 +8,7 @@ import chokidar, { FSWatcher } from 'chokidar';
 import * as path from 'path';
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { GraphifyEngine } from '../memory/graphify.js';
+import { formatFileEventFact } from '../memory/contextBlock.js';
 import { OhMyPiHarness, HarnessState } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from './autoCommit.js';
 
@@ -108,7 +109,7 @@ export class FileWatcherHook {
     const now = Date.now();
     const lastRemember = this.lastRememberAt.get(relativePath) ?? 0;
     if (now - lastRemember >= FileWatcherHook.REMEMBER_COOLDOWN_MS) {
-      this.supermemory.remember('architecture', `File ${type}: ${relativePath}`);
+      this.supermemory.remember('architecture', formatFileEventFact(type, relativePath));
       this.lastRememberAt.set(relativePath, now);
     }
 

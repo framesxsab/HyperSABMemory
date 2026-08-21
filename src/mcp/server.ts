@@ -12,13 +12,71 @@ import {
 
 import { SupermemoryEngine } from '../memory/supermemory.js';
 import { GraphifyEngine } from '../memory/graphify.js';
-import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
+import { MemoryRecord } from '../memory/sqliteStore.js';
 import { OhMyPiHarness } from '../harness/ohMyPi.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
+import { getPackageVersion } from '../version.js';
 import * as fs from 'fs';
 import * as path from 'path';
+
+export type QuerySource = 'memory' | 'graph' | 'all';
+
+/**
+ * Maps graphify structural hits onto synthetic MemoryRecord shape so the MCP
+ * query response stays MemoryRecord-compatible. Response-only: never persisted.
+ */
+export function mapGraphHitsToRecords(hits: HybridSearchResult[]): MemoryRecord[] {
+  return hits
+    .filter((hit) => hit.source === 'graphify')
+    .map((hit) => {
+      const idx = hit.title.indexOf('] ');
+      const name = idx >= 0 ? hit.title.slice(idx + 2) : hit.title;
+      return {
+        id: `graph_${name}`,
+        category: 'symbol' as const,
+        content: hit.snippet,
+        timestamp: new Date().toISOString(),
+        status: 'active' as const
+      };
+    });
+}
+
+/**
+ * Shared query pipeline: memory leg first (byte-identical ranking to the
+ * pre-source-field behavior), then graph synthetics filling remaining slots.
+ */
+export function selectQueryRecords(
+  hybrid: HybridSearchEngine,
+  query: string,
+  limit: number,
+  source: QuerySource
+): MemoryRecord[] {
+  if (source === 'graph') {
+    return mapGraphHitsToRecords(hybrid.search(query, limit));
+  }
+
+  const memoryLeg = hybrid.searchRecords(query, limit);
+  if (source === 'memory') return memoryLeg;
+
+  const remaining = Math.max(0, limit - memoryLeg.length);
+  if (remaining === 0) return memoryLeg;
+  const graphLeg = mapGraphHitsToRecords(hybrid.search(query, limit));
+  return [...memoryLeg, ...graphLeg.slice(0, remaining)];
+}
+
+/**
+ * Contains activeFile inside the workspace: escaping paths (../ or absolute
+ * outside workspaceDir) resolve to undefined instead of a readable file.
+ */
+export function resolveActiveFilePath(workspaceDir: string, activeFile: string): string | undefined {
+  const resolved = path.resolve(workspaceDir, activeFile);
+  const rel = path.relative(workspaceDir, resolved);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+  return resolved;
+}
 
 export class HyperMemoryMcpServer {
   private server: Server;
@@ -44,7 +102,7 @@ export class HyperMemoryMcpServer {
     this.server = new Server(
       {
         name: 'hypermemory-mcp',
-        version: '1.0.0'
+        version: getPackageVersion()
       },
       {
         capabilities: {
@@ -106,7 +164,12 @@ export class HyperMemoryMcpServer {
               type: 'object',
               properties: {
                 query: { type: 'string', description: 'Search terms' },
-                limit: { type: 'number', description: 'Max results (default 10)' }
+                limit: { type: 'number', description: 'Max results (default 10)' },
+                source: {
+                  type: 'string',
+                  enum: ['memory', 'graph', 'all'],
+                  description: 'Which result legs to include (default all: memories first, then graph symbols)'
+                }
               },
               required: ['query']
             }
@@ -188,8 +251,8 @@ export class HyperMemoryMcpServer {
 
           let activeFileContent: string | undefined;
           if (activeFile) {
-            const filePath = path.join(this.workspaceDir, activeFile);
-            if (fs.existsSync(filePath)) {
+            const filePath = resolveActiveFilePath(this.workspaceDir, activeFile);
+            if (filePath && fs.existsSync(filePath)) {
               try {
                 activeFileContent = fs.readFileSync(filePath, 'utf-8').split('\n').slice(0, 200).join('\n');
               } catch {
@@ -238,7 +301,8 @@ export class HyperMemoryMcpServer {
         if (name === 'hypermemory_query') {
           const query = (args?.query as string) || '';
           const limit = Number.isFinite(args?.limit) ? (args?.limit as number) : 10;
-          const results = this.hybridSearch.searchRecords(query, limit);
+          const source = (args?.source as QuerySource) || 'all';
+          const results = selectQueryRecords(this.hybridSearch, query, limit, source);
           return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
         }
 
