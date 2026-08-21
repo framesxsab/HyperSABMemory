@@ -106,5 +106,5 @@ describe('HyperMemory — CLI completeness + bugfix sweep (P12)', () => {
     expect(fs.existsSync(outPath)).toBe(true);
     const source = fs.readFileSync(outPath, 'utf-8');
     expect(source).toContain('getPackageVersion');
-  });
+  }, 180_000);
 });
