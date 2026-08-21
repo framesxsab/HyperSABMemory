@@ -50,6 +50,21 @@ function scoreRecord(record: MemoryRecord): number {
   return recencyDecay(record.timestamp) * weight * noisePenalty(record.content);
 }
 
+const SEGMENT_CLIP = 80;
+
+function clipSegment(text: string): string {
+  return text.length > SEGMENT_CLIP ? text.slice(0, SEGMENT_CLIP) : text;
+}
+
+function structuredSuffix(record: MemoryRecord): string {
+  const segments: string[] = [];
+  if (record.intent) segments.push(`intent: ${clipSegment(record.intent)}`);
+  if (record.artifacts?.length) segments.push(`artifacts: ${clipSegment(record.artifacts.join(','))}`);
+  if (record.errorsAndFixes) segments.push(`fix: ${clipSegment(record.errorsAndFixes)}`);
+  if (record.nextSteps) segments.push(`next: ${clipSegment(record.nextSteps)}`);
+  return segments.length > 0 ? ` | ${segments.join(' | ')}` : '';
+}
+
 export function buildContextBlock(records: MemoryRecord[], projectSummary?: string): string {
   const ranked = records
     .filter((record) => (record.status ?? 'active') === 'active')
@@ -67,7 +82,7 @@ export function buildContextBlock(records: MemoryRecord[], projectSummary?: stri
     : ranked
         .map(({ record }) => {
           const day = record.timestamp.slice(0, 10);
-          return `- ${day} [${record.category}] ${record.content}`;
+          return `- ${day} [${record.category}] ${record.content}${structuredSuffix(record)}`;
         })
         .join('\n');
 

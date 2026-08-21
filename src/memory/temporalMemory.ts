@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildContextBlock } from './contextBlock.js';
-import { SqliteStore, MemoryRecord } from './sqliteStore.js';
+import { SqliteStore, MemoryRecord, StructuredMemory } from './sqliteStore.js';
 
 export class TemporalMemoryEngine {
   private store: SqliteStore;
@@ -23,12 +23,27 @@ export class TemporalMemoryEngine {
    * Remembers a new key architectural insight or decision.
    * Duplicate/overlapping active facts are superseded (merge/forget).
    */
-  public remember(category: MemoryRecord['category'], content: string, tags: string[] = []): MemoryRecord {
+  public remember(
+    category: MemoryRecord['category'],
+    content: string,
+    tags: string[] = [],
+    structured?: StructuredMemory
+  ): MemoryRecord {
     if (!content || !content.trim()) {
       throw new Error('content must be a non-empty string');
     }
     const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const record = this.store.set({ id, category, content, tags, status: 'active' });
+    const record = this.store.set({
+      id,
+      category,
+      content,
+      tags,
+      status: 'active',
+      ...(structured?.intent ? { intent: structured.intent } : {}),
+      ...(structured?.artifacts?.length ? { artifacts: structured.artifacts } : {}),
+      ...(structured?.errorsAndFixes ? { errorsAndFixes: structured.errorsAndFixes } : {}),
+      ...(structured?.nextSteps ? { nextSteps: structured.nextSteps } : {})
+    });
 
     for (const existing of this.store.getActive()) {
       if (existing.id === record.id) continue;
@@ -97,9 +112,16 @@ export class TemporalMemoryEngine {
 
     try {
       const records = this.store.getAll();
-      const recordsFormatted = records.map(r => 
-        `- **[${r.category.toUpperCase()}]** (${new Date(r.timestamp).toLocaleTimeString()}) [${r.status ?? 'active'}]: ${r.content}`
-      ).join('\n');
+      const recordsFormatted = records.map(r => {
+        const lines = [
+          `- **[${r.category.toUpperCase()}]** (${new Date(r.timestamp).toLocaleTimeString()}) [${r.status ?? 'active'}]: ${r.content}`
+        ];
+        if (r.intent) lines.push(`  - intent: ${r.intent}`);
+        if (r.artifacts?.length) lines.push(`  - artifacts: ${r.artifacts.join(', ')}`);
+        if (r.errorsAndFixes) lines.push(`  - fix: ${r.errorsAndFixes}`);
+        if (r.nextSteps) lines.push(`  - next: ${r.nextSteps}`);
+        return lines.join('\n');
+      }).join('\n');
 
       let content = fs.readFileSync(this.memoryFilePath, 'utf-8');
 

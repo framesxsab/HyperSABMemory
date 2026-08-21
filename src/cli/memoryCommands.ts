@@ -2,6 +2,10 @@ import { Command } from 'commander';
 import picocolors from 'picocolors';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 
+function collectArtifacts(value: string, previous: string[]): string[] {
+  return previous.concat([value]);
+}
+
 export function registerMemoryCommands(program: Command): void {
   program
     .command('remember')
@@ -9,13 +13,30 @@ export function registerMemoryCommands(program: Command): void {
     .argument('<content>', 'Fact or decision to remember')
     .option('-c, --category <category>', 'architecture | decision | bug | symbol | general', 'general')
     .option('-t, --tag <tags...>', 'Searchable tags')
-    .action((content: string, options: { category: string; tag?: string[] }) => {
+    .option('--intent <text>', 'Why the work/decision happened')
+    .option('--artifact <path>', 'File/module involved (repeatable)', collectArtifacts, [])
+    .option('--fixes <text>', 'What broke and how it was fixed')
+    .option('--next <text>', 'What remains open')
+    .action((content: string, options: {
+      category: string;
+      tag?: string[];
+      intent?: string;
+      artifact?: string[];
+      fixes?: string;
+      next?: string;
+    }) => {
       try {
         const engine = new TemporalMemoryEngine(process.cwd());
         const record = engine.remember(
           options.category as 'architecture' | 'decision' | 'bug' | 'symbol' | 'general',
           content,
-          options.tag ?? []
+          options.tag ?? [],
+          {
+            intent: options.intent,
+            artifacts: options.artifact,
+            errorsAndFixes: options.fixes,
+            nextSteps: options.next
+          }
         );
         console.log(picocolors.green(`✔ Saved memory [${record.id}]: ${record.content}`));
       } catch (err) {

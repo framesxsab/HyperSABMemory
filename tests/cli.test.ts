@@ -88,6 +88,63 @@ describe('HyperSABMemory — CLI completeness + bugfix sweep (P12)', () => {
     }
   });
 
+  it('parses structured remember flags including repeatable --artifact', () => {
+    const dir = tmpDir();
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      const program = new Command();
+      program.name('hypersabmemory-test');
+      registerMemoryCommands(program);
+
+      program.parse([
+        'node', 'hypersabmemory-test', 'remember',
+        'Structured CLI fact about atomic saves',
+        '--category', 'bug',
+        '--intent', 'Harden crash-safe writes',
+        '--artifact', 'src/memory/sqliteStore.ts',
+        '--artifact', 'src/memory/temporalMemory.ts',
+        '--fixes', 'Added EPERM retry before fallback',
+        '--next', 'Fuzz the rename path'
+      ]);
+
+      const record = new TemporalMemoryEngine(dir)
+        .getActive()
+        .find((r) => r.content === 'Structured CLI fact about atomic saves');
+      expect(record).toBeDefined();
+      expect(record?.intent).toBe('Harden crash-safe writes');
+      expect(record?.artifacts).toEqual(['src/memory/sqliteStore.ts', 'src/memory/temporalMemory.ts']);
+      expect(record?.errorsAndFixes).toBe('Added EPERM retry before fallback');
+      expect(record?.nextSteps).toBe('Fuzz the rename path');
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it('keeps plain remember with zero structured flags free of structured fields', () => {
+    const dir = tmpDir();
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      const program = new Command();
+      program.name('hypersabmemory-test');
+      registerMemoryCommands(program);
+
+      program.parse(['node', 'hypersabmemory-test', 'remember', 'Plain flagless fact']);
+
+      const record = new TemporalMemoryEngine(dir)
+        .getActive()
+        .find((r) => r.content === 'Plain flagless fact');
+      expect(record).toBeDefined();
+      expect(record?.intent).toBeUndefined();
+      expect(record?.artifacts).toBeUndefined();
+      expect(record?.errorsAndFixes).toBeUndefined();
+      expect(record?.nextSteps).toBeUndefined();
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
   it('runs doctor strictly read-only and degrades gracefully outside a repo', async () => {
     const dir = tmpDir();
     const before = fs.readdirSync(dir);

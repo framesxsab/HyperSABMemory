@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   HyperSABMemoryMcpServer,
   mapGraphHitsToRecords,
+  parseRememberArgs,
   selectQueryRecords,
   QuerySource
 } from '../src/mcp/server.js';
@@ -99,5 +100,55 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
   it('constructs the MCP server over a temp workspace without throwing', () => {
     const dir = tmpDir();
     expect(() => new HyperSABMemoryMcpServer(dir)).not.toThrow();
+  });
+
+  it('parses all four structured remember props from MCP tool args', () => {
+    const parsed = parseRememberArgs({
+      category: 'bug',
+      content: 'Rename failed under AV lock',
+      tags: ['windows'],
+      intent: 'Make saves crash-safe',
+      artifacts: ['src/memory/sqliteStore.ts', 'tests/sqliteStore.test.ts'],
+      errorsAndFixes: 'Single retry before direct-write fallback',
+      nextSteps: 'Fuzz the rename path'
+    });
+
+    expect(parsed.category).toBe('bug');
+    expect(parsed.content).toBe('Rename failed under AV lock');
+    expect(parsed.tags).toEqual(['windows']);
+    expect(parsed.structured).toEqual({
+      intent: 'Make saves crash-safe',
+      artifacts: ['src/memory/sqliteStore.ts', 'tests/sqliteStore.test.ts'],
+      errorsAndFixes: 'Single retry before direct-write fallback',
+      nextSteps: 'Fuzz the rename path'
+    });
+  });
+
+  it('leaves structured undefined for plain remembers (back-compat)', () => {
+    const plain = parseRememberArgs({ category: 'general', content: 'plain fact' });
+    expect(plain.structured).toBeUndefined();
+
+    const noArgs = parseRememberArgs(undefined);
+    expect(noArgs.category).toBe('general');
+    expect(noArgs.content).toBe('');
+    expect(noArgs.tags).toEqual([]);
+    expect(noArgs.structured).toBeUndefined();
+  });
+
+  it('persists structured props end-to-end through engine.remember', () => {
+    const dir = tmpDir();
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('bug', 'Watcher debounce noisy', [], {
+      intent: 'Cut watcher noise',
+      artifacts: ['src/hooks/fileWatcher.ts'],
+      errorsAndFixes: 'Raised debounce to 30s',
+      nextSteps: 'Tune per-OS debounce'
+    });
+
+    const record = memory.getActive().find((r) => r.content === 'Watcher debounce noisy');
+    expect(record?.intent).toBe('Cut watcher noise');
+    expect(record?.artifacts).toEqual(['src/hooks/fileWatcher.ts']);
+    expect(record?.errorsAndFixes).toBe('Raised debounce to 30s');
+    expect(record?.nextSteps).toBe('Tune per-OS debounce');
   });
 });

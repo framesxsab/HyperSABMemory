@@ -84,4 +84,39 @@ describe('HyperSABMemory — Crash-safe Memory Store (P8)', () => {
     expect(recovered.get('kill')?.status).toBe('forgotten');
     expect(recovered.getActive().map((r) => r.id)).toEqual(['keep']);
   });
+
+  it('round-trips optional structured fields through save and reload', () => {
+    const dir = tmpDir();
+    const store = new SqliteStore(dir);
+    store.set({
+      id: 'structured-1',
+      category: 'bug',
+      content: 'Atomic rename failed on Windows',
+      intent: 'Harden crash-safe saves',
+      artifacts: ['src/memory/sqliteStore.ts'],
+      errorsAndFixes: 'Added single EPERM/EBUSY retry before direct-write fallback',
+      nextSteps: 'Fuzz the rename path under AV lock pressure'
+    });
+
+    const reloaded = new SqliteStore(dir);
+    const record = reloaded.get('structured-1');
+    expect(record?.intent).toBe('Harden crash-safe saves');
+    expect(record?.artifacts).toEqual(['src/memory/sqliteStore.ts']);
+    expect(record?.errorsAndFixes).toBe('Added single EPERM/EBUSY retry before direct-write fallback');
+    expect(record?.nextSteps).toBe('Fuzz the rename path under AV lock pressure');
+  });
+
+  it('keeps legacy records without structured fields loadable and undefined-safe', () => {
+    const dir = tmpDir();
+    const store = new SqliteStore(dir);
+    store.set({ id: 'legacy-1', category: 'general', content: 'Plain pre-structured fact' });
+
+    const reloaded = new SqliteStore(dir);
+    const record = reloaded.get('legacy-1');
+    expect(record?.content).toBe('Plain pre-structured fact');
+    expect(record?.intent).toBeUndefined();
+    expect(record?.artifacts).toBeUndefined();
+    expect(record?.errorsAndFixes).toBeUndefined();
+    expect(record?.nextSteps).toBeUndefined();
+  });
 });

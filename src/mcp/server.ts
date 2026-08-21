@@ -14,7 +14,7 @@ import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
-import { MemoryRecord } from '../memory/sqliteStore.js';
+import { MemoryRecord, StructuredMemory } from '../memory/sqliteStore.js';
 import { ContextHarness } from '../harness/contextHarness.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
@@ -65,6 +65,36 @@ export function selectQueryRecords(
   if (remaining === 0) return memoryLeg;
   const graphLeg = mapGraphHitsToRecords(hybrid.search(query, limit));
   return [...memoryLeg, ...graphLeg.slice(0, remaining)];
+}
+
+export interface ParsedRememberArgs {
+  category: MemoryRecord['category'];
+  content: string;
+  tags: string[];
+  structured?: StructuredMemory;
+}
+
+/**
+ * Extracts hypersabmemory_remember tool args; structured is undefined when none
+ * of the four optional dimensions are present so plain remembers stay back-compat.
+ */
+export function parseRememberArgs(args: Record<string, unknown> | undefined): ParsedRememberArgs {
+  const category = ((args?.category as string) || 'general') as MemoryRecord['category'];
+  const content = (args?.content as string) || '';
+  const tags = (args?.tags as string[]) || [];
+  const intent = args?.intent as string | undefined;
+  const artifacts = args?.artifacts as string[] | undefined;
+  const errorsAndFixes = args?.errorsAndFixes as string | undefined;
+  const nextSteps = args?.nextSteps as string | undefined;
+  const hasStructured = Boolean(
+    intent || (artifacts && artifacts.length > 0) || errorsAndFixes || nextSteps
+  );
+  return {
+    category,
+    content,
+    tags,
+    structured: hasStructured ? { intent, artifacts, errorsAndFixes, nextSteps } : undefined
+  };
 }
 
 /**
@@ -132,17 +162,21 @@ export class HyperSABMemoryMcpServer {
           },
           {
             name: 'hypersabmemory_remember',
-            description: 'Save a persistent architectural memory or key decision into the temporal memory store.',
+            description: 'Save a persistent architectural memory or key decision into the temporal memory store. Optional structured dimensions: intent (why it happened), artifacts (files/modules involved), errorsAndFixes (what broke and the fix), nextSteps (what remains open).',
             inputSchema: {
               type: 'object',
               properties: {
-                category: { 
-                  type: 'string', 
+                category: {
+                  type: 'string',
                   enum: ['architecture', 'decision', 'bug', 'symbol', 'general'],
-                  description: 'Memory category' 
+                  description: 'Memory category'
                 },
                 content: { type: 'string', description: 'Insight or decision content' },
-                tags: { type: 'array', items: { type: 'string' }, description: 'Searchable tags' }
+                tags: { type: 'array', items: { type: 'string' }, description: 'Searchable tags' },
+                intent: { type: 'string', description: 'Why the work/decision happened' },
+                artifacts: { type: 'array', items: { type: 'string' }, description: 'Files/modules involved' },
+                errorsAndFixes: { type: 'string', description: 'What broke and how it was fixed' },
+                nextSteps: { type: 'string', description: 'What remains open' }
               },
               required: ['category', 'content']
             }
@@ -280,10 +314,8 @@ export class HyperSABMemoryMcpServer {
         }
 
         if (name === 'hypersabmemory_remember') {
-          const category = (args?.category as any) || 'general';
-          const content = (args?.content as string) || '';
-          const tags = (args?.tags as string[]) || [];
-          const record = this.memory.remember(category, content, tags);
+          const parsed = parseRememberArgs(args as Record<string, unknown> | undefined);
+          const record = this.memory.remember(parsed.category, parsed.content, parsed.tags, parsed.structured);
           return { content: [{ type: 'text', text: `Saved memory ID [${record.id}]: ${record.content}` }] };
         }
 

@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Structured memory record fields: optional `intent`, `artifacts`, `errorsAndFixes`, and `nextSteps` dimensions on remember records, accepted by the MCP tool schema and new CLI flags (`--intent`, `--artifact` (repeatable), `--fixes`, `--next`), rendered in the context block and Memory.md, and indexed by hybrid search
 - Community files: security policy, code of conduct, changelog, contributing guide, issue templates, and pull request template
 
 ## [1.2.0]

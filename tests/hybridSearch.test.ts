@@ -61,4 +61,33 @@ describe('HyperSABMemory — Hybrid Search (BM25 + RRF)', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('matches artifact filenames and fix keywords in both BM25 and fusion paths', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-hybrid-structured-'));
+    try {
+      const engine = new TemporalMemoryEngine(dir);
+      engine.remember('bug', 'Watcher debounce was noisy before the fix.', [], {
+        intent: 'Cut watcher log spam',
+        artifacts: ['src/hooks/fileWatcher.ts'],
+        errorsAndFixes: 'Raised the debounce window to thirty seconds',
+        nextSteps: 'Tune per-OS debounce values'
+      });
+      engine.remember('general', 'Some unrelated note about coffee.');
+
+      const hybrid = new HybridSearchEngine(dir);
+
+      const byArtifact = hybrid.searchRecords('fileWatcher', 10);
+      expect(byArtifact.length).toBeGreaterThanOrEqual(1);
+      expect(byArtifact[0].content).toContain('Watcher debounce');
+
+      const byFixKeyword = hybrid.searchRecords('debounce window', 10);
+      expect(byFixKeyword.length).toBeGreaterThanOrEqual(1);
+      expect(byFixKeyword[0].content).toContain('Watcher debounce');
+
+      const fused = hybrid.search('fileWatcher', 10);
+      expect(fused.some((hit) => hit.source === 'memory' && hit.snippet.includes('Watcher debounce'))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

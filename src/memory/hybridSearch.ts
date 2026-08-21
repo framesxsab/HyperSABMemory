@@ -186,6 +186,14 @@ export class HybridSearchEngine {
   }
 
   private recordText(record: MemoryRecord): string {
-    return `${record.content} ${(record.tags ?? []).join(' ')} ${record.category}`;
+    return [
+      record.content,
+      (record.tags ?? []).join(' '),
+      record.category,
+      record.intent ?? '',
+      (record.artifacts ?? []).join(' '),
+      record.errorsAndFixes ?? '',
+      record.nextSteps ?? ''
+    ].filter(Boolean).join(' ');
   }
 }

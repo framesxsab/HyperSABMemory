@@ -8,7 +8,14 @@ import * as path from 'path';
 
 export type MemoryStatus = 'active' | 'forgotten' | 'superseded';
 
-export interface MemoryRecord {
+export interface StructuredMemory {
+  intent?: string;
+  artifacts?: string[];
+  errorsAndFixes?: string;
+  nextSteps?: string;
+}
+
+export interface MemoryRecord extends StructuredMemory {
   id: string;
   category: 'architecture' | 'decision' | 'bug' | 'symbol' | 'general';
   content: string;

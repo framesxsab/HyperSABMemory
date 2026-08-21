@@ -74,6 +74,70 @@ describe('HyperSABMemory — Noise-aware Context Block (P6)', () => {
     expect(TokenCompressor.estimateTokens(block)).toBeLessThanOrEqual(400);
   });
 
+  it('appends structured suffixes on the same fact line, clipped to 80 chars', () => {
+    const records: MemoryRecord[] = [
+      {
+        id: 'structured',
+        category: 'bug',
+        content: 'Atomic rename failed on Windows',
+        timestamp: iso(HOUR_MS),
+        status: 'active',
+        intent: 'Harden crash-safe saves',
+        artifacts: ['src/memory/sqliteStore.ts', 'src/memory/temporalMemory.ts'],
+        errorsAndFixes: 'Added EPERM retry before direct-write fallback',
+        nextSteps: 'Fuzz the rename path'
+      },
+      {
+        id: 'plain',
+        category: 'general',
+        content: 'Plain fact without structured fields',
+        timestamp: iso(HOUR_MS),
+        status: 'active'
+      }
+    ];
+
+    const block = buildContextBlock(records);
+    const structuredLine = block.split('\n').find((line) => line.includes('Atomic rename failed'))!;
+    expect(structuredLine).toContain('| intent: Harden crash-safe saves');
+    expect(structuredLine).toContain('| artifacts: src/memory/sqliteStore.ts,src/memory/temporalMemory.ts');
+    expect(structuredLine).toContain('| fix: Added EPERM retry before direct-write fallback');
+    expect(structuredLine).toContain('| next: Fuzz the rename path');
+
+    const plainLine = block.split('\n').find((line) => line.includes('Plain fact without structured fields'))!;
+    expect(plainLine).not.toContain('|');
+
+    const overlong = buildContextBlock([
+      {
+        id: 'overlong',
+        category: 'decision',
+        content: 'Clipping probe',
+        timestamp: iso(HOUR_MS),
+        status: 'active',
+        intent: 'y'.repeat(200)
+      }
+    ]);
+    const clippedLine = overlong.split('\n').find((line) => line.includes('Clipping probe'))!;
+    expect(clippedLine).toContain(`intent: ${'y'.repeat(80)}`);
+    expect(clippedLine).not.toContain('y'.repeat(81));
+  });
+
+  it('holds the 400-token ceiling with fully-loaded structured facts', () => {
+    const records: MemoryRecord[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `loaded-${i}`,
+      category: 'decision' as const,
+      content: 'x'.repeat(200),
+      timestamp: iso((i + 1) * HOUR_MS),
+      status: 'active' as const,
+      intent: 'w'.repeat(200),
+      artifacts: [`very/long/artifact/path/number-${i}/segment/deeply/nested/module.ts`],
+      errorsAndFixes: 'f'.repeat(200),
+      nextSteps: 'n'.repeat(200)
+    }));
+
+    const block = buildContextBlock(records);
+    expect(TokenCompressor.estimateTokens(block)).toBeLessThanOrEqual(400);
+  });
+
   it('never leaks forgotten facts', () => {
     const records: MemoryRecord[] = [
       {
