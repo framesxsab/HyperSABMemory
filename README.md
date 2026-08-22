@@ -24,7 +24,7 @@ Nothing here requires an account, an API key, or network access after install.
 
 ## Install in any project
 
-Requires Node 18+.
+Requires Node 20+.
 
 ```bash
 npx hypersabmemory setup
@@ -152,7 +152,7 @@ npm run eval
 npm run build
 ```
 
-CI runs the full matrix (Ubuntu + Windows, Node 18/20/22) plus the recall gate on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+CI runs the full matrix (Ubuntu + Windows, Node 20/22) plus the recall gate on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Blueprint docs: [Architecture.md](./Architecture.md), [PRD.md](./PRD.md), [Rules.md](./Rules.md), [Phases.md](./Phases.md).
 

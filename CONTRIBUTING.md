@@ -4,7 +4,7 @@ Thanks for your interest in improving HyperSABMemory. This guide covers everythi
 
 ## Development setup
 
-You need Node.js 18 or newer.
+You need Node.js 20 or newer.
 
 ```bash
 git clone https://github.com/framesxsab/HyperSABMemory.git

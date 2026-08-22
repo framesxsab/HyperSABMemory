@@ -1,7 +1,8 @@
-# CI for HyperMemory / HyperSABMemory
-# Matrix covers the declared engines range (node >=18) on both Linux and Windows:
+# CI for HyperSABMemory
+# Matrix covers the declared engines range (node >=20) on both Linux and Windows:
 # the project is developed on Windows and has shipped a Windows-only chokidar bug,
 # so windows-latest is tested explicitly instead of assumed.
+# Node 20 is the floor because vitest 4 (dev toolchain) requires ^20 || ^22 || >=24.
 name: CI
 
 on:
@@ -23,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [18, 20, 22]
+        node: [20, 22]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
 
   eval:
     # Advisory recall benchmark (MemoryBench). Kept as a separate job pinned to a
-    # single runner (ubuntu + node 22) so the 6-cell matrix stays fast and eval
+    # single runner (ubuntu + node 22) so the matrix stays fast and eval
     # flakiness cannot block cross-platform test results.
     name: eval (advisory)
     continue-on-error: true

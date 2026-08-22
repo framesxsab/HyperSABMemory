@@ -44,8 +44,8 @@
     "type": "git",
     "url": "git+https://github.com/framesxsab/HyperSABMemory.git"
   },
-  "engines": {
-    "node": ">=18"
+    "engines": {
+        "node": ">=20"
   },
   "files": [
     "dist",
