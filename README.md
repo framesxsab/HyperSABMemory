@@ -103,7 +103,28 @@ every push.
 | Header size under worst-case state | <= 1500 tokens enforced |
 
 The fixture includes both active and deliberately forgotten facts, so invalidation is
-tested, not assumed. Run it yourself: `npm run eval`.
+tested, not assumed. Run it yourself:
+
+```bash
+npx hypersabmemory eval
+```
+
+```text
+HyperSABMemory - local benchmark report
+
+  [PASS] direct-engine       recall 100.0%  forgotten-leaks 0  context-block-leaks 0
+  [PASS] keyword-bm25        recall 100.0%  forgotten-leaks 0  context-block-leaks 0
+  [PASS] fused-memory-graph  recall 100.0%  forgotten-leaks 0  context-block-leaks 0
+
+Verdict: all 3 retrieval paths passed (threshold 0.8).
+Token economics: 381 delivered / 1790 naive corpus tokens (78.7% saved, ratio 0.213)
+```
+
+Achieved recall above is on the deterministic fixture (CI runs the same numbers).
+The token-economics line is measured against your workspace's own memory store:
+the injected context block is hard-capped (~400 tokens) while the raw fact corpus
+grows unbounded, so savings climb as your store matures. Use `--json` for
+machine-readable output.
 
 ## Architecture
 

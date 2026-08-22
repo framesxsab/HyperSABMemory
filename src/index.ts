@@ -15,6 +15,7 @@ export { FileWatcherHook, type FileWatcherOptions } from './hooks/fileWatcher.js
 export { AutoCommitEngine, type AutoCommitOptions } from './hooks/autoCommit.js';
 export { OneShotSetupEngine } from './cli/oneShotSetup.js';
 export { HyperSABMemoryMcpServer } from './mcp/server.js';
-export { MEMORYBENCH_FIXTURE, RECALL_THRESHOLD, scoreMemoryBench, seedMemoryBench, evaluateMemoryEngine, type MemoryBenchCase, type MemoryBenchReport } from './eval/memoryBench.js';
+export { MEMORYBENCH_FIXTURE, RECALL_THRESHOLD, scoreMemoryBench, seedMemoryBench, evaluateMemoryEngine, runMemoryBenchReport, type MemoryBenchCase, type MemoryBenchScore, type MemoryBenchPathResult, type MemoryBenchReport } from './eval/memoryBench.js';
+export { computeTokenEfficiency, type TokenEfficiency } from './eval/tokenEfficiency.js';
 export { McpAccessEngine, resolveMcpLaunch, MCP_TOOL_FLOW, type McpHost, type McpLaunch, type McpConnectResult } from './harness/mcpAccess.js';
 export { UniversalAdaptersEngine, injectHypersabmemorySection, type NativeRuleKind, type NativeRuleFile, type AdapterSyncOptions, type AdapterSyncResult } from './harness/universalAdapters.js';

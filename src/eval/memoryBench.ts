@@ -3,6 +3,9 @@
  * OSS-safe: no AWS, no SageMaker, no paid APIs. Runs in CI via npm test / npm run eval.
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { MemoryRecord } from '../memory/sqliteStore.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
@@ -17,7 +20,8 @@ export interface MemoryBenchCase {
   query: string;
 }
 
-export interface MemoryBenchReport {
+/** Per-path score returned by the evaluate* helpers (recall + leak counts). */
+export interface MemoryBenchScore {
   activeCases: number;
   recalled: number;
   recall: number;
@@ -45,7 +49,7 @@ export function scoreMemoryBench(
   queryFn: (searchTerm: string) => MemoryRecord[],
   contextBlock: string,
   cases: MemoryBenchCase[] = MEMORYBENCH_FIXTURE
-): MemoryBenchReport {
+): MemoryBenchScore {
   const active = cases.filter((c) => c.status === 'active');
   const forgotten = cases.filter((c) => c.status === 'forgotten');
   const blockLower = contextBlock.toLowerCase();
@@ -89,7 +93,7 @@ export function seedMemoryBench(engine: TemporalMemoryEngine, cases: MemoryBench
   }
 }
 
-export function evaluateMemoryEngine(engine: TemporalMemoryEngine): MemoryBenchReport {
+export function evaluateMemoryEngine(engine: TemporalMemoryEngine): MemoryBenchScore {
   return scoreMemoryBench((q) => engine.query(q), engine.getContextBlock());
 }
 
@@ -97,7 +101,7 @@ export function evaluateMemoryEngine(engine: TemporalMemoryEngine): MemoryBenchR
  * Gates the SHIPPED MCP query path (BM25 searchRecords), not just the
  * substring fallback — keeps the eval from testing a dead path.
  */
-export function evaluateSearchRecordsPath(hybrid: HybridSearchEngine, contextBlock: string): MemoryBenchReport {
+export function evaluateSearchRecordsPath(hybrid: HybridSearchEngine, contextBlock: string): MemoryBenchScore {
   return scoreMemoryBench((q) => hybrid.searchRecords(q), contextBlock);
 }
 
@@ -131,4 +135,72 @@ export function evaluateFusionPath(hybrid: HybridSearchEngine): FusionPathReport
 
   const recall = active.length === 0 ? 1 : recalled / active.length;
   return { recall, forgottenLeaks, passed: recall >= RECALL_THRESHOLD && forgottenLeaks === 0 };
+}
+
+export interface MemoryBenchPathResult {
+  name: 'direct-engine' | 'keyword-bm25' | 'fused-memory-graph';
+  recall: number;
+  forgottenLeaks: number;
+  contextBlockLeaks: number;
+  passed: boolean;
+}
+
+export interface MemoryBenchReport {
+  generatedAt: string;
+  fixtureSize: number;
+  threshold: number;
+  paths: MemoryBenchPathResult[];
+  allPassed: boolean;
+}
+
+/**
+ * Runs all three retrieval-path gates on a throwaway fixture store and returns
+ * the achieved numbers per path (not just pass/fail). The fused leg never
+ * touches the Context Block, so its block-leak count is 0 by construction.
+ */
+export function runMemoryBenchReport(): MemoryBenchReport {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-report-'));
+  try {
+    const engine = new TemporalMemoryEngine(dir);
+    seedMemoryBench(engine);
+    const hybrid = new HybridSearchEngine(dir, engine);
+
+    const direct = evaluateMemoryEngine(engine);
+    const searchRecords = evaluateSearchRecordsPath(hybrid, engine.getContextBlock());
+    const fusion = evaluateFusionPath(hybrid);
+
+    const paths: MemoryBenchPathResult[] = [
+      {
+        name: 'direct-engine',
+        recall: direct.recall,
+        forgottenLeaks: direct.forgottenLeaks,
+        contextBlockLeaks: direct.contextBlockLeaks,
+        passed: direct.passed
+      },
+      {
+        name: 'keyword-bm25',
+        recall: searchRecords.recall,
+        forgottenLeaks: searchRecords.forgottenLeaks,
+        contextBlockLeaks: searchRecords.contextBlockLeaks,
+        passed: searchRecords.passed
+      },
+      {
+        name: 'fused-memory-graph',
+        recall: fusion.recall,
+        forgottenLeaks: fusion.forgottenLeaks,
+        contextBlockLeaks: 0,
+        passed: fusion.passed
+      }
+    ];
+
+    return {
+      generatedAt: new Date().toISOString(),
+      fixtureSize: MEMORYBENCH_FIXTURE.length,
+      threshold: RECALL_THRESHOLD,
+      paths,
+      allPassed: paths.every((p) => p.passed)
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }

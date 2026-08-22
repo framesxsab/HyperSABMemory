@@ -8,7 +8,6 @@
 import { Command } from 'commander';
 import picocolors from 'picocolors';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline/promises';
 import { execFile } from 'child_process';
@@ -21,12 +20,11 @@ import { OneShotSetupEngine } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine, MCP_TOOL_FLOW } from '../harness/mcpAccess.js';
-import { evaluateMemoryEngine, evaluateSearchRecordsPath, evaluateFusionPath, seedMemoryBench } from '../eval/memoryBench.js';
-import { HybridSearchEngine } from '../memory/hybridSearch.js';
 import { getPackageVersion } from '../version.js';
 import { parseIntervalMinutes } from './cliUtils.js';
 import { registerMemoryCommands } from './memoryCommands.js';
 import { runDoctor } from './doctor.js';
+import { runEvalCommand } from './evalCommand.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -293,22 +291,9 @@ program
 program
   .command('eval')
   .description('Run local MemoryBench recall eval (no AWS). Exit 1 if recall < 0.8 or forgotten facts leak.')
-  .action(() => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-eval-'));
-    const engine = new TemporalMemoryEngine(dir);
-    seedMemoryBench(engine);
-    const report = evaluateMemoryEngine(engine);
-    const hybrid = new HybridSearchEngine(dir, engine);
-    const searchRecordsPath = evaluateSearchRecordsPath(hybrid, engine.getContextBlock());
-    const fusionPath = evaluateFusionPath(hybrid);
-    fs.rmSync(dir, { recursive: true, force: true });
-    console.log(JSON.stringify({ ...report, searchRecordsPath, fusionPath }, null, 2));
-    if (!report.passed || !searchRecordsPath.passed || !fusionPath.passed) {
-      console.log(picocolors.red('✖ MemoryBench eval failed.'));
-      process.exitCode = 1;
-      return;
-    }
-    console.log(picocolors.green(`✔ MemoryBench passed (recall ${report.recall.toFixed(2)}, shipped-path ${searchRecordsPath.recall.toFixed(2)}, fusion ${fusionPath.recall.toFixed(2)}).`));
+  .option('--json', 'Print machine-readable benchmark report + token-efficiency JSON', false)
+  .action((options: { json?: boolean }) => {
+    runEvalCommand({ json: options.json });
   });
 
 // Command: mcp
