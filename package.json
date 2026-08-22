@@ -1,6 +1,6 @@
 {
   "name": "hypersabmemory",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Open-source IDE context harness and persistent memory engine for AI coding agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
