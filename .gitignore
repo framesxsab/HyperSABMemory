@@ -65,3 +65,6 @@ GRAPH_REPORT.md
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# UI design-tournament artifacts (local only)
+.design/

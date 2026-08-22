@@ -89,6 +89,24 @@ export class TemporalMemoryEngine {
     return `${all.length} items recorded. Latest: ${latest}`;
   }
 
+  /** Newest-first ledger rows for the dashboard memory pane. */
+  public getLedger(limit = 4): Array<{ date: string; tag: string; text: string }> {
+    return this.store.getActive().slice(-50).reverse().slice(0, limit).map(r => ({
+      date: r.timestamp.slice(0, 10),
+      tag: r.category,
+      text: r.content
+    }));
+  }
+
+  /** Total vs active record counts for the dashboard stats strip. */
+  public getCounts(): { recorded: number; active: number } {
+    const all = this.store.getAll();
+    return {
+      recorded: all.length,
+      active: all.filter(r => (r.status ?? 'active') === 'active').length
+    };
+  }
+
   public getContextBlock(): string {
     return buildContextBlock(this.store.getActive(), this.getSummary());
   }
