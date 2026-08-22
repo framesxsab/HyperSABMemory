@@ -8,6 +8,8 @@ Agents forget work across chat resets and burn tokens re-reading your repo on ev
 [![CI](https://github.com/framesxsab/HyperSABMemory/actions/workflows/ci.yml/badge.svg)](https://github.com/framesxsab/HyperSABMemory/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/hypersabmemory.svg)](https://www.npmjs.com/package/hypersabmemory)
 
+![HyperSABMemory live dashboard: token meter, structural knowledge graph, memory store, and git checkpoint timeline with rollback](docs/dashboard.png)
+
 ## Why it is different
 
 Most agent-memory tools store chat facts in a cloud or a sidecar database. HyperSABMemory treats the *workspace itself* as the memory:

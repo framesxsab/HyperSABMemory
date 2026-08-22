@@ -58,3 +58,10 @@ Memory.md
 .omo/
 .cursor/hooks/
 
+
+# Per-workspace structural graph index (machine-generated state)
+graph.json
+GRAPH_REPORT.md
+
+# Playwright MCP session artifacts
+.playwright-mcp/

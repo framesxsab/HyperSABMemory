@@ -238,7 +238,7 @@ export class DashboardServer {
       }
       list.innerHTML = history.map(function (h) {
         return '<li><span><code>' + h.hash + '</code> ' + h.message + ' <span style="color:#64748B">(' + h.date + ')</span></span>' +
-          '<button class="rollback" onclick="rollback(\'' + h.hash + '\')">↩ Rollback</button></li>';
+          '<button class="rollback" onclick="rollback(\\'' + h.hash + '\\')">↩ Rollback</button></li>';
       }).join('');
     }
     async function rollback(hash) {
