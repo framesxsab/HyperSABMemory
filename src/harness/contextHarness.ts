@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HyperSABMemory — Context State Harness Engine
  * Formats terminal/IDE context state headers into rich, compressed prompts for AI agents.
  */
@@ -69,7 +69,7 @@ export class ContextHarness {
       ? TokenCompressor.summarizeRead(state.activeFileContent, 16)
       : '';
 
-    const rawHeader = `⚡ [HYPERSABMEMORY :: CONTEXT HARNESS]
+    const rawHeader = `[HYPERSABMEMORY :: CONTEXT HARNESS]
 ┌─ Workspace: ${state.workspaceName} | Branch: ${branchStr} | Checkpoint: ${commitStr}
 ├─ Active Focus: ${activeFileStr}
 ├─ Hashline: ${hashline || 'n/a'}

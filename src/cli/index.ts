@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
  * HyperSABMemory — CLI Entry Point
@@ -71,7 +71,7 @@ program
   .command('setup')
   .description('One-shot setup: Installs IDE adapters + temporal memory store + structural knowledge graph rules + 3-5m Auto-Commits')
   .action(async () => {
-    console.log(picocolors.cyan('\n🚀 [HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
+    console.log(picocolors.cyan('\n[HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
     const result = await setupEngine.executeSetup();
     if (result.success) {
@@ -91,7 +91,7 @@ program
   .command('init')
   .description('Initialize HyperSABMemory environment and core blueprint docs in current directory')
   .action(() => {
-    console.log(picocolors.cyan('⚡ [HyperSABMemory] Initializing IDE context harness & temporal memory store...'));
+    console.log(picocolors.cyan('[HyperSABMemory] Initializing IDE context harness & temporal memory store...'));
     const engine = new TemporalMemoryEngine(process.cwd());
     engine.remember('architecture', 'Initialized HyperSABMemory workspace environment.');
     console.log(picocolors.green('✔ Initialized .hypersabmemory/ store and Memory.md state log.'));
@@ -112,7 +112,7 @@ program
       process.exitCode = 1;
       return;
     }
-    console.log(picocolors.cyan(`⚡ [HyperSABMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
+    console.log(picocolors.cyan(`[HyperSABMemory] Starting watcher & hyperfrequent auto-commit engine (${minutes}m interval)...`));
     const hook = new FileWatcherHook({
       workspaceDir: process.cwd(),
       autoCommitIntervalMinutes: minutes
@@ -310,7 +310,7 @@ program
   .command('publish')
   .description('Check open source publication readiness for https://github.com/framesxsab/HyperSABMemory')
   .action(async () => {
-    console.log(picocolors.cyan('\n🚀 HyperSABMemory — Publication Readiness Checklist'));
+    console.log(picocolors.cyan('\nHyperSABMemory — Publication Readiness Checklist'));
     console.log(picocolors.gray('Target Repo: https://github.com/framesxsab/HyperSABMemory\n'));
 
     let hardFailures = 0;

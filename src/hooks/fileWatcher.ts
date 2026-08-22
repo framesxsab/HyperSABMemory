@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HyperSABMemory — Real-Time File Watcher & Event Hook
  * Automatically triggers state re-synthesis, context harness header update,
  * and Memory.md syncing after every file edit or save.
@@ -84,7 +84,7 @@ export class FileWatcherHook {
     // Start 3-5 min hyperfrequent auto-commit engine
     this.autoCommit.start();
 
-    console.log(`⚡ [HyperSABMemory :: FileWatcher] Active on ${this.workspaceDir}`);
+    console.log(`[HyperSABMemory :: FileWatcher] Active on ${this.workspaceDir}`);
   }
 
   /**
@@ -123,7 +123,7 @@ export class FileWatcherHook {
     };
 
     this.lastStateHeader = this.harness.generateHeader(state);
-    console.log(`⚡ [HyperSABMemory :: Hook] Re-synthesized state after edit on [${relativePath}]`);
+    console.log(`[HyperSABMemory :: Hook] Re-synthesized state after edit on [${relativePath}]`);
   }
 
   /**

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HyperSABMemory — Hyperfrequent Auto-Commit & Checkpoint System
  * Automatically commits uncommitted changes every 3-5 minutes for granular rollback capability.
  */
@@ -57,7 +57,7 @@ export class AutoCommitEngine {
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log(`⚡ [HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
+    console.log(`[HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
     this.createCheckpoint();
     this.timer = setInterval(() => {
       this.createCheckpoint();
@@ -70,7 +70,7 @@ export class AutoCommitEngine {
       this.timer = null;
     }
     this.isRunning = false;
-    console.log('⚡ [HyperSABMemory :: AutoCommit] Engine paused');
+    console.log('[HyperSABMemory :: AutoCommit] Engine paused');
   }
 
   public async configureGitIdentity(): Promise<void> {
@@ -118,7 +118,7 @@ export class AutoCommitEngine {
         this.onCommit(hash, commitMessage);
       }
 
-      console.log(`⚡ [HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
+      console.log(`[HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
       return { committed: true, status: 'committed', hash };
     } catch (err) {
       if (this.onError && err instanceof Error) {
@@ -203,13 +203,13 @@ export class AutoCommitEngine {
 
   public async rollback(hash: string): Promise<boolean> {
     if (!/^[0-9a-f]{4,40}$/i.test(hash)) {
-      console.error('⚡ [HyperSABMemory :: AutoCommit] Rejected rollback: invalid hash');
+      console.error('[HyperSABMemory :: AutoCommit] Rejected rollback: invalid hash');
       return false;
     }
     try {
       await execFileAsync('git', ['cat-file', '-e', `${hash}^{commit}`], { cwd: this.workspaceDir });
     } catch {
-      console.error(`⚡ [HyperSABMemory :: AutoCommit] Rejected rollback: unknown commit ${hash}`);
+      console.error(`[HyperSABMemory :: AutoCommit] Rejected rollback: unknown commit ${hash}`);
       return false;
     }
     try {
@@ -218,13 +218,13 @@ export class AutoCommitEngine {
       try {
         await this.createCheckpoint('safety: pre-rollback snapshot');
       } catch (safetyErr) {
-        console.warn('⚡ [HyperSABMemory :: AutoCommit] Safety checkpoint failed — proceeding with rollback.', safetyErr);
+        console.warn('[HyperSABMemory :: AutoCommit] Safety checkpoint failed — proceeding with rollback.', safetyErr);
       }
       await execFileAsync('git', ['reset', '--hard', hash], { cwd: this.workspaceDir });
-      console.log(`⚡ [HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
+      console.log(`[HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
       return true;
     } catch (err) {
-      console.error(`⚡ [HyperSABMemory :: AutoCommit] Failed rollback to ${hash}:`, err);
+      console.error(`[HyperSABMemory :: AutoCommit] Failed rollback to ${hash}:`, err);
       return false;
     }
   }
