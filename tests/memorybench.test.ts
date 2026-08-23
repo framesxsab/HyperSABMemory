@@ -12,8 +12,13 @@ import {
   evaluateMemoryEngine,
   evaluateSearchRecordsPath,
   evaluateFusionPath,
-  seedMemoryBench
+  seedMemoryBench,
+  ADVERSARIAL_CLASSES,
+  scoreAdversarialClass,
+  seedAdversarialClasses,
+  runMemoryBenchReport
 } from '../src/eval/memoryBench.js';
+import type { MemoryRecord } from '../src/memory/sqliteStore.js';
 
 describe('HyperSABMemory — MemoryBench local eval (OSS)', () => {
   it('meets recall ≥ 0.8 on active facts and leaks zero forgotten facts', () => {
@@ -100,6 +105,104 @@ describe('HyperSABMemory — MemoryBench local eval (OSS)', () => {
     for (const state of [empty, typical, worst]) {
       const header = harness.generateHeader(state);
       expect(TokenCompressor.estimateTokens(header)).toBeLessThanOrEqual(1500);
+    }
+  });
+});
+
+describe('HyperSABMemory — F4 adversarial eval classes', () => {
+  function seedAll(dir: string): { engine: TemporalMemoryEngine; hybrid: HybridSearchEngine } {
+    const engine = new TemporalMemoryEngine(dir);
+    seedMemoryBench(engine);
+    seedAdversarialClasses(engine);
+    const hybrid = new HybridSearchEngine(dir, engine);
+    return { engine, hybrid };
+  }
+
+  function fusionQueryFn(hybrid: HybridSearchEngine): (q: string) => MemoryRecord[] {
+    return (q) => hybrid.search(q).filter((h) => h.source === 'memory').map((h) => ({ content: h.snippet }));
+  }
+
+  it('negation class: migration facts recalled on all three paths with zero stale pure-X leaks', () => {
+    expect(ADVERSARIAL_CLASSES.negation.length).toBeGreaterThanOrEqual(2);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-neg-'));
+    const { engine, hybrid } = seedAll(dir);
+    try {
+      const scores = [
+        scoreAdversarialClass('negation', (q) => engine.query(q), engine.getContextBlock()),
+        scoreAdversarialClass('negation', (q) => hybrid.searchRecords(q), engine.getContextBlock()),
+        scoreAdversarialClass('negation', fusionQueryFn(hybrid), '')
+      ];
+      for (const score of scores) {
+        expect(score.recall).toBeGreaterThanOrEqual(RECALL_THRESHOLD);
+        expect(score.staleLeaks).toBe(0);
+        expect(score.contextBlockLeaks).toBe(0);
+        expect(score.passed).toBe(true);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('superseded-stale class: chain tip C is top hit on all three paths with zero A/B stale leaks', () => {
+    expect(ADVERSARIAL_CLASSES['superseded-stale'].length).toBeGreaterThanOrEqual(2);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-sup-'));
+    const { engine, hybrid } = seedAll(dir);
+    try {
+      const scores = [
+        scoreAdversarialClass('superseded-stale', (q) => engine.query(q), engine.getContextBlock()),
+        scoreAdversarialClass('superseded-stale', (q) => hybrid.searchRecords(q), engine.getContextBlock()),
+        scoreAdversarialClass('superseded-stale', fusionQueryFn(hybrid), '')
+      ];
+      for (const score of scores) {
+        expect(score.recall).toBeGreaterThanOrEqual(RECALL_THRESHOLD);
+        expect(score.staleLeaks).toBe(0);
+        expect(score.contextBlockLeaks).toBe(0);
+        expect(score.passed).toBe(true);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('artifact-linked class: file-path queries recall linked facts on all three paths', () => {
+    expect(ADVERSARIAL_CLASSES['artifact-linked'].length).toBeGreaterThanOrEqual(3);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-bench-art-'));
+    const { engine, hybrid } = seedAll(dir);
+    try {
+      const scores = [
+        scoreAdversarialClass('artifact-linked', (q) => engine.query(q), engine.getContextBlock()),
+        scoreAdversarialClass('artifact-linked', (q) => hybrid.searchRecords(q), engine.getContextBlock()),
+        scoreAdversarialClass('artifact-linked', fusionQueryFn(hybrid), '')
+      ];
+      for (const score of scores) {
+        expect(score.recall).toBeGreaterThanOrEqual(RECALL_THRESHOLD);
+        expect(score.passed).toBe(true);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('report adds per-class breakdown across all three paths while keeping legacy fields intact', () => {
+    const report = runMemoryBenchReport();
+
+    expect(report.paths).toHaveLength(3);
+    expect(report.threshold).toBe(RECALL_THRESHOLD);
+    expect(report.allPassed).toBe(true);
+
+    expect(report.classes).toHaveLength(3);
+    expect(report.classes?.map((c) => c.name)).toEqual(['negation', 'superseded-stale', 'artifact-linked']);
+    for (const cls of report.classes ?? []) {
+      expect(cls.paths.map((p) => p.name)).toEqual(['direct-engine', 'keyword-bm25', 'fused-memory-graph']);
+      for (const path of cls.paths) {
+        expect(path.recall).toBeGreaterThanOrEqual(RECALL_THRESHOLD);
+        expect(path.staleLeaks).toBe(0);
+        expect(path.passed).toBe(true);
+      }
+      expect(cls.passed).toBe(true);
     }
   });
 });
