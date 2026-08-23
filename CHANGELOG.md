@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-23
+
+### Fixed
+
+- Checkpoints no longer overwrite the repo-local git identity; committer identity is passed per-invocation via `-c` flags, so your own commits are never reattributed to the bot
+- The memory store is now truly contained: `.hypersabmemory/` is added to `.git/info/exclude` on setup, legacy tracked stores are untracked, and staging can never sweep the decision log into your commits
+- Auto-commit logs no longer corrupt the MCP stdio JSON-RPC stream when the checkpoint tool runs inside an IDE
+- Generated MCP configs wrap `npx` in `cmd /c` on Windows, fixing ENOENT first-run failures in Cursor/VS Code
+- Checkpoints now refuse to fire during a conflicted merge or rebase (`operation-in-progress`) and refuse monorepo subdirectory sweeps (`subdir-of-repo`)
+- Dashboard POST endpoints are hardened against CSRF and DNS rebinding (Host allowlist, JSON content-type, custom header)
+- Concurrent engines (MCP + dashboard + CLI) no longer suffer last-writer-wins memory loss: all store mutations serialize through a file-lock CAS with atomic tmp+rename writes, dead-holder eviction, and a golden format safety net
+- Swarm mesh locks close the check-then-act race: claim/release/broadcast reload under lock, `sync()` is read-only, sessions are garbage-collected, and lock keys are case-folded on Windows
+- `remember()` performs one batched store save instead of one per superseded duplicate; watcher ignores `.venv/target/build/out/coverage/vendor` and debounces rapid writes
+- README benchmark wording now matches CI reality (the recall gate runs inside the blocking matrix job)
+
+### Added
+
+- Cold-start bootstrap seeding: `setup` derives 5-10 facts from your README/package.json/git history with visible `[seeded]` provenance, never-supersede semantics, and a GENESIS ritual that prints the baseline checkpoint hash
+- `handoff` command: paste-ready forward session brief (<=600 tokens) plus deterministic `--story` retrospective mode
+- `doctor` now verifies the configured MCP launch command end-to-end via a real stdio handshake and reports measured counters (active/forgotten facts, checkpoints)
+- Adversarial eval classes in MemoryBench: negation, superseded-stale, and artifact-linked query fixtures gated at >=0.80 recall with zero leaks across all retrieval paths
+- MCP resources: context block and memory log exposed via resources/list + resources/read for resource-aware clients
+- `remove` command for clean uninstall of injected sections, MCP entries, and the local store
+- Swarm visibility cards on the dashboard: live file-lock TTLs and recent broadcasts via `/api/swarm`
+- Ghost Paths: the header warns `[GHOST]` when current edits collide with files from rolled-back checkpoints (opt-out via `HYPERSABMEMORY_GHOST_PATHS=off`)
+- Setup success output now prints per-host enable steps; funding file and tag-triggered release workflow added
+
 ## [1.3.0] - 2026-08-22
 
 ### Changed
