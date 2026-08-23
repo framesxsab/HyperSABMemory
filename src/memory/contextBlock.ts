@@ -7,6 +7,7 @@
 
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 import { MemoryRecord } from './sqliteStore.js';
+import { SEED_TAG } from './seeding.js';
 
 const MAX_FACTS = 8;
 const BLOCK_TOKEN_BUDGET = 400;
@@ -82,7 +83,8 @@ export function buildContextBlock(records: MemoryRecord[], projectSummary?: stri
     : ranked
         .map(({ record }) => {
           const day = record.timestamp.slice(0, 10);
-          return `- ${day} [${record.category}] ${record.content}${structuredSuffix(record)}`;
+          const seedMark = record.tags?.includes(SEED_TAG) ? '[seeded] ' : '';
+          return `- ${day} [${record.category}] ${seedMark}${record.content}${structuredSuffix(record)}`;
         })
         .join('\n');
 

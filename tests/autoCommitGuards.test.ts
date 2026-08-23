@@ -55,13 +55,23 @@ describe('AutoCommitEngine — git argv guards', () => {
     expect(commit!.args.some((a) => a.startsWith('--author='))).toBe(true);
   });
 
-  it('B2: staging uses an exclude pathspec so .hypersabmemory can never be added', async () => {
+  it('B2: staging never leaves .hypersabmemory changes in checkpoints (add -A, then tracked-store reset)', async () => {
     calls.length = 0;
     const engine = new AutoCommitEngine({ workspaceDir: 'X:\\does-not-matter' });
     await engine.createCheckpoint();
 
     const add = calls.find((c) => c.args[0] === 'add');
     expect(add).toBeDefined();
-    expect(add!.args).toEqual(['add', '-A', '--', ':(exclude).hypersabmemory']);
+    expect(add!.args).toEqual(['add', '-A']);
+
+    // Legacy tracked stores are detected via ls-files and reset to HEAD so no
+    // store change can enter the commit; untracked stores leave no trace at all.
+    const inspect = calls.find((c) => c.args[0] === 'ls-files' && c.args.includes('.hypersabmemory'));
+    expect(inspect).toBeDefined();
+
+    const inspectIndex = calls.indexOf(inspect!);
+    const commitIndex = calls.findIndex((c) => c.args.includes('commit'));
+    expect(inspectIndex).toBeGreaterThan(calls.indexOf(add!));
+    expect(inspectIndex).toBeLessThan(commitIndex);
   });
 });

@@ -20,6 +20,37 @@ function tmpWorkspace(): string {
   return dir;
 }
 
+describe('TemporalMemoryEngine.remember — seeded facts are never superseded (F1)', () => {
+  it('keeps an active seeded fact untouched when a near-duplicate user fact arrives', () => {
+    // Given: a seeded architecture fact about topic X in the store
+    const workspace = tmpWorkspace();
+    const seeder = new SqliteStore(path.join(workspace, '.hypersabmemory'));
+    seeder.set({
+      id: 'seed_1',
+      category: 'architecture',
+      content: 'Watcher floods the store with architecture facts per changed file',
+      tags: ['seeded'],
+      source: 'seed',
+      status: 'active'
+    });
+    const engine = new TemporalMemoryEngine(workspace);
+
+    // When: a near-duplicate user fact about the same topic is remembered
+    const user = engine.remember(
+      'architecture',
+      'Watcher floods the store with architecture facts per changed file (v2)'
+    );
+
+    // Then: the seed stays ACTIVE and untouched; the user fact sits alongside it
+    const persisted = new SqliteStore(path.join(workspace, '.hypersabmemory'));
+    const seed = persisted.get('seed_1');
+    expect(seed?.status).toBe('active');
+    expect(seed?.tags).toEqual(['seeded']);
+    expect(seed?.invalidAt).toBeUndefined();
+    expect(persisted.get(user.id)?.status).toBe('active');
+  });
+});
+
 describe('TemporalMemoryEngine.remember — batched persistence (C4a)', () => {
   it('saves the store exactly once for all supersedes when one remember supersedes multiple records', () => {
     // Given: three active architecture facts that all duplicate the incoming content

@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { buildContextBlock } from './contextBlock.js';
 import { SqliteStore, MemoryRecord, StructuredMemory } from './sqliteStore.js';
+import { SEED_TAG } from './seeding.js';
 
 export class TemporalMemoryEngine {
   private store: SqliteStore;
@@ -52,6 +53,7 @@ export class TemporalMemoryEngine {
     for (const existing of this.store.getActive()) {
       if (existing.id === record.id) continue;
       if (existing.category !== category) continue;
+      if ((existing.tags ?? []).includes(SEED_TAG)) continue;
       if (!this.isDuplicateOrContradiction(existing.content, content)) continue;
       toSupersede.push(existing);
     }

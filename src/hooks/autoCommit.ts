@@ -120,8 +120,21 @@ export class AutoCommitEngine {
         return { committed: false, status: 'clean' };
       }
 
-      // Belt-and-braces: exclude pathspec keeps the memory store unstaged even if ignore rules are bypassed.
-      await execFileAsync('git', ['add', '-A', '--', ':(exclude).hypersabmemory'], { cwd: this.workspaceDir });
+      // Belt-and-braces: keep the memory store out of checkpoints even if ignore
+      // rules are bypassed. An exclude pathspec on add cannot be used here: naming
+      // the ignored dir trips advice.addIgnoredFile and git exits 1, aborting every
+      // checkpoint in contained workspaces. Instead: stage all, then restore the
+      // index to HEAD for store paths ONLY when a legacy tracked store exists
+      // (post-untrack stores must keep their deletion staged so setup commits it).
+      await execFileAsync('git', ['add', '-A'], { cwd: this.workspaceDir });
+      try {
+        const { stdout: trackedStore } = await execFileAsync('git', ['ls-files', '--', '.hypersabmemory'], { cwd: this.workspaceDir });
+        if (trackedStore.trim()) {
+          await execFileAsync('git', ['reset', '-q', 'HEAD', '--', '.hypersabmemory'], { cwd: this.workspaceDir });
+        }
+      } catch {
+        // Index inspection is best-effort; staging itself already succeeded.
+      }
 
       const fileFocus = this.workspaceDir ? path.basename(this.workspaceDir) : 'workspace';
       const commitMessage = customReason

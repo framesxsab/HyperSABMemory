@@ -12,6 +12,7 @@ import * as path from 'path';
 import picocolors from 'picocolors';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
+import { seedWorkspace, writeGenesisRecord } from '../memory/seeding.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine } from '../harness/mcpAccess.js';
@@ -53,6 +54,7 @@ async function containStoreInGit(targetDir: string): Promise<void> {
 export interface SetupOutcome {
   success: boolean;
   createdFiles: string[];
+  genesisHash?: string;
   error?: string;
 }
 
@@ -70,6 +72,9 @@ export class OneShotSetupEngine {
     let createdFiles: string[] = [];
 
     try {
+      // 0. Cold-start bootstrap: seed first-boot facts before the engine loads the store.
+      const seedResult = await seedWorkspace(this.targetDir);
+
       // 1. Sync Universal IDE Adapters (Cursor, Claude Code, Windsurf, Copilot, Antigravity)
       const memory = new TemporalMemoryEngine(this.targetDir);
       memory.remember('architecture', 'Initialized HyperSABMemory one-shot setup with universal IDE adapters.');
@@ -85,6 +90,8 @@ export class OneShotSetupEngine {
       createdFiles = createdFiles.concat(connected.written);
 
       await containStoreInGit(this.targetDir);
+      const gitDir = path.join(this.targetDir, '.git');
+      const contained = fs.existsSync(gitDir) && fs.statSync(gitDir).isDirectory();
 
       const graph = new StructuralGraphEngine(this.targetDir);
       await graph.updateGraph();
@@ -95,11 +102,48 @@ export class OneShotSetupEngine {
       });
       await autoCommit.createCheckpoint('HyperSABMemory One-Shot Setup Complete');
 
-      return { success: true, createdFiles };
+      // 5. GENESIS RITUAL — terminal step, fresh workspaces only (seeds already present => skip).
+      let genesisHash: string | undefined;
+      if (contained && seedResult.seeded > 0) {
+        genesisHash = await this.runGenesisRitual(memory, autoCommit);
+      }
+
+      return { success: true, createdFiles, ...(genesisHash ? { genesisHash } : {}) };
     } catch (err) {
       console.error('[HyperSABMemory :: OneShotSetup] Setup failed:', err);
       return { success: false, createdFiles, error: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  /**
+   * Writes the single genesis record via direct set, bootstraps Memory.md so the
+   * named checkpoint has a tracked artifact (the store itself is git-excluded),
+   * then prints the final GENESIS line with the checkpoint's short hash.
+   */
+  private async runGenesisRitual(
+    memory: TemporalMemoryEngine,
+    autoCommit: AutoCommitEngine
+  ): Promise<string> {
+    writeGenesisRecord(this.targetDir);
+
+    const memoryMd = path.join(this.targetDir, 'Memory.md');
+    if (!fs.existsSync(memoryMd)) {
+      fs.writeFileSync(memoryMd, '# Memory\n', 'utf-8');
+    }
+    memory.syncToMemoryFile();
+
+    const checkpoint = await autoCommit.createCheckpoint('genesis: workspace memory baseline');
+    let hash = checkpoint.hash;
+    if (!hash) {
+      try {
+        const { stdout } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], { cwd: this.targetDir });
+        hash = stdout.trim();
+      } catch {
+        hash = 'unknown';
+      }
+    }
+    console.log(`GENESIS ${hash} - this workspace now remembers.`);
+    return hash;
   }
 }
 

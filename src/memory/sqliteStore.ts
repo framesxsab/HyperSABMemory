@@ -25,6 +25,7 @@ export interface MemoryRecord extends StructuredMemory {
   status?: MemoryStatus;
   invalidAt?: string;
   supersedes?: string;
+  source?: 'seed' | 'auto' | 'user';
 }
 
 export class SqliteStore {
