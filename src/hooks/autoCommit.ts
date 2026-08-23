@@ -90,8 +90,6 @@ export class AutoCommitEngine {
         return { committed: false, status: 'not-a-repo' };
       }
 
-      await this.configureGitIdentity();
-
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
       if (!status.trim()) {
         return { committed: false, status: 'clean' };
@@ -107,7 +105,11 @@ export class AutoCommitEngine {
       const author = `${this.authorName} <${this.authorEmail}>`;
       await execFileAsync(
         'git',
-        ['commit', `--author=${author}`, '-m', commitMessage, '--allow-empty'],
+        [
+          '-c', `user.name=${this.authorName}`,
+          '-c', `user.email=${this.authorEmail}`,
+          'commit', `--author=${author}`, '-m', commitMessage, '--allow-empty'
+        ],
         { cwd: this.workspaceDir }
       );
 

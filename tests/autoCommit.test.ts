@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AutoCommitEngine } from '../src/hooks/autoCommit.js';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -9,18 +9,26 @@ function run(dir: string, command: string): string {
   return execSync(command, { cwd: dir, encoding: 'utf-8' });
 }
 
-function initRepo(): string {
+// Shell-less git call: needed for formats containing % (cmd.exe mangles them).
+function runGit(dir: string, args: string[]): string {
+  return execFileSync('git', args, { cwd: dir, encoding: 'utf-8' });
+}
+
+function initRepo(withIdentity: boolean = true): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-ac-'));
   run(dir, 'git init');
-  run(dir, 'git config user.email test@example.com');
-  run(dir, 'git config user.name test');
+  if (withIdentity) {
+    run(dir, 'git config user.email test@example.com');
+    run(dir, 'git config user.name test');
+  }
   return dir;
 }
 
 function commitFile(dir: string, name: string, content: string, message: string): void {
   fs.writeFileSync(path.join(dir, name), content, 'utf-8');
   run(dir, 'git add -A');
-  run(dir, `git commit -m "${message}"`);
+  // Per-invocation identity: fixtures must commit even with no git identity configured (CI).
+  run(dir, `git -c user.name=seed -c user.email=seed@example.com commit -m "${message}"`);
 }
 
 function shortHead(dir: string): string {
@@ -124,5 +132,31 @@ describe('HyperSABMemory — Safe Rollback + History + Diff (P11)', () => {
     expect(diff).not.toBeNull();
     expect(diff!.nameStatus).toContain('a.txt');
     expect(diff!.stat).toContain('a.txt');
+  });
+});
+
+describe('HyperSABMemory — Checkpoint hygiene (v1.4.0 repair floor)', () => {
+  function localConfig(dir: string, key: string): string | undefined {
+    try {
+      return run(dir, `git config --local ${key}`).trim();
+    } catch {
+      return undefined;
+    }
+  }
+
+  it('B1: checkpoint leaves repo-local git identity unset and signs via per-invocation -c flags', async () => {
+    const dir = initRepo(false);
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'dirty', 'utf-8');
+    const result = await new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint();
+
+    expect(result.committed).toBe(true);
+    expect(localConfig(dir, 'user.name')).toBeUndefined();
+    expect(localConfig(dir, 'user.email')).toBeUndefined();
+    expect(runGit(dir, ['log', '-1', '--format=%cn|%ce']).trim()).toBe(
+      'hypersabmemory-bot|hypersabmemory@users.noreply.github.com'
+    );
   });
 });
