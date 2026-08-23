@@ -11,6 +11,7 @@ import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { ContextHarness } from '../harness/contextHarness.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 
@@ -25,6 +26,7 @@ export class DashboardServer {
   private graph: StructuralGraphEngine;
   private autoCommit: AutoCommitEngine;
   private hybridSearch: HybridSearchEngine;
+  private swarm: SwarmMeshEngine;
   private harness: ContextHarness;
 
   constructor(port: number = 4321, workspaceDir: string = process.cwd()) {
@@ -37,6 +39,7 @@ export class DashboardServer {
       workspaceDir
     });
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
+    this.swarm = new SwarmMeshEngine(workspaceDir);
     this.harness = new ContextHarness(TOKEN_CEILING);
   }
 
@@ -167,6 +170,14 @@ export class DashboardServer {
           );
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ nodes: data.nodes, edges }));
+          return;
+        }
+
+        // Endpoint: /api/swarm (read-only snapshot; sync() persists nothing)
+        if (url.pathname === '/api/swarm') {
+          const snapshot = this.swarm.sync();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ fileLocks: snapshot.fileLocks, broadcasts: snapshot.broadcasts }));
           return;
         }
 
@@ -448,6 +459,13 @@ export class DashboardServer {
       </div>
       <ul class="history-list" id="history-log"><li class="empty">fetching checkpoints…</li></ul>
     </section>
+    <section class="card" id="swarm-card">
+      <div class="pane-head">
+        <span class="pane-label">Swarm Mesh</span>
+        <span class="pane-meta" id="swarm-status">syncing…</span>
+      </div>
+      <ul class="ledger" id="swarm-log"><li class="empty">fetching swarm…</li></ul>
+    </section>
   </main>
   <script>
     var METER_CELLS = 20;
@@ -545,11 +563,42 @@ export class DashboardServer {
       alert(data.ok ? 'Rolled back to ' + hash : 'Rollback failed (invalid hash or git error).');
       loadHistory();
     }
+    function fmtDur(ms) {
+      const m = Math.max(0, Math.floor(ms / 60000));
+      if (m < 60) return m + 'm';
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + 'h';
+      return Math.floor(h / 24) + 'd';
+    }
+    async function loadSwarm() {
+      const res = await fetch('/api/swarm');
+      const data = await res.json();
+      const locks = data.fileLocks || [];
+      const broadcasts = data.broadcasts || [];
+      document.getElementById('swarm-status').textContent = locks.length + ' locks · ' + broadcasts.length + ' broadcasts';
+      const list = document.getElementById('swarm-log');
+      if (locks.length === 0 && broadcasts.length === 0) {
+        list.innerHTML = '<li class="empty">no locks held - no broadcasts</li>';
+        return;
+      }
+      const lockRows = locks.map(function (l) {
+        const left = new Date(l.expiresAt).getTime() - Date.now();
+        return '<li><span class="cat">[lock]</span><span class="fact">' + esc(l.filePath) + '</span><span class="date">' + esc(l.sessionId) + ' · ' + fmtDur(left) + ' left</span></li>';
+      });
+      const bcastRows = broadcasts.slice(0, 8).map(function (b) {
+        const age = Date.now() - new Date(b.createdAt).getTime();
+        const msg = b.message.length > 80 ? b.message.slice(0, 77) + '…' : b.message;
+        return '<li><span class="cat">[' + esc(b.category || 'note') + ']</span><span class="fact">' + esc(msg) + '</span><span class="date">' + fmtDur(age) + ' ago</span></li>';
+      });
+      list.innerHTML = lockRows.concat(bcastRows).join('');
+    }
     loadData();
     loadContext();
     loadGraph();
     loadHistory();
+    loadSwarm();
     setInterval(loadContext, 5000);
+    setInterval(loadSwarm, 5000);
   </script>
 </body>
 </html>`);
