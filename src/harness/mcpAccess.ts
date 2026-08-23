@@ -38,6 +38,9 @@ export function resolveMcpLaunch(workspaceDir: string): McpLaunch {
   if (fs.existsSync(localBin)) {
     return { command: 'node', args: ['dist/cli/index.js', 'mcp'] };
   }
+  if (process.platform === 'win32') {
+    return { command: 'cmd', args: ['/c', 'npx', '-y', 'hypersabmemory', 'mcp'] };
+  }
   return { command: 'npx', args: ['-y', 'hypersabmemory', 'mcp'] };
 }
 
