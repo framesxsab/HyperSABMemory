@@ -38,18 +38,7 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  eval:
-    # Advisory recall benchmark (MemoryBench). Kept as a separate job pinned to a
-    # single runner (ubuntu + node 22) so the matrix stays fast and eval
-    # flakiness cannot block cross-platform test results.
-    name: eval (advisory)
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run eval
+# The recall/leak benchmark (tests/memorybench.test.ts, thresholds recall >= 0.80,
+# zero forgotten-fact leaks) runs inside the blocking matrix job via `npm test`,
+# so no separate advisory eval job is needed.
+
