@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
+import * as http from 'http';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { DashboardServer } from '../src/server/dashboardServer.js';
@@ -74,7 +76,7 @@ describe('HyperSABMemory — Dashboard Server API', () => {
   it('rejects rollback with invalid hash', async () => {
     const res = await fetch(`${baseUrl}/api/rollback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-hypersabmemory': 'test' },
       body: JSON.stringify({ hash: 'not-a-valid-hash!!!' })
     });
     expect(res.status).toBe(200);
@@ -85,11 +87,91 @@ describe('HyperSABMemory — Dashboard Server API', () => {
   it('rejects rollback with malformed body', async () => {
     const res = await fetch(`${baseUrl}/api/rollback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-hypersabmemory': 'test' },
       body: '{broken json'
     });
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.ok).toBe(false);
+  });
+
+  // Raw http.request helper: undici's fetch strips forbidden headers like
+  // Host, so Host-validation tests must drive the socket directly.
+  function postRaw(headers: Record<string, string>): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        { hostname: '127.0.0.1', port, path: '/api/rollback', method: 'POST', headers },
+        (res) => { res.resume(); resolve(res.statusCode ?? 0); }
+      );
+      req.on('error', reject);
+      req.end(JSON.stringify({ hash: 'deadbeef' }));
+    });
+  }
+
+  // HTTP/1.0 raw-socket POST: llhttp rejects Host-less HTTP/1.1 requests with
+  // 400 before any handler runs, so only 1.0 reaches the app-level guard.
+  function postRawHttp10(request: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const socket = net.connect(port, '127.0.0.1', () => { socket.end(request); });
+      let data = '';
+      socket.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+      socket.on('close', () => {
+        const match = /^HTTP\/1\.[01] (\d{3})/.exec(data);
+        if (match) resolve(Number(match[1])); else reject(new Error(`no status line: ${data}`));
+      });
+      socket.on('error', reject);
+    });
+  }
+
+  it('rejects POST with a non-loopback Host header (DNS rebinding)', async () => {
+    const status = await postRaw({
+      host: 'attacker.example.com',
+      'content-type': 'application/json',
+      'x-hypersabmemory': 'test'
+    });
+    expect(status).toBe(403);
+  });
+
+  it('rejects POST with a missing Host header', async () => {
+    const body = JSON.stringify({ hash: 'deadbeef' });
+    const request = [
+      'POST /api/rollback HTTP/1.0',
+      'Content-Type: application/json',
+      'x-hypersabmemory: test',
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      '',
+      body
+    ].join('\r\n');
+    const status = await postRawHttp10(request);
+    expect(status).toBe(403);
+  });
+
+  it('rejects POST with a non-JSON content-type (CORS simple request)', async () => {
+    const res = await fetch(`${baseUrl}/api/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'x-hypersabmemory': 'test' },
+      body: JSON.stringify({ hash: 'deadbeef' })
+    });
+    expect(res.status).toBe(415);
+  });
+
+  it('rejects POST without the x-hypersabmemory header', async () => {
+    const res = await fetch(`${baseUrl}/api/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hash: 'deadbeef' })
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('accepts a well-formed POST (json + custom header + loopback host)', async () => {
+    const res = await fetch(`${baseUrl}/api/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hypersabmemory': 'dashboard' },
+      body: JSON.stringify({ hash: 'not-a-valid-hash!!!' })
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(false); // handler ran; hash is simply invalid
   });
 });

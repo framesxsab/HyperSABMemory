@@ -18,6 +18,7 @@ const TOKEN_CEILING = 1500;
 
 export class DashboardServer {
   private port: number;
+  private boundPort: number;
   private workspaceDir: string;
   private server: http.Server | null = null;
   private memory: TemporalMemoryEngine;
@@ -28,6 +29,7 @@ export class DashboardServer {
 
   constructor(port: number = 4321, workspaceDir: string = process.cwd()) {
     this.port = port;
+    this.boundPort = port;
     this.workspaceDir = workspaceDir;
     this.memory = new TemporalMemoryEngine(workspaceDir);
     this.graph = new StructuralGraphEngine(workspaceDir);
@@ -65,6 +67,27 @@ export class DashboardServer {
   }
 
   /**
+   * Guards state-changing POSTs against CSRF and DNS rebinding. Only loopback
+   * Host names pass (defeats rebinding to 127.0.0.1), and requiring both a
+   * JSON content-type and a custom header forces a CORS preflight that
+   * cross-origin no-cors requests cannot pass (defeats drive-by POSTs).
+   */
+  private guardStateChange(req: http.IncomingMessage): { status: number; error: string } | null {
+    const host = req.headers.host || '';
+    if (host !== `127.0.0.1:${this.boundPort}` && host !== `localhost:${this.boundPort}`) {
+      return { status: 403, error: 'Forbidden host' };
+    }
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    if (!contentType.includes('application/json')) {
+      return { status: 415, error: 'Content-Type must be application/json' };
+    }
+    if (!req.headers['x-hypersabmemory']) {
+      return { status: 403, error: 'Missing x-hypersabmemory header' };
+    }
+    return null;
+  }
+
+  /**
    * Starts the HTTP dashboard server. Resolves with the bound port.
    */
   public start(): Promise<number> {
@@ -80,6 +103,16 @@ export class DashboardServer {
           res.writeHead(200);
           res.end();
           return;
+        }
+
+        // State-changing POSTs must pass the CSRF/DNS-rebinding guard first.
+        if (req.method === 'POST') {
+          const rejected = this.guardStateChange(req);
+          if (rejected) {
+            res.writeHead(rejected.status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: rejected.error }));
+            return;
+          }
         }
 
         // Endpoint: /api/status
@@ -505,7 +538,7 @@ export class DashboardServer {
       if (!confirm('Hard reset workspace to checkpoint ' + hash + '? This discards uncommitted changes.')) return;
       const res = await fetch('/api/rollback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-hypersabmemory': 'dashboard' },
         body: JSON.stringify({ hash: hash })
       });
       const data = await res.json();
@@ -525,6 +558,7 @@ export class DashboardServer {
       this.server.listen(this.port, '127.0.0.1', () => {
         const addr = this.server?.address();
         const boundPort = typeof addr === 'object' && addr ? addr.port : this.port;
+        this.boundPort = boundPort;
         console.log(`[HyperSABMemory :: Dashboard] Server running at http://127.0.0.1:${boundPort}`);
         resolve(boundPort);
       });
