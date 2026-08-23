@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { withFileLock } from './fileLock.js';
 
 export type MemoryStatus = 'active' | 'forgotten' | 'superseded';
 
@@ -42,7 +43,11 @@ export class SqliteStore {
     }
   }
 
-  private loadStore(): void {
+  private get lockPath(): string {
+    return `${this.storagePath}.lock`;
+  }
+
+  private loadStore(warnWhenMissing: boolean = true): void {
     const tmpPath = `${this.storagePath}.tmp`;
     const bakPath = `${this.storagePath}.bak`;
 
@@ -62,8 +67,10 @@ export class SqliteStore {
       return;
     }
 
-    console.warn('[HyperSABMemory :: SqliteStore] No readable memory store found — starting clean.');
     this.memoryMap.clear();
+    if (warnWhenMissing) {
+      console.warn('[HyperSABMemory :: SqliteStore] No readable memory store found — starting clean.');
+    }
   }
 
   private tryLoadFrom(file: string): boolean {
@@ -88,20 +95,14 @@ export class SqliteStore {
 
       fs.writeFileSync(tmpPath, payload, 'utf-8');
       try {
-        try {
-          fs.renameSync(tmpPath, this.storagePath);
-        } catch (renameErr) {
-          const code = (renameErr as NodeJS.ErrnoException).code;
-          if (code === 'EPERM' || code === 'EBUSY') {
-            fs.renameSync(tmpPath, this.storagePath); // single retry (Win AV locks)
-          } else {
-            throw renameErr;
-          }
+        fs.renameSync(tmpPath, this.storagePath);
+      } catch (renameErr) {
+        const code = (renameErr as NodeJS.ErrnoException).code;
+        if (code === 'EPERM' || code === 'EBUSY') {
+          fs.renameSync(tmpPath, this.storagePath); // single retry (Win AV locks)
+        } else {
+          throw renameErr; // payload stays in .tmp for loadStore recovery
         }
-      } catch {
-        // Non-atomic fallback rather than losing the save entirely.
-        fs.writeFileSync(this.storagePath, payload, 'utf-8');
-        console.warn('[HyperSABMemory :: SqliteStore] Atomic rename failed — wrote store directly.');
       }
 
       try {
@@ -115,6 +116,13 @@ export class SqliteStore {
   }
 
   public set(record: Omit<MemoryRecord, 'timestamp'> & { timestamp?: string }): MemoryRecord {
+    return withFileLock(this.lockPath, () => {
+      this.loadStore(false);
+      return this.applySetUnderLock(record);
+    });
+  }
+
+  private applySetUnderLock(record: Omit<MemoryRecord, 'timestamp'> & { timestamp?: string }): MemoryRecord {
     const fullRecord: MemoryRecord = {
       ...record,
       status: record.status ?? 'active',
@@ -147,28 +155,37 @@ export class SqliteStore {
   }
 
   public forget(id: string): MemoryRecord | undefined {
-    const existing = this.memoryMap.get(id);
-    if (!existing) return undefined;
-    return this.set({
-      ...existing,
-      status: 'forgotten',
-      invalidAt: new Date().toISOString()
+    return withFileLock(this.lockPath, () => {
+      this.loadStore(false);
+      const existing = this.memoryMap.get(id);
+      if (!existing) return undefined;
+      return this.applySetUnderLock({
+        ...existing,
+        status: 'forgotten',
+        invalidAt: new Date().toISOString()
+      });
     });
   }
 
   public supersede(id: string, successorId: string): MemoryRecord | undefined {
-    const existing = this.memoryMap.get(id);
-    if (!existing) return undefined;
-    return this.set({
-      ...existing,
-      status: 'superseded',
-      invalidAt: new Date().toISOString(),
-      tags: [...(existing.tags ?? []), `superseded-by:${successorId}`]
+    return withFileLock(this.lockPath, () => {
+      this.loadStore(false);
+      const existing = this.memoryMap.get(id);
+      if (!existing) return undefined;
+      return this.applySetUnderLock({
+        ...existing,
+        status: 'superseded',
+        invalidAt: new Date().toISOString(),
+        tags: [...(existing.tags ?? []), `superseded-by:${successorId}`]
+      });
     });
   }
 
   public clear(): void {
-    this.memoryMap.clear();
-    this.saveStore();
+    withFileLock(this.lockPath, () => {
+      this.loadStore(false);
+      this.memoryMap.clear();
+      this.saveStore();
+    });
   }
 }
