@@ -25,6 +25,7 @@ import { parseIntervalMinutes } from './cliUtils.js';
 import { registerMemoryCommands } from './memoryCommands.js';
 import { runDoctor } from './doctor.js';
 import { runEvalCommand } from './evalCommand.js';
+import { buildHandoffBrief } from './handoffCommand.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -164,6 +165,16 @@ program
       console.log(`  ${picocolors.green(entry.hash)}  ${entry.date}  ${entry.message}`);
     }
     console.log(picocolors.gray(`\nPreview a rollback with: hypersabmemory diff <hash>`));
+  });
+
+// Command: handoff
+program
+  .command('handoff')
+  .description('Print a paste-ready forward handoff brief (--story for a ledger-only retrospective)')
+  .option('--story', 'Deterministic captain\'s-log retrospective built purely from local ledgers', false)
+  .action(async (options) => {
+    const brief = await buildHandoffBrief(process.cwd(), { story: options.story === true });
+    console.log(brief);
   });
 
 // Command: diff
