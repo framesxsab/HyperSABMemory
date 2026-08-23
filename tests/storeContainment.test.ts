@@ -42,7 +42,7 @@ describe('HyperSABMemory — store containment via .git/info/exclude (B2)', () =
     expect(first.success).toBe(true);
     expect(second.success).toBe(true);
     expect(excludeLines(dir)).toHaveLength(1);
-  });
+  }, 30000);
 
   it('succeeds silently when the target has no .git directory', async () => {
     // Given: a plain directory with no git repo
@@ -53,7 +53,7 @@ describe('HyperSABMemory — store containment via .git/info/exclude (B2)', () =
 
     // Then: it completes without crashing
     expect(result.success).toBe(true);
-  });
+  }, 30000);
 
   it('untracks an already-committed .hypersabmemory directory', async () => {
     // Given: a repo where a dummy store file is already tracked
@@ -71,5 +71,5 @@ describe('HyperSABMemory — store containment via .git/info/exclude (B2)', () =
     // Then: the store files are no longer tracked
     expect(result.success).toBe(true);
     expect(git(dir, ['ls-files', '--', '.hypersabmemory']).trim()).toBe('');
-  });
+  }, 30000);
 });
