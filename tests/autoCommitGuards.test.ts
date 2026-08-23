@@ -54,4 +54,14 @@ describe('AutoCommitEngine — git argv guards', () => {
     // Existing --author flag stays untouched.
     expect(commit!.args.some((a) => a.startsWith('--author='))).toBe(true);
   });
+
+  it('B2: staging uses an exclude pathspec so .hypersabmemory can never be added', async () => {
+    calls.length = 0;
+    const engine = new AutoCommitEngine({ workspaceDir: 'X:\\does-not-matter' });
+    await engine.createCheckpoint();
+
+    const add = calls.find((c) => c.args[0] === 'add');
+    expect(add).toBeDefined();
+    expect(add!.args).toEqual(['add', '-A', '--', ':(exclude).hypersabmemory']);
+  });
 });

@@ -120,7 +120,8 @@ export class AutoCommitEngine {
         return { committed: false, status: 'clean' };
       }
 
-      await execFileAsync('git', ['add', '-A'], { cwd: this.workspaceDir });
+      // Belt-and-braces: exclude pathspec keeps the memory store unstaged even if ignore rules are bypassed.
+      await execFileAsync('git', ['add', '-A', '--', ':(exclude).hypersabmemory'], { cwd: this.workspaceDir });
 
       const fileFocus = this.workspaceDir ? path.basename(this.workspaceDir) : 'workspace';
       const commitMessage = customReason

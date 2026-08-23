@@ -211,4 +211,22 @@ describe('HyperSABMemory — Checkpoint hygiene (v1.4.0 repair floor)', () => {
     expect(result.status).toBe('subdir-of-repo');
     expect(shortHead(dir)).toBe(before);
   });
+
+  it('B2: tracked .hypersabmemory files are never staged into checkpoints', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    fs.mkdirSync(path.join(dir, '.hypersabmemory'), { recursive: true });
+    commitFile(dir, path.join('.hypersabmemory', 'memory.json'), '{"facts":[]}', 'seed memory store');
+
+    fs.writeFileSync(path.join(dir, '.hypersabmemory', 'memory.json'), '{"facts":["x"]}', 'utf-8');
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'v2', 'utf-8');
+
+    const result = await new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint();
+
+    expect(result.committed).toBe(true);
+    const changed = runGit(dir, ['show', '--name-only', '--format=', 'HEAD']);
+    expect(changed).toContain('a.txt');
+    expect(changed).not.toContain('.hypersabmemory');
+  });
 });
