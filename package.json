@@ -51,7 +51,9 @@
     "dist",
     "README.md",
     "LICENSE",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
