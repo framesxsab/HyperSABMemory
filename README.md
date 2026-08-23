@@ -93,8 +93,8 @@ Checkpoints stay **local**. HyperSABMemory never runs `git push`.
 ## Benchmarked in the open
 
 Recall is gated by a local benchmark (`npm run eval`) with published thresholds and
-deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate on
-every push.
+deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate
+inside its blocking test job on every push.
 
 | Gate | Threshold |
 |---|---|
@@ -175,7 +175,7 @@ npm run eval
 npm run build
 ```
 
-CI runs the full matrix (Ubuntu + Windows, Node 20/22) plus the recall gate on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+CI runs the full matrix (Ubuntu + Windows, Node 20/22) with the recall gate inside the blocking test job on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Blueprint docs: [Architecture.md](./Architecture.md), [PRD.md](./PRD.md), [Rules.md](./Rules.md), [Phases.md](./Phases.md).
 
