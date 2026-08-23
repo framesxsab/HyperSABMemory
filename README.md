@@ -36,7 +36,7 @@ That command:
 
 1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
 2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
-3. Initializes local memory under `.hypersabmemory/` (gitignored)
+3. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
 
 Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
