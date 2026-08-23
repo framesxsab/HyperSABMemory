@@ -9,6 +9,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import picocolors from 'picocolors';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
@@ -49,6 +50,12 @@ async function containStoreInGit(targetDir: string): Promise<void> {
   }
 }
 
+export interface SetupOutcome {
+  success: boolean;
+  createdFiles: string[];
+  error?: string;
+}
+
 export class OneShotSetupEngine {
   private targetDir: string;
 
@@ -59,7 +66,7 @@ export class OneShotSetupEngine {
   /**
    * Executes the full one-shot setup sequence.
    */
-  public async executeSetup(): Promise<{ success: boolean; createdFiles: string[] }> {
+  public async executeSetup(): Promise<SetupOutcome> {
     let createdFiles: string[] = [];
 
     try {
@@ -91,7 +98,31 @@ export class OneShotSetupEngine {
       return { success: true, createdFiles };
     } catch (err) {
       console.error('[HyperSABMemory :: OneShotSetup] Setup failed:', err);
-      return { success: false, createdFiles };
+      return { success: false, createdFiles, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+}
+
+/**
+ * Prints the setup result. Failures surface the real error message plus the
+ * partial createdFiles list instead of a generic "check logs" pointer.
+ */
+export function printSetupOutcome(outcome: SetupOutcome, workspaceDir: string = process.cwd()): void {
+  if (outcome.success) {
+    console.log(picocolors.green('✔ Structural knowledge graph integrated.'));
+    console.log(picocolors.green('✔ Temporal memory store initialized.'));
+    console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
+    console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
+    console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
+    console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypersabmemory MCP server → call hypersabmemory_get_context.'));
+    return;
+  }
+
+  console.log(picocolors.red(`✖ Setup failed: ${outcome.error ?? 'unknown error'}`));
+  if (outcome.createdFiles.length > 0) {
+    console.log(picocolors.yellow(`Partially created files before failure (${outcome.createdFiles.length}):`));
+    for (const file of outcome.createdFiles) {
+      console.log(picocolors.gray(`  ${path.relative(workspaceDir, file) || file}`));
     }
   }
 }

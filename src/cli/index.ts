@@ -16,7 +16,7 @@ import { FileWatcherHook } from '../hooks/fileWatcher.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HyperSABMemoryMcpServer } from '../mcp/server.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
-import { OneShotSetupEngine } from './oneShotSetup.js';
+import { OneShotSetupEngine, printSetupOutcome } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine, MCP_TOOL_FLOW } from '../harness/mcpAccess.js';
@@ -75,16 +75,7 @@ program
     console.log(picocolors.cyan('\n[HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
     const result = await setupEngine.executeSetup();
-    if (result.success) {
-      console.log(picocolors.green('✔ Structural knowledge graph integrated.'));
-      console.log(picocolors.green('✔ Temporal memory store initialized.'));
-      console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
-      console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
-      console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
-      console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypersabmemory MCP server → call hypersabmemory_get_context.'));
-    } else {
-      console.log(picocolors.red('✖ Setup encountered an error. Check logs for details.'));
-    }
+    printSetupOutcome(result);
   });
 
 // Command: init
@@ -402,6 +393,18 @@ program
       console.log(picocolors.red('\n✖ Issues found above.'));
       process.exitCode = 1;
       return;
+    }
+    if (report.counters) {
+      const counters = report.counters;
+      console.log(picocolors.cyan('\nMeasured counters:'));
+      console.log(`  memory records: ${counters.activeRecords} active / ${counters.forgottenRecords} forgotten`);
+      console.log(`  checkpoint commits: ${counters.checkpointCommits ?? 'unknown (not a git repo)'}`);
+      if (counters.lastRollbackHash) {
+        console.log(`  last rollback: ${counters.lastRollbackHash} (safety checkpoint)`);
+      }
+      if (typeof counters.estTokensSavedPct === 'number') {
+        console.log(`  est. tokens saved ~${counters.estTokensSavedPct}% (measured on this store)`);
+      }
     }
     console.log(picocolors.green('\n✔ All checks passed.'));
   });
