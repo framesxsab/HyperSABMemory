@@ -57,7 +57,7 @@ export class AutoCommitEngine {
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log(`[HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
+    console.error(`[HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
     this.createCheckpoint();
     this.timer = setInterval(() => {
       this.createCheckpoint();
@@ -120,7 +120,7 @@ export class AutoCommitEngine {
         this.onCommit(hash, commitMessage);
       }
 
-      console.log(`[HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
+      console.error(`[HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
       return { committed: true, status: 'committed', hash };
     } catch (err) {
       if (this.onError && err instanceof Error) {
@@ -223,7 +223,7 @@ export class AutoCommitEngine {
         console.warn('[HyperSABMemory :: AutoCommit] Safety checkpoint failed — proceeding with rollback.', safetyErr);
       }
       await execFileAsync('git', ['reset', '--hard', hash], { cwd: this.workspaceDir });
-      console.log(`[HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
+      console.error(`[HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
       return true;
     } catch (err) {
       console.error(`[HyperSABMemory :: AutoCommit] Failed rollback to ${hash}:`, err);

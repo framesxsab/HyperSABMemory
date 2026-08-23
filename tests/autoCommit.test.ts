@@ -159,4 +159,23 @@ describe('HyperSABMemory — Checkpoint hygiene (v1.4.0 repair floor)', () => {
       'hypersabmemory-bot|hypersabmemory@users.noreply.github.com'
     );
   });
+
+  it('B3: checkpoint logging never writes to stdio stdout (MCP JSON-RPC safety)', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'dirty', 'utf-8');
+
+    // Vitest intercepts console.* before raw streams, so assert both layers (raw stdout = production invariant).
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint();
+
+    expect(result.committed).toBe(true);
+    expect(outSpy).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('Created checkpoint'))).toBe(true);
+  });
 });
