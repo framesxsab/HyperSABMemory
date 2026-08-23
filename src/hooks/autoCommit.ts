@@ -104,14 +104,24 @@ export class AutoCommitEngine {
 
       // Safety: whole-tree add from a monorepo subdir sweeps teammates' WIP.
       const normalize = (p: string): string => {
+        const resolved = path.resolve(p);
         try {
-          return fs.realpathSync(p);
+          // native resolves symlinks AND 8.3 short names (CI runners expose
+          // os.tmpdir() as C:\Users\RUNNER~1\... while git reports the long form).
+          return process.platform === 'win32'
+            ? fs.realpathSync.native(resolved)
+            : fs.realpathSync(resolved);
         } catch {
-          return path.resolve(p);
+          return resolved;
         }
       };
       const { stdout: toplevelRaw } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: this.workspaceDir });
-      if (path.relative(normalize(this.workspaceDir), normalize(toplevelRaw.trim())) !== '') {
+      const wsCanonical = normalize(this.workspaceDir);
+      const topCanonical = normalize(toplevelRaw.trim());
+      const sameRoot = process.platform === 'win32'
+        ? wsCanonical.toLowerCase() === topCanonical.toLowerCase()
+        : wsCanonical === topCanonical;
+      if (!sameRoot) {
         return { committed: false, status: 'subdir-of-repo' };
       }
 

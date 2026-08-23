@@ -212,6 +212,22 @@ describe('HyperSABMemory — Checkpoint hygiene (v1.4.0 repair floor)', () => {
     expect(shortHead(dir)).toBe(before);
   });
 
+  it('B5: same repo root spelled with different case or separators is not a subdir', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'v2', 'utf-8');
+
+    const variant = process.platform === 'win32'
+      ? dir.replace(/\\/g, '/').toLowerCase()
+      : path.join(dir, 'nested', '..');
+
+    const result = await new AutoCommitEngine({ workspaceDir: variant }).createCheckpoint();
+
+    expect(result.status).not.toBe('subdir-of-repo');
+    expect(result.committed).toBe(true);
+  });
+
   it('B2: tracked .hypersabmemory files are never staged into checkpoints', async () => {
     const dir = initRepo();
     dirs.push(dir);
