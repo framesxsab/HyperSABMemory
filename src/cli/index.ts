@@ -27,6 +27,7 @@ import { runDoctor } from './doctor.js';
 import { runEvalCommand } from './evalCommand.js';
 import { buildHandoffBrief } from './handoffCommand.js';
 import { removeInjection } from './removeCommand.js';
+import { setupNextStepsFlow } from './setupOutput.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -77,6 +78,9 @@ program
     const setupEngine = new OneShotSetupEngine(process.cwd());
     const result = await setupEngine.executeSetup();
     printSetupOutcome(result);
+    if (result.success) {
+      console.log(picocolors.cyan(`\n${setupNextStepsFlow(process.cwd())}`));
+    }
   });
 
 // Command: init
