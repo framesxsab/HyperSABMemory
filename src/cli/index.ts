@@ -26,6 +26,7 @@ import { registerMemoryCommands } from './memoryCommands.js';
 import { runDoctor } from './doctor.js';
 import { runEvalCommand } from './evalCommand.js';
 import { buildHandoffBrief } from './handoffCommand.js';
+import { removeInjection } from './removeCommand.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -407,6 +408,29 @@ program
       }
     }
     console.log(picocolors.green('\n✔ All checks passed.'));
+  });
+
+// Command: remove
+program
+  .command('remove')
+  .description('Clean uninstall: strips injected HyperSABMemory sections, MCP entries, and the local store')
+  .action(() => {
+    const result = removeInjection(process.cwd());
+    if (result.cleanedFiles.length > 0) {
+      console.log(picocolors.green(`✔ Cleaned injected sections from ${result.cleanedFiles.length} file(s):`));
+      for (const file of result.cleanedFiles) {
+        console.log(picocolors.gray(`  ${path.relative(process.cwd(), file) || file}`));
+      }
+    }
+    for (const file of result.removedFiles) {
+      console.log(picocolors.green(`✔ Removed generated file: ${path.relative(process.cwd(), file) || file}`));
+    }
+    if (result.storeRemoved) {
+      console.log(picocolors.green('✔ Removed .hypersabmemory/ store directory.'));
+    }
+    if (result.cleanedFiles.length === 0 && result.removedFiles.length === 0 && !result.storeRemoved) {
+      console.log(picocolors.yellow('ℹ Nothing to remove — no HyperSABMemory artifacts found.'));
+    }
   });
 
 registerMemoryCommands(program);
