@@ -1,6 +1,6 @@
 {
   "name": "hypersabmemory",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Open-source IDE context harness and persistent memory engine for AI coding agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,8 +44,8 @@
     "type": "git",
     "url": "git+https://github.com/framesxsab/HyperSABMemory.git"
   },
-    "engines": {
-        "node": ">=20"
+  "engines": {
+    "node": ">=20"
   },
   "files": [
     "dist",
