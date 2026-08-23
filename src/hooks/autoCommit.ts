@@ -5,6 +5,7 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -26,7 +27,7 @@ export interface WorkspaceSnapshot {
   recentDiff?: string;
 }
 
-export type CheckpointStatus = 'committed' | 'clean' | 'not-a-repo' | 'failed';
+export type CheckpointStatus = 'committed' | 'clean' | 'not-a-repo' | 'operation-in-progress' | 'subdir-of-repo' | 'failed';
 
 export interface CheckpointResult {
   committed: boolean;
@@ -84,10 +85,34 @@ export class AutoCommitEngine {
 
   public async createCheckpoint(customReason?: string): Promise<CheckpointResult> {
     try {
+      let gitDirRaw: string;
       try {
-        await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir });
+        ({ stdout: gitDirRaw } = await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir }));
       } catch {
         return { committed: false, status: 'not-a-repo' };
+      }
+      const gitDir = path.resolve(this.workspaceDir, gitDirRaw.trim());
+
+      // Safety: staging mid-merge/rebase concludes the user's operation with conflict markers baked in.
+      if (
+        fs.existsSync(path.join(gitDir, 'MERGE_HEAD')) ||
+        fs.existsSync(path.join(gitDir, 'rebase-merge')) ||
+        fs.existsSync(path.join(gitDir, 'rebase-apply'))
+      ) {
+        return { committed: false, status: 'operation-in-progress' };
+      }
+
+      // Safety: whole-tree add from a monorepo subdir sweeps teammates' WIP.
+      const normalize = (p: string): string => {
+        try {
+          return fs.realpathSync(p);
+        } catch {
+          return path.resolve(p);
+        }
+      };
+      const { stdout: toplevelRaw } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: this.workspaceDir });
+      if (path.relative(normalize(this.workspaceDir), normalize(toplevelRaw.trim())) !== '') {
+        return { committed: false, status: 'subdir-of-repo' };
       }
 
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });

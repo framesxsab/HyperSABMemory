@@ -178,4 +178,37 @@ describe('HyperSABMemory — Checkpoint hygiene (v1.4.0 repair floor)', () => {
     expect(logSpy).not.toHaveBeenCalled();
     expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('Created checkpoint'))).toBe(true);
   });
+
+  it('B5: refuses to checkpoint while a merge is in progress (MERGE_HEAD present)', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    const before = shortHead(dir);
+
+    fs.writeFileSync(path.join(dir, '.git', 'MERGE_HEAD'), '1234567890abcdef1234567890abcdef12345678', 'utf-8');
+    fs.writeFileSync(path.join(dir, 'conflicted.txt'), '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\n', 'utf-8');
+
+    const result = await new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint();
+
+    expect(result.committed).toBe(false);
+    expect(result.status).toBe('operation-in-progress');
+    expect(shortHead(dir)).toBe(before);
+  });
+
+  it('B5: refuses to sweep the whole tree when workspace is a subdir of the repo', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    const before = shortHead(dir);
+
+    const sub = path.join(dir, 'packages', 'app');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, 'wip.ts'), 'teammate wip', 'utf-8');
+
+    const result = await new AutoCommitEngine({ workspaceDir: sub }).createCheckpoint();
+
+    expect(result.committed).toBe(false);
+    expect(result.status).toBe('subdir-of-repo');
+    expect(shortHead(dir)).toBe(before);
+  });
 });

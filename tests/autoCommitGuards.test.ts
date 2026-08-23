@@ -19,7 +19,9 @@ vi.mock('child_process', () => ({
   ) => {
     let stdout = '';
     if (args[0] === 'status') stdout = ' M tracked.txt\n';
-    else if (args[0] === 'rev-parse' && args.includes('--short')) stdout = 'abc1234\n';
+    else if (args.includes('--short')) stdout = 'abc1234\n';
+    else if (args.includes('--git-dir')) stdout = '.git\n';
+    else if (args.includes('--show-toplevel')) stdout = 'X:\\does-not-matter\n';
     calls.push({ file, args: [...args] });
     cb(null, { stdout, stderr: '' });
   }
