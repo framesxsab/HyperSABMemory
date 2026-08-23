@@ -21,6 +21,7 @@ Most agent-memory tools store chat facts in a cloud or a sidecar database. Hyper
 | Token-ceiling context block | A hard 1500-token budget on injected context, enforced by tests |
 | Structural knowledge graph | AST-level map of your codebase so agents reuse existing components instead of rewriting them |
 | Swarm coordination | File locks and broadcasts for parallel subagents working the same repo |
+| Multi-engine safe | MCP servers, dashboard, and CLI share one store through a file-lock CAS — no last-writer-wins memory loss |
 
 Nothing here requires an account, an API key, or network access after install.
 
@@ -37,6 +38,7 @@ That command:
 1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
 2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
 3. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
+4. Seeds 5-10 first-boot facts from your README, package.json, and git history, then prints a `GENESIS <hash>` baseline checkpoint you can always return to
 
 Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
@@ -66,6 +68,8 @@ npx hypersabmemory status
 | `hypersabmemory_claim_task` | Acquire/release an exclusive file lock |
 | `hypersabmemory_sync_swarm` | Pull live locks + broadcasts + your session id |
 
+Resource-aware clients can also pull the context block and memory log passively via MCP resources (`resources/list` + `resources/read`).
+
 ## Everyday commands
 
 ```bash
@@ -79,16 +83,20 @@ npx hypersabmemory rollback <hash>       # safety-checkpointed reset to a checkp
 npx hypersabmemory remember "fact"       # save a memory from the terminal
 npx hypersabmemory list -q "search"      # list / recall active memories
 npx hypersabmemory forget <id>           # invalidate a memory by id
-npx hypersabmemory doctor                # read-only health check (git, store, MCP configs)
+npx hypersabmemory handoff               # paste-ready session brief (--story for a retrospective)
+npx hypersabmemory doctor                # read-only health check incl. live MCP launch handshake
+npx hypersabmemory remove                # clean uninstall: injected sections, MCP entries, store
 npx hypersabmemory publish               # real pre-flight release checks (tree, dist, version)
 npx hypersabmemory mcp                   # stdio MCP server (used by the IDE)
 ```
 
 The live dashboard shows a token meter for the context block, the structural graph state,
-memory-store status, and a git checkpoint timeline with 1-click rollback.
-It binds to `127.0.0.1` only.
+memory-store status, swarm mesh activity (locks + broadcasts), and a git checkpoint timeline
+with 1-click rollback. It binds to `127.0.0.1` only.
 
-Checkpoints stay **local**. HyperSABMemory never runs `git push`.
+Checkpoints stay **local**. HyperSABMemory never runs `git push`. If your current edits
+overlap files from a rolled-back checkpoint, the harness appends a single `[GHOST]` warning
+to the context header (opt out with `HYPERSABMEMORY_GHOST_PATHS=off`).
 
 ## Benchmarked in the open
 

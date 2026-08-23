@@ -71,3 +71,7 @@ GRAPH_REPORT.md
 
 # local npm pack artifacts
 *.tgz
+
+# local memory log + generated IDE adapters (machine-local)
+/Memory.md
+/.claude.json
