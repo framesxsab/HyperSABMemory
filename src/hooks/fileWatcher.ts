@@ -60,7 +60,13 @@ export class FileWatcherHook {
       '**/.git/**',
       '**/dist/**',
       '**/.hypersabmemory/**',
-      '**/Memory.md'
+      '**/Memory.md',
+      '**/.venv/**',
+      '**/target/**',
+      '**/build/**',
+      '**/out/**',
+      '**/coverage/**',
+      '**/vendor/**'
     ];
 
     this.watcher = chokidar.watch(this.workspaceDir, {
@@ -71,6 +77,10 @@ export class FileWatcherHook {
         return (this.options.ignoredPatterns ?? []).some((pattern) =>
           typeof pattern === 'string' ? normalized.includes(pattern) : pattern.test(normalized)
         );
+      },
+      awaitWriteFinish: {
+        stabilityThreshold: 400,
+        pollInterval: 100
       },
       persistent: true,
       ignoreInitial: true

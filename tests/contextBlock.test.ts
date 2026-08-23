@@ -24,6 +24,51 @@ function noiseFact(i: number, msAgo: number): MemoryRecord {
   };
 }
 
+describe('HyperSABMemory — seeded provenance marker (F1)', () => {
+  it('prefixes seeded fact lines with [seeded] and leaves normal facts unmarked', () => {
+    const now = new Date().toISOString();
+    const records: MemoryRecord[] = [
+      {
+        id: 'seed-1',
+        category: 'architecture',
+        content: 'Seeded stack summary fact',
+        timestamp: now,
+        tags: ['seeded'],
+        source: 'seed',
+        status: 'active'
+      },
+      {
+        id: 'user-1',
+        category: 'decision',
+        content: 'User decision fact',
+        timestamp: now,
+        status: 'active'
+      }
+    ];
+
+    const block = buildContextBlock(records);
+    const seedLine = block.split('\n').find((line) => line.includes('Seeded stack summary fact'))!;
+    expect(seedLine).toContain('[seeded]');
+    const userLine = block.split('\n').find((line) => line.includes('User decision fact'))!;
+    expect(userLine).not.toContain('[seeded]');
+  });
+
+  it('holds the 400-token ceiling when every rendered fact carries the [seeded] marker', () => {
+    const records: MemoryRecord[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `seeded-${i}`,
+      category: 'architecture' as const,
+      content: 'x'.repeat(200),
+      timestamp: iso((i + 1) * HOUR_MS),
+      tags: ['seeded'],
+      source: 'seed' as const,
+      status: 'active' as const
+    }));
+
+    const block = buildContextBlock(records);
+    expect(TokenCompressor.estimateTokens(block)).toBeLessThanOrEqual(400);
+  });
+});
+
 describe('HyperSABMemory — Noise-aware Context Block (P6)', () => {
   it('ranks a fresh decision above fresh watcher noise and evicts noise, not the decision', () => {
     const records: MemoryRecord[] = [

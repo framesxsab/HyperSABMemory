@@ -5,9 +5,12 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
@@ -136,7 +139,8 @@ export class HyperSABMemoryMcpServer {
       },
       {
         capabilities: {
-          tools: {}
+          tools: {},
+          resources: {}
         }
       }
     );
@@ -415,10 +419,52 @@ export class HyperSABMemoryMcpServer {
         return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
       }
     });
+
+    // List exposed MCP resources (additive capability; tool responses unchanged)
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: [
+          {
+            uri: 'hypersabmemory://context-block',
+            name: 'Context Block',
+            description: 'Token-packed Context Block of dated active facts (same content as the hypersabmemory_context_block tool).',
+            mimeType: 'text/plain'
+          },
+          {
+            uri: 'hypersabmemory://memory-log',
+            name: 'Memory Log',
+            description: 'Persistent decision log (Memory.md) at the workspace root.',
+            mimeType: 'text/markdown'
+          }
+        ]
+      };
+    });
+
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {      const { uri } = request.params;
+
+      if (uri === 'hypersabmemory://context-block') {
+        return {
+          contents: [{ uri, mimeType: 'text/plain', text: this.memory.getContextBlock() }]
+        };
+      }
+
+      if (uri === 'hypersabmemory://memory-log') {
+        const logPath = path.join(this.workspaceDir, 'Memory.md');
+        const text = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8') : '';
+        return {
+          contents: [{ uri, mimeType: 'text/markdown', text }]
+        };
+      }
+
+      throw new Error(`Unknown resource: ${uri}`);
+    });
+  }
+
+  public connect(transport: Transport): Promise<void> {
+    return this.server.connect(transport);
   }
 
   public async start(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+    await this.connect(new StdioServerTransport());
   }
 }

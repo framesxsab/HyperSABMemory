@@ -5,6 +5,7 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -26,7 +27,7 @@ export interface WorkspaceSnapshot {
   recentDiff?: string;
 }
 
-export type CheckpointStatus = 'committed' | 'clean' | 'not-a-repo' | 'failed';
+export type CheckpointStatus = 'committed' | 'clean' | 'not-a-repo' | 'operation-in-progress' | 'subdir-of-repo' | 'failed';
 
 export interface CheckpointResult {
   committed: boolean;
@@ -57,7 +58,7 @@ export class AutoCommitEngine {
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log(`[HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
+    console.error(`[HyperSABMemory :: AutoCommit] Engine active (Interval: ${this.intervalMs / 60000}m | Author: ${this.authorName} <${this.authorEmail}>)`);
     this.createCheckpoint();
     this.timer = setInterval(() => {
       this.createCheckpoint();
@@ -84,20 +85,66 @@ export class AutoCommitEngine {
 
   public async createCheckpoint(customReason?: string): Promise<CheckpointResult> {
     try {
+      let gitDirRaw: string;
       try {
-        await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir });
+        ({ stdout: gitDirRaw } = await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir }));
       } catch {
         return { committed: false, status: 'not-a-repo' };
       }
+      const gitDir = path.resolve(this.workspaceDir, gitDirRaw.trim());
 
-      await this.configureGitIdentity();
+      // Safety: staging mid-merge/rebase concludes the user's operation with conflict markers baked in.
+      if (
+        fs.existsSync(path.join(gitDir, 'MERGE_HEAD')) ||
+        fs.existsSync(path.join(gitDir, 'rebase-merge')) ||
+        fs.existsSync(path.join(gitDir, 'rebase-apply'))
+      ) {
+        return { committed: false, status: 'operation-in-progress' };
+      }
+
+      // Safety: whole-tree add from a monorepo subdir sweeps teammates' WIP.
+      const normalize = (p: string): string => {
+        const resolved = path.resolve(p);
+        try {
+          // native resolves symlinks AND 8.3 short names (CI runners expose
+          // os.tmpdir() as C:\Users\RUNNER~1\... while git reports the long form).
+          return process.platform === 'win32'
+            ? fs.realpathSync.native(resolved)
+            : fs.realpathSync(resolved);
+        } catch {
+          return resolved;
+        }
+      };
+      const { stdout: toplevelRaw } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: this.workspaceDir });
+      const wsCanonical = normalize(this.workspaceDir);
+      const topCanonical = normalize(toplevelRaw.trim());
+      const sameRoot = process.platform === 'win32'
+        ? wsCanonical.toLowerCase() === topCanonical.toLowerCase()
+        : wsCanonical === topCanonical;
+      if (!sameRoot) {
+        return { committed: false, status: 'subdir-of-repo' };
+      }
 
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
       if (!status.trim()) {
         return { committed: false, status: 'clean' };
       }
 
+      // Belt-and-braces: keep the memory store out of checkpoints even if ignore
+      // rules are bypassed. An exclude pathspec on add cannot be used here: naming
+      // the ignored dir trips advice.addIgnoredFile and git exits 1, aborting every
+      // checkpoint in contained workspaces. Instead: stage all, then restore the
+      // index to HEAD for store paths ONLY when a legacy tracked store exists
+      // (post-untrack stores must keep their deletion staged so setup commits it).
       await execFileAsync('git', ['add', '-A'], { cwd: this.workspaceDir });
+      try {
+        const { stdout: trackedStore } = await execFileAsync('git', ['ls-files', '--', '.hypersabmemory'], { cwd: this.workspaceDir });
+        if (trackedStore.trim()) {
+          await execFileAsync('git', ['reset', '-q', 'HEAD', '--', '.hypersabmemory'], { cwd: this.workspaceDir });
+        }
+      } catch {
+        // Index inspection is best-effort; staging itself already succeeded.
+      }
 
       const fileFocus = this.workspaceDir ? path.basename(this.workspaceDir) : 'workspace';
       const commitMessage = customReason
@@ -107,7 +154,11 @@ export class AutoCommitEngine {
       const author = `${this.authorName} <${this.authorEmail}>`;
       await execFileAsync(
         'git',
-        ['commit', `--author=${author}`, '-m', commitMessage, '--allow-empty'],
+        [
+          '-c', `user.name=${this.authorName}`,
+          '-c', `user.email=${this.authorEmail}`,
+          'commit', `--author=${author}`, '-m', commitMessage, '--allow-empty'
+        ],
         { cwd: this.workspaceDir }
       );
 
@@ -118,7 +169,7 @@ export class AutoCommitEngine {
         this.onCommit(hash, commitMessage);
       }
 
-      console.log(`[HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
+      console.error(`[HyperSABMemory :: AutoCommit] Created checkpoint [${hash}] by ${this.authorName} -> ${commitMessage}`);
       return { committed: true, status: 'committed', hash };
     } catch (err) {
       if (this.onError && err instanceof Error) {
@@ -221,7 +272,7 @@ export class AutoCommitEngine {
         console.warn('[HyperSABMemory :: AutoCommit] Safety checkpoint failed — proceeding with rollback.', safetyErr);
       }
       await execFileAsync('git', ['reset', '--hard', hash], { cwd: this.workspaceDir });
-      console.log(`[HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
+      console.error(`[HyperSABMemory :: AutoCommit] Successfully rolled back to ${hash}`);
       return true;
     } catch (err) {
       console.error(`[HyperSABMemory :: AutoCommit] Failed rollback to ${hash}:`, err);

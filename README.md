@@ -36,7 +36,7 @@ That command:
 
 1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
 2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
-3. Initializes local memory under `.hypersabmemory/` (gitignored)
+3. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
 
 Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
@@ -93,8 +93,8 @@ Checkpoints stay **local**. HyperSABMemory never runs `git push`.
 ## Benchmarked in the open
 
 Recall is gated by a local benchmark (`npm run eval`) with published thresholds and
-deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate on
-every push.
+deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate
+inside its blocking test job on every push.
 
 | Gate | Threshold |
 |---|---|
@@ -175,7 +175,7 @@ npm run eval
 npm run build
 ```
 
-CI runs the full matrix (Ubuntu + Windows, Node 20/22) plus the recall gate on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+CI runs the full matrix (Ubuntu + Windows, Node 20/22) with the recall gate inside the blocking test job on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Blueprint docs: [Architecture.md](./Architecture.md), [PRD.md](./PRD.md), [Rules.md](./Rules.md), [Phases.md](./Phases.md).
 

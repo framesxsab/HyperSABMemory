@@ -68,3 +68,6 @@ GRAPH_REPORT.md
 
 # UI design-tournament artifacts (local only)
 .design/
+
+# local npm pack artifacts
+*.tgz

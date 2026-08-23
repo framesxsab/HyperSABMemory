@@ -6,9 +6,11 @@
 import { HashAnchorEngine } from './hashAnchor.js';
 import { MinimalChangeEngine, type MinimalChangeIntensity } from './minimalChange.js';
 import { TokenCompressor } from './tokenCompressor.js';
+import { resolveGhostLine } from './ghostPaths.js';
 
 export interface HarnessState {
   workspaceName: string;
+  workspaceDir?: string;
   activeFile?: string;
   cursorLine?: number;
   cursorColumn?: number;
@@ -69,6 +71,12 @@ export class ContextHarness {
       ? TokenCompressor.summarizeRead(state.activeFileContent, 16)
       : '';
 
+    const ghostLine = resolveGhostLine({
+      workspaceDir: state.workspaceDir,
+      activeFile: state.activeFile,
+      modifiedFiles: state.modifiedFiles
+    });
+
     const rawHeader = `[HYPERSABMEMORY :: CONTEXT HARNESS]
 ┌─ Workspace: ${state.workspaceName} | Branch: ${branchStr} | Checkpoint: ${commitStr}
 ├─ Active Focus: ${activeFileStr}
@@ -83,7 +91,7 @@ ${rules.generateMinimalChangeHeader()}
 
 <STATE_FOCUS>
 Ensure all edits maintain non-blocking execution, adhere to project Rules.md, and preserve persistent Memory.md state.
-</STATE_FOCUS>`;
+</STATE_FOCUS>${ghostLine ? `\n${ghostLine}` : ''}`;
 
     return TokenCompressor.compressText(rawHeader, this.tokenCeiling);
   }

@@ -16,7 +16,7 @@ import { FileWatcherHook } from '../hooks/fileWatcher.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HyperSABMemoryMcpServer } from '../mcp/server.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
-import { OneShotSetupEngine } from './oneShotSetup.js';
+import { OneShotSetupEngine, printSetupOutcome } from './oneShotSetup.js';
 import { DashboardServer } from '../server/dashboardServer.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine, MCP_TOOL_FLOW } from '../harness/mcpAccess.js';
@@ -25,6 +25,9 @@ import { parseIntervalMinutes } from './cliUtils.js';
 import { registerMemoryCommands } from './memoryCommands.js';
 import { runDoctor } from './doctor.js';
 import { runEvalCommand } from './evalCommand.js';
+import { buildHandoffBrief } from './handoffCommand.js';
+import { removeInjection } from './removeCommand.js';
+import { setupNextStepsFlow } from './setupOutput.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -74,15 +77,9 @@ program
     console.log(picocolors.cyan('\n[HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
     const result = await setupEngine.executeSetup();
+    printSetupOutcome(result);
     if (result.success) {
-      console.log(picocolors.green('✔ Structural knowledge graph integrated.'));
-      console.log(picocolors.green('✔ Temporal memory store initialized.'));
-      console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
-      console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
-      console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
-      console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypersabmemory MCP server → call hypersabmemory_get_context.'));
-    } else {
-      console.log(picocolors.red('✖ Setup encountered an error. Check logs for details.'));
+      console.log(picocolors.cyan(`\n${setupNextStepsFlow(process.cwd())}`));
     }
   });
 
@@ -164,6 +161,16 @@ program
       console.log(`  ${picocolors.green(entry.hash)}  ${entry.date}  ${entry.message}`);
     }
     console.log(picocolors.gray(`\nPreview a rollback with: hypersabmemory diff <hash>`));
+  });
+
+// Command: handoff
+program
+  .command('handoff')
+  .description('Print a paste-ready forward handoff brief (--story for a ledger-only retrospective)')
+  .option('--story', 'Deterministic captain\'s-log retrospective built purely from local ledgers', false)
+  .action(async (options) => {
+    const brief = await buildHandoffBrief(process.cwd(), { story: options.story === true });
+    console.log(brief);
   });
 
 // Command: diff
@@ -392,7 +399,42 @@ program
       process.exitCode = 1;
       return;
     }
+    if (report.counters) {
+      const counters = report.counters;
+      console.log(picocolors.cyan('\nMeasured counters:'));
+      console.log(`  memory records: ${counters.activeRecords} active / ${counters.forgottenRecords} forgotten`);
+      console.log(`  checkpoint commits: ${counters.checkpointCommits ?? 'unknown (not a git repo)'}`);
+      if (counters.lastRollbackHash) {
+        console.log(`  last rollback: ${counters.lastRollbackHash} (safety checkpoint)`);
+      }
+      if (typeof counters.estTokensSavedPct === 'number') {
+        console.log(`  est. tokens saved ~${counters.estTokensSavedPct}% (measured on this store)`);
+      }
+    }
     console.log(picocolors.green('\n✔ All checks passed.'));
+  });
+
+// Command: remove
+program
+  .command('remove')
+  .description('Clean uninstall: strips injected HyperSABMemory sections, MCP entries, and the local store')
+  .action(() => {
+    const result = removeInjection(process.cwd());
+    if (result.cleanedFiles.length > 0) {
+      console.log(picocolors.green(`✔ Cleaned injected sections from ${result.cleanedFiles.length} file(s):`));
+      for (const file of result.cleanedFiles) {
+        console.log(picocolors.gray(`  ${path.relative(process.cwd(), file) || file}`));
+      }
+    }
+    for (const file of result.removedFiles) {
+      console.log(picocolors.green(`✔ Removed generated file: ${path.relative(process.cwd(), file) || file}`));
+    }
+    if (result.storeRemoved) {
+      console.log(picocolors.green('✔ Removed .hypersabmemory/ store directory.'));
+    }
+    if (result.cleanedFiles.length === 0 && result.removedFiles.length === 0 && !result.storeRemoved) {
+      console.log(picocolors.yellow('ℹ Nothing to remove — no HyperSABMemory artifacts found.'));
+    }
   });
 
 registerMemoryCommands(program);

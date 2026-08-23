@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { withFileLock } from './fileLock.js';
 
 export interface SwarmBroadcast {
   id: string;
@@ -82,9 +83,38 @@ export class SwarmMeshEngine {
     return { broadcasts: [], fileLocks: [], sessions: [] };
   }
 
+  private get lockPath(): string {
+    return `${this.swarmStatePath}.lock`;
+  }
+
+  private canonicalKey(filePath: string): string {
+    const normalized = path.normalize(filePath);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+  }
+
+  private mutate<T>(fn: () => T): T {
+    return withFileLock(this.lockPath, () => {
+      this.state = this.loadState();
+      return fn();
+    });
+  }
+
   private saveState(): void {
     try {
-      fs.writeFileSync(this.swarmStatePath, JSON.stringify(this.state, null, 2), 'utf-8');
+      const payload = JSON.stringify(this.state, null, 2);
+      const tmpPath = `${this.swarmStatePath}.tmp`;
+
+      fs.writeFileSync(tmpPath, payload, 'utf-8');
+      try {
+        fs.renameSync(tmpPath, this.swarmStatePath);
+      } catch (renameErr) {
+        const code = (renameErr as NodeJS.ErrnoException).code;
+        if (code === 'EPERM' || code === 'EBUSY') {
+          fs.renameSync(tmpPath, this.swarmStatePath); // single retry (Win AV locks)
+        } else {
+          throw renameErr; // payload stays in .tmp
+        }
+      }
     } catch (err) {
       console.error('[HyperSABMemory :: SwarmMesh] Failed to write swarm state:', err);
     }
@@ -94,6 +124,10 @@ export class SwarmMeshEngine {
     const cutoff = this.now().getTime();
     this.state.broadcasts = this.state.broadcasts.filter((b) => new Date(b.expiresAt).getTime() > cutoff);
     this.state.fileLocks = this.state.fileLocks.filter((l) => new Date(l.expiresAt).getTime() > cutoff);
+    const liveSessions = new Set<string>();
+    for (const b of this.state.broadcasts) liveSessions.add(b.sessionId);
+    for (const l of this.state.fileLocks) liveSessions.add(l.sessionId);
+    this.state.sessions = this.state.sessions.filter((s) => liveSessions.has(s));
   }
 
   private registerSession(sessionId: string): void {
@@ -107,88 +141,110 @@ export class SwarmMeshEngine {
   }
 
   public getOrCreateSessionId(sessionId?: string): string {
-    const id = sessionId?.trim() || randomId('swarm');
-    this.registerSession(id);
-    this.saveState();
-    return id;
+    return sessionId?.trim() || randomId('swarm');
   }
 
   public broadcast(sessionId: string | undefined, message: string, category?: string): SwarmBroadcast {
-    const id = this.getOrCreateSessionId(sessionId);
-    const trimmed = message.trim();
-    const nowMs = this.now().getTime();
-    const expiresAt = this.toIso(nowMs + this.broadcastTtlMs);
+    return this.mutate(() => {
+      this.pruneExpired();
+      const id = this.getOrCreateSessionId(sessionId);
+      this.registerSession(id);
+      const trimmed = message.trim();
+      const nowMs = this.now().getTime();
+      const expiresAt = this.toIso(nowMs + this.broadcastTtlMs);
 
-    const existing = this.state.broadcasts.find(
-      (b) => b.message === trimmed && (b.category ?? undefined) === (category?.trim() || undefined) && new Date(b.expiresAt).getTime() > nowMs
-    );
-    if (existing) return existing;
+      const existing = this.state.broadcasts.find(
+        (b) => b.message === trimmed && (b.category ?? undefined) === (category?.trim() || undefined) && new Date(b.expiresAt).getTime() > nowMs
+      );
+      if (existing) {
+        this.saveState();
+        return existing;
+      }
 
-    const record: SwarmBroadcast = {
-      id: randomId('brc'),
-      sessionId: id,
-      message: trimmed,
-      category: category?.trim() || undefined,
-      createdAt: new Date(nowMs).toISOString(),
-      expiresAt
-    };
-    this.state.broadcasts.push(record);
-    this.saveState();
-    return record;
+      const record: SwarmBroadcast = {
+        id: randomId('brc'),
+        sessionId: id,
+        message: trimmed,
+        category: category?.trim() || undefined,
+        createdAt: new Date(nowMs).toISOString(),
+        expiresAt
+      };
+      this.state.broadcasts.push(record);
+      this.saveState();
+      return record;
+    });
   }
 
   public claimFile(sessionId: string | undefined, filePath: string, ttlMs?: number): ClaimResult {
-    const id = this.getOrCreateSessionId(sessionId);
-    const nowMs = this.now().getTime();
-    const expiresAt = this.toIso(nowMs + (ttlMs ?? this.lockTtlMs));
-    const normalized = path.normalize(filePath);
+    return this.mutate(() => {
+      this.pruneExpired();
+      const id = this.getOrCreateSessionId(sessionId);
+      this.registerSession(id);
+      const nowMs = this.now().getTime();
+      const expiresAt = this.toIso(nowMs + (ttlMs ?? this.lockTtlMs));
+      const normalized = this.canonicalKey(filePath);
 
-    const existing = this.state.fileLocks.find((l) => l.filePath === normalized);
-    if (existing) {
-      if (existing.sessionId === id) {
-        existing.acquiredAt = new Date(nowMs).toISOString();
-        existing.expiresAt = expiresAt;
-        this.saveState();
-        return { ok: true, lock: existing };
+      const existing = this.state.fileLocks.find((l) => l.filePath === normalized);
+      if (existing) {
+        if (existing.sessionId === id) {
+          existing.acquiredAt = new Date(nowMs).toISOString();
+          existing.expiresAt = expiresAt;
+          this.saveState();
+          return { ok: true, lock: existing };
+        }
+        if (new Date(existing.expiresAt).getTime() > nowMs) {
+          this.saveState();
+          return { ok: false, lock: existing, heldBy: existing.sessionId, reason: 'locked' };
+        }
+        this.state.fileLocks = this.state.fileLocks.filter((l) => l.filePath !== normalized);
       }
-      if (new Date(existing.expiresAt).getTime() > nowMs) {
-        return { ok: false, lock: existing, heldBy: existing.sessionId, reason: 'locked' };
-      }
-      this.state.fileLocks = this.state.fileLocks.filter((l) => l.filePath !== normalized);
-    }
 
-    const lock: SwarmFileLock = {
-      filePath: normalized,
-      sessionId: id,
-      acquiredAt: new Date(nowMs).toISOString(),
-      expiresAt
-    };
-    this.state.fileLocks.push(lock);
-    this.saveState();
-    return { ok: true, lock };
+      const lock: SwarmFileLock = {
+        filePath: normalized,
+        sessionId: id,
+        acquiredAt: new Date(nowMs).toISOString(),
+        expiresAt
+      };
+      this.state.fileLocks.push(lock);
+      this.saveState();
+      return { ok: true, lock };
+    });
   }
 
   public releaseFile(sessionId: string | undefined, filePath: string): ClaimResult {
-    const id = this.getOrCreateSessionId(sessionId);
-    const normalized = path.normalize(filePath);
-    const existing = this.state.fileLocks.find((l) => l.filePath === normalized);
-    if (!existing) return { ok: true, reason: 'not-locked' };
-    if (existing.sessionId !== id) {
-      return { ok: false, heldBy: existing.sessionId, reason: 'not-owner' };
-    }
-    this.state.fileLocks = this.state.fileLocks.filter((l) => l.filePath !== normalized);
-    this.saveState();
-    return { ok: true };
+    return this.mutate(() => {
+      this.pruneExpired();
+      const id = this.getOrCreateSessionId(sessionId);
+      this.registerSession(id);
+      const normalized = this.canonicalKey(filePath);
+      const existing = this.state.fileLocks.find((l) => l.filePath === normalized);
+      if (!existing) {
+        this.saveState();
+        return { ok: true, reason: 'not-locked' };
+      }
+      if (existing.sessionId !== id) {
+        this.saveState();
+        return { ok: false, heldBy: existing.sessionId, reason: 'not-owner' };
+      }
+      this.state.fileLocks = this.state.fileLocks.filter((l) => l.filePath !== normalized);
+      this.saveState();
+      return { ok: true };
+    });
   }
 
   public sync(sessionId?: string): { sessionId: string; broadcasts: SwarmBroadcast[]; fileLocks: SwarmFileLock[] } {
-    const id = this.getOrCreateSessionId(sessionId);
-    this.pruneExpired();
-    this.saveState();
+    // Read-only: atomic tmp+rename writes mean a plain read never sees torn
+    // state, so no lock is taken and nothing is persisted. Session ids are
+    // registered lazily on the next true mutation instead.
+    const id = sessionId?.trim() || randomId('swarm');
+    const state = this.loadState();
+    const cutoff = this.now().getTime();
     return {
       sessionId: id,
-      broadcasts: [...this.state.broadcasts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      fileLocks: [...this.state.fileLocks]
+      broadcasts: state.broadcasts
+        .filter((b) => new Date(b.expiresAt).getTime() > cutoff)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      fileLocks: state.fileLocks.filter((l) => new Date(l.expiresAt).getTime() > cutoff)
     };
   }
 }

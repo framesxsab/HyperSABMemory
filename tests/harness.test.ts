@@ -5,7 +5,7 @@ import { HashAnchorEngine } from '../src/harness/hashAnchor.js';
 import { StructuralGraphEngine } from '../src/memory/structuralGraph.js';
 import { MinimalChangeEngine } from '../src/harness/minimalChange.js';
 import { UniversalAdaptersEngine } from '../src/harness/universalAdapters.js';
-import { McpAccessEngine } from '../src/harness/mcpAccess.js';
+import { McpAccessEngine, resolveMcpLaunch } from '../src/harness/mcpAccess.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { buildContextBlock } from '../src/memory/contextBlock.js';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
@@ -170,4 +170,32 @@ describe('HyperSABMemory — Context Harness Tests', () => {
     expect(await engine.rollback('HEAD; rm -rf /')).toBe(false);
     expect(await engine.rollback('../.git')).toBe(false);
   });
+
+  it('should wrap npx in cmd /c on win32 so shell-less hosts can spawn it', () => {
+    withPlatform('win32', () => {
+      const launch = resolveMcpLaunch(os.tmpdir());
+      expect(launch.command).toBe('cmd');
+      expect(launch.args).toEqual(['/c', 'npx', '-y', 'hypersabmemory', 'mcp']);
+    });
+  });
+
+  it('should keep the bare npx launch shape on darwin and linux', () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+      withPlatform(platform, () => {
+        const launch = resolveMcpLaunch(os.tmpdir());
+        expect(launch.command).toBe('npx');
+        expect(launch.args).toEqual(['-y', 'hypersabmemory', 'mcp']);
+      });
+    }
+  });
 });
+
+function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, 'platform', descriptor as PropertyDescriptor);
+  }
+}

@@ -11,6 +11,7 @@ import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { HybridSearchEngine } from '../memory/hybridSearch.js';
+import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { ContextHarness } from '../harness/contextHarness.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 
@@ -18,16 +19,19 @@ const TOKEN_CEILING = 1500;
 
 export class DashboardServer {
   private port: number;
+  private boundPort: number;
   private workspaceDir: string;
   private server: http.Server | null = null;
   private memory: TemporalMemoryEngine;
   private graph: StructuralGraphEngine;
   private autoCommit: AutoCommitEngine;
   private hybridSearch: HybridSearchEngine;
+  private swarm: SwarmMeshEngine;
   private harness: ContextHarness;
 
   constructor(port: number = 4321, workspaceDir: string = process.cwd()) {
     this.port = port;
+    this.boundPort = port;
     this.workspaceDir = workspaceDir;
     this.memory = new TemporalMemoryEngine(workspaceDir);
     this.graph = new StructuralGraphEngine(workspaceDir);
@@ -35,6 +39,7 @@ export class DashboardServer {
       workspaceDir
     });
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
+    this.swarm = new SwarmMeshEngine(workspaceDir);
     this.harness = new ContextHarness(TOKEN_CEILING);
   }
 
@@ -65,6 +70,27 @@ export class DashboardServer {
   }
 
   /**
+   * Guards state-changing POSTs against CSRF and DNS rebinding. Only loopback
+   * Host names pass (defeats rebinding to 127.0.0.1), and requiring both a
+   * JSON content-type and a custom header forces a CORS preflight that
+   * cross-origin no-cors requests cannot pass (defeats drive-by POSTs).
+   */
+  private guardStateChange(req: http.IncomingMessage): { status: number; error: string } | null {
+    const host = req.headers.host || '';
+    if (host !== `127.0.0.1:${this.boundPort}` && host !== `localhost:${this.boundPort}`) {
+      return { status: 403, error: 'Forbidden host' };
+    }
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    if (!contentType.includes('application/json')) {
+      return { status: 415, error: 'Content-Type must be application/json' };
+    }
+    if (!req.headers['x-hypersabmemory']) {
+      return { status: 403, error: 'Missing x-hypersabmemory header' };
+    }
+    return null;
+  }
+
+  /**
    * Starts the HTTP dashboard server. Resolves with the bound port.
    */
   public start(): Promise<number> {
@@ -80,6 +106,16 @@ export class DashboardServer {
           res.writeHead(200);
           res.end();
           return;
+        }
+
+        // State-changing POSTs must pass the CSRF/DNS-rebinding guard first.
+        if (req.method === 'POST') {
+          const rejected = this.guardStateChange(req);
+          if (rejected) {
+            res.writeHead(rejected.status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: rejected.error }));
+            return;
+          }
         }
 
         // Endpoint: /api/status
@@ -134,6 +170,14 @@ export class DashboardServer {
           );
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ nodes: data.nodes, edges }));
+          return;
+        }
+
+        // Endpoint: /api/swarm (read-only snapshot; sync() persists nothing)
+        if (url.pathname === '/api/swarm') {
+          const snapshot = this.swarm.sync();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ fileLocks: snapshot.fileLocks, broadcasts: snapshot.broadcasts }));
           return;
         }
 
@@ -415,6 +459,13 @@ export class DashboardServer {
       </div>
       <ul class="history-list" id="history-log"><li class="empty">fetching checkpoints…</li></ul>
     </section>
+    <section class="card" id="swarm-card">
+      <div class="pane-head">
+        <span class="pane-label">Swarm Mesh</span>
+        <span class="pane-meta" id="swarm-status">syncing…</span>
+      </div>
+      <ul class="ledger" id="swarm-log"><li class="empty">fetching swarm…</li></ul>
+    </section>
   </main>
   <script>
     var METER_CELLS = 20;
@@ -505,18 +556,49 @@ export class DashboardServer {
       if (!confirm('Hard reset workspace to checkpoint ' + hash + '? This discards uncommitted changes.')) return;
       const res = await fetch('/api/rollback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-hypersabmemory': 'dashboard' },
         body: JSON.stringify({ hash: hash })
       });
       const data = await res.json();
       alert(data.ok ? 'Rolled back to ' + hash : 'Rollback failed (invalid hash or git error).');
       loadHistory();
     }
+    function fmtDur(ms) {
+      const m = Math.max(0, Math.floor(ms / 60000));
+      if (m < 60) return m + 'm';
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + 'h';
+      return Math.floor(h / 24) + 'd';
+    }
+    async function loadSwarm() {
+      const res = await fetch('/api/swarm');
+      const data = await res.json();
+      const locks = data.fileLocks || [];
+      const broadcasts = data.broadcasts || [];
+      document.getElementById('swarm-status').textContent = locks.length + ' locks · ' + broadcasts.length + ' broadcasts';
+      const list = document.getElementById('swarm-log');
+      if (locks.length === 0 && broadcasts.length === 0) {
+        list.innerHTML = '<li class="empty">no locks held - no broadcasts</li>';
+        return;
+      }
+      const lockRows = locks.map(function (l) {
+        const left = new Date(l.expiresAt).getTime() - Date.now();
+        return '<li><span class="cat">[lock]</span><span class="fact">' + esc(l.filePath) + '</span><span class="date">' + esc(l.sessionId) + ' · ' + fmtDur(left) + ' left</span></li>';
+      });
+      const bcastRows = broadcasts.slice(0, 8).map(function (b) {
+        const age = Date.now() - new Date(b.createdAt).getTime();
+        const msg = b.message.length > 80 ? b.message.slice(0, 77) + '…' : b.message;
+        return '<li><span class="cat">[' + esc(b.category || 'note') + ']</span><span class="fact">' + esc(msg) + '</span><span class="date">' + fmtDur(age) + ' ago</span></li>';
+      });
+      list.innerHTML = lockRows.concat(bcastRows).join('');
+    }
     loadData();
     loadContext();
     loadGraph();
     loadHistory();
+    loadSwarm();
     setInterval(loadContext, 5000);
+    setInterval(loadSwarm, 5000);
   </script>
 </body>
 </html>`);
@@ -525,6 +607,7 @@ export class DashboardServer {
       this.server.listen(this.port, '127.0.0.1', () => {
         const addr = this.server?.address();
         const boundPort = typeof addr === 'object' && addr ? addr.port : this.port;
+        this.boundPort = boundPort;
         console.log(`[HyperSABMemory :: Dashboard] Server running at http://127.0.0.1:${boundPort}`);
         resolve(boundPort);
       });
