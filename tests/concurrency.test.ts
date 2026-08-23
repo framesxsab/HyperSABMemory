@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
+import { SwarmMeshEngine } from '../src/memory/swarmMesh.js';
 import { spawn, execSync, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -93,6 +94,36 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
     const raw = readRawStore(dir);
     expect(raw).toContain(alpha);
     expect(raw).toContain(beta);
+  });
+
+  it('(a-swarm) two swarm engines on one dir: exactly one file-claim holder, no lost updates', () => {
+    const dir = tmpDir();
+    const engineA = new SwarmMeshEngine(dir);
+    const engineB = new SwarmMeshEngine(dir);
+
+    // Lost-update probe: A mutates after B cached its construction-time state.
+    engineA.broadcast('agent-a', 'alpha finding');
+    const claimB = engineB.claimFile('agent-b', 'src/foo.ts');
+    expect(claimB.ok).toBe(true);
+
+    const raw = fs.readFileSync(path.join(dir, '.hypersabmemory', 'swarm_state.json'), 'utf-8');
+    const persisted = JSON.parse(raw) as { broadcasts: Array<{ message: string }>; fileLocks: unknown[] };
+    expect(persisted.broadcasts.some((b) => b.message === 'alpha finding')).toBe(true); // B's claim must not clobber A's broadcast
+    expect(persisted.fileLocks).toHaveLength(1);
+
+    // Double-acquire of the same path: second claimant is denied.
+    const claimA = engineA.claimFile('agent-a', 'src/foo.ts');
+    expect(claimA.ok).toBe(false);
+    expect(claimA.heldBy).toBe('agent-b');
+    expect(claimA.reason).toBe('locked');
+
+    // Case-insensitive variant collides on win32 (canonical lock keys).
+    if (process.platform === 'win32') {
+      const upper = engineA.claimFile('agent-a', 'src/Foo.ts');
+      expect(upper.ok).toBe(false);
+      expect(upper.reason).toBe('locked');
+      expect(upper.heldBy).toBe('agent-b');
+    }
   });
 
   it('(b) two real child processes writing to one dir keep all 10 facts', async () => {

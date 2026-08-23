@@ -112,6 +112,43 @@ describe('HyperSABMemory — Swarm Shared Memory Mesh', () => {
     }
   });
 
+  it('sync() is read-only: no bytes written and no session persisted', () => {
+    const dir = makeDir();
+    try {
+      const writer = makeEngine(dir, 1_000).engine;
+      writer.broadcast('agent-a', 'seed broadcast');
+
+      const statePath = path.join(dir, '.hypersabmemory', 'swarm_state.json');
+      const before = fs.readFileSync(statePath, 'utf-8');
+
+      const reader = new SwarmMeshEngine(dir, { now: () => new Date(2_000) });
+      reader.sync();
+
+      const after = fs.readFileSync(statePath, 'utf-8');
+      expect(after).toBe(before);
+      const parsed = JSON.parse(after) as { sessions: string[] };
+      expect(parsed.sessions).toEqual(['agent-a']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prunes dead sessions from persisted state during a mutation', () => {
+    const dir = makeDir();
+    try {
+      const { engine, advance } = makeEngine(dir, 1_000);
+      engine.broadcast('agent-a', 'short-lived finding');
+      advance(120_000);
+      engine.broadcast('agent-b', 'replacement finding');
+
+      const statePath = path.join(dir, '.hypersabmemory', 'swarm_state.json');
+      const parsed = JSON.parse(fs.readFileSync(statePath, 'utf-8')) as { sessions: string[] };
+      expect(parsed.sessions).toEqual(['agent-b']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('persists state across engine instances on the same workspace', () => {
     const dir = makeDir();
     try {
