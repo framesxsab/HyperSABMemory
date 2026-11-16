@@ -171,6 +171,13 @@ try {
     const sample = await restarted.callTool({ name: 'hypersabmemory_task_grounded_query', arguments: { taskId: sampleTask.structuredContent.taskId, query: 'What decision was recorded about invoice queues?' } });
     assert.equal(sample.structuredContent.canAssert, false);
     assert.deepEqual(sample.structuredContent.requirements.find(item => item.role === 'decision').verifiedFacts, []);
+    const evidenceResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What did the project record about task creation before routing?' } });
+    const evidencePacket = JSON.parse(evidenceResult.content[0].text);
+    assert.equal(evidencePacket.question, 'What did the project record about task creation before routing?');
+    assert.ok(evidencePacket.records.some(item => item.statement.includes('Task creation validates input before routing.')));
+    assert.ok(evidencePacket.evidence.some(item => item.source.path === 'Architecture.md' && /^[a-f0-9]{64}$/.test(item.source.sha256) && item.source.freshness === 'current'));
+    assert.equal(evidencePacket.answerVerified, false, 'ordinary language retrieval is evidence, not asserted entailment');
+    assert.ok(evidencePacket.limitations.length > 0);
     const restored = await restarted.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
     assert.equal(restored.structuredContent.lease.status, 'active');
     assert.equal(restored.structuredContent.lease.recordedOwner, 'package-agent-b');

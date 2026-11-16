@@ -62,6 +62,7 @@ npx hypersabmemory status
 | `hypersabmemory_get_context` | Harness header + Context Block (< 1500 estimated tokens) |
 | `hypersabmemory_remember` | Save a decision / architecture / bug fact |
 | `hypersabmemory_query` | Search active memories |
+| `hypersabmemory_query_evidence` | Retrieve bounded recorded memories and hash-checked source excerpts; unsupported relationships remain unresolved |
 | `hypersabmemory_forget` | Invalidate a fact (dropped from Context Block) |
 | `hypersabmemory_context_block` | Packed dated facts for the prompt |
 | `hypersabmemory_inject_adapters` | Re-sync native rule files |
@@ -82,6 +83,10 @@ Symbol verification accepts complete questions such as `Where is createTask defi
 Task-grounded responses include `requirements` for requested implementation, test, interface, configuration, and decision roles. Missing roles trigger a subject-focused search within matching captured sources. Candidate lists contain current, hash-checked sources; if no candidate is found, up to five `unrankedReferences` are offered as unverified navigation leads. A role remains `unresolved` until an agent verifies that a source actually supports the question.
 
 Lexical search splits code identifiers and normalizes English word forms with Porter stemming, so terms such as `validate` and `validation` can match. Exact identifier/path priorities and literal assertion verification continue to use the original text. Stemming is a retrieval heuristic and can also increase unrelated candidate matches.
+
+### Evidence query
+
+Use `hypersabmemory_query_evidence` with a natural project question and optional result limit from 1 to 5. The response separates recorded memory from current source excerpts and includes source paths, hashes and line positions when available. Only the existing deterministic verifier can mark an assertion supported; retrieved text by itself does not establish a relationship or implementation compliance.
 
 ## Everyday commands
 

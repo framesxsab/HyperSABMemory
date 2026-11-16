@@ -96,6 +96,34 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
     }
   });
 
+  it('returns bounded source-backed evidence and abstains on unsupported claims through MCP', async () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'prefs.json'), '{\n  "port": 4317\n}\n');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'The project stores port configuration locally.', [], { artifacts: ['prefs.json'] });
+    const server = new HyperSABMemoryMcpServer(dir);
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+    const client = new Client({ name: 'evidence-query-test', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const tools = await client.listTools();
+      expect(tools.tools.some(tool => tool.name === 'hypersabmemory_query_evidence')).toBe(true);
+      const result = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What value is in the local port configuration?' } });
+      const packet = JSON.parse(result.content[0].text);
+      expect(packet.question).toBe('What value is in the local port configuration?');
+      expect(packet.records[0]).toMatchObject({ attribution: 'recorded_memory', artifacts: ['prefs.json'] });
+      expect(packet.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ source: expect.objectContaining({ path: 'prefs.json', freshness: 'current', sha256: expect.any(String) }) })]));
+      expect(packet.answerVerified).toBe(false);
+      expect(packet.limitations.join(' ')).toContain('does not prove');
+      const missing = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'Which carrier handles these parcels?' } });
+      const abstention = JSON.parse(missing.content[0].text);
+      expect(abstention.answerVerified).toBe(false);
+      expect(abstention.assertions).toEqual([]);
+    } finally { await client.close(); }
+  });
+
   it('constructs the MCP server over a temp workspace without throwing', () => {
     const dir = tmpDir();
     expect(() => new HyperSABMemoryMcpServer(dir)).not.toThrow();

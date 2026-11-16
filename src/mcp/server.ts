@@ -18,6 +18,8 @@ import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { TaskLedger } from '../memory/taskLedger.js';
+import { captureTaskSources, inspectTaskSourceContents } from '../harness/taskSources.js';
+import { excerptFor, searchGrounded } from '../memory/groundedSearch.js';
 import { TASK_TOOLS, TASK_LIST_RESOURCE, executeTaskTool, listActiveTasks } from './taskTools.js';
 import { MemoryRecord, StructuredMemory } from '../memory/sqliteStore.js';
 import { ContextHarness } from '../harness/contextHarness.js';
@@ -217,6 +219,19 @@ export class HyperSABMemoryMcpServer {
             }
           },
           {
+            name: 'hypersabmemory_query_evidence',
+            description: 'Retrieve bounded active memory records and hash-checked excerpts from their referenced files for a project question. Recorded memory is not proof; assertions appear only for existing deterministic verification rules. Other relationships and conclusions remain unverified.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string', minLength: 1 },
+                limit: { type: 'integer', minimum: 1, maximum: 5 }
+              },
+              required: ['query'],
+              additionalProperties: false
+            }
+          },
+          {
             name: 'hypersabmemory_forget',
             description: 'Invalidate a memory by id (merge/forget). Forgotten facts drop out of Context Block.',
             inputSchema: {
@@ -348,6 +363,77 @@ export class HyperSABMemoryMcpServer {
           const source = (args?.source as QuerySource) || 'all';
           const results = selectQueryRecords(this.hybridSearch, query, limit, source);
           return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        }
+
+        if (name === 'hypersabmemory_query_evidence') {
+          const query = typeof args?.query === 'string' ? args.query.trim() : '';
+          if (!query) throw new Error('query must be a non-empty string');
+          const limit = Number.isInteger(args?.limit) ? Math.min(Math.max(args?.limit as number, 1), 5) : 5;
+          const ranked = this.hybridSearch.searchRecordsWithScores(query, 20);
+          const records = ranked.slice(0, limit).map(({ record, score }) => ({
+            id: record.id,
+            category: record.category,
+            statement: record.content.slice(0, 320),
+            timestamp: record.timestamp,
+            artifacts: (record.artifacts ?? []).slice(0, 5),
+            rankScore: score,
+            attribution: 'recorded_memory'
+          }));
+          const references = new Map<string, { path: string; sha256: string }>();
+          for (const { record } of ranked) {
+            for (const sourcePath of record.artifacts ?? []) {
+              if (references.size >= 64) break;
+              try {
+                const captured = captureTaskSources(this.workspaceDir, [sourcePath])[0];
+                if (captured?.sha256) references.set(captured.path, captured);
+              } catch {}
+            }
+            if (references.size >= 64) break;
+          }
+          const grounded = searchGrounded(this.hybridSearch, this.workspaceDir, query, [...references.values()]);
+          const evidence = grounded.evidence.slice(0, limit).map(item => ({
+            excerpt: item.excerpt ?? '',
+            source: { path: item.source.path, sha256: item.source.currentSha256, freshness: item.source.status, ...(item.line ? { line: item.line } : {}) },
+            supportType: 'retrieved_source_excerpt',
+            verification: 'source_hash_verified',
+            lexicalSupport: item.lexicalSupport
+          }));
+          const included = new Set(evidence.map(item => item.source.path));
+          for (const reference of references.values()) {
+            if (evidence.length >= limit || included.has(reference.path)) continue;
+            const inspected = inspectTaskSourceContents(this.workspaceDir, [reference])[0];
+            if (inspected.status !== 'current' || !inspected.content) continue;
+            const excerpt = excerptFor(query, inspected.content.toString('utf8'), reference.path);
+            if (!excerpt) continue;
+            const checked = inspectTaskSourceContents(this.workspaceDir, [reference])[0];
+            if (checked.status !== 'current') continue;
+            const line = checked.content?.toString('utf8').indexOf(excerpt) ?? -1;
+            evidence.push({
+              excerpt,
+              source: { path: reference.path, sha256: checked.currentSha256, freshness: checked.status, ...(line >= 0 ? { line: checked.content!.toString('utf8').slice(0, line).split('\n').length } : {}) },
+              supportType: 'candidate_excerpt',
+              verification: 'insufficient_evidence',
+              lexicalSupport: 0
+            });
+            included.add(reference.path);
+          }
+          const limitations = [
+            'Recorded memory statements are agent-authored and are not independently verified.',
+            'Lexical relevance does not prove that evidence entails the question or that related files have an established relationship.',
+            'Freshness is checked against bytes captured for this request; this does not establish when a memory statement was originally recorded.'
+          ];
+          if (!grounded.assertions.length) limitations.push('No supported assertion was established by the deterministic verifier.');
+          return { content: [{ type: 'text', text: JSON.stringify({
+            question: query,
+            status: evidence.length || records.length ? 'evidence_found' : grounded.status === 'STALE_EVIDENCE' ? 'stale_only' : 'insufficient_evidence',
+            records,
+            evidence,
+            assertions: grounded.assertions,
+            relationships: [],
+            staleSources: grounded.staleSources,
+            limitations,
+            answerVerified: grounded.canAssert
+          }, null, 2) }] };
         }
 
         if (name === 'hypersabmemory_forget') {
