@@ -420,6 +420,7 @@ export class HyperSABMemoryMcpServer {
           const limitations = [
             'Recorded memory statements are agent-authored and are not independently verified.',
             'Lexical relevance does not prove that evidence entails the question or that related files have an established relationship.',
+            'Recorded decisions do not establish implementation compliance or independently verified causality.',
             'Freshness is checked against bytes captured for this request; this does not establish when a memory statement was originally recorded.'
           ];
           if (!grounded.assertions.length) limitations.push('No supported assertion was established by the deterministic verifier.');

@@ -108,6 +108,8 @@ try {
       await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'architecture', content, artifacts: [artifact] } });
     }
     writeFileSync(path.join(workspace, 'unindexed.json'), '{"port": 4321}');
+    writeFileSync(path.join(workspace, 'evidence-config.json'), '{"port": 4321}');
+    await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'decision', content: 'The local service port is configured explicitly.', artifacts: ['evidence-config.json'] } });
     writeFileSync(path.join(workspace, 'src', 'paymentFlow.ts'), 'export function checkPayment() { return "payment validation policy"; }\n');
     writeFileSync(path.join(workspace, 'tests', 'paymentFlow.test.ts'), 'test("payment validation policy", () => checkPayment());\n');
     const created = await agentA.callTool({ name: 'hypersabmemory_task_create', arguments: {
@@ -178,6 +180,16 @@ try {
     assert.ok(evidencePacket.evidence.some(item => item.source.path === 'Architecture.md' && /^[a-f0-9]{64}$/.test(item.source.sha256) && item.source.freshness === 'current'));
     assert.equal(evidencePacket.answerVerified, false, 'ordinary language retrieval is evidence, not asserted entailment');
     assert.ok(evidencePacket.limitations.length > 0);
+    const configAnswerResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What port is configured for the local service?' } });
+    const configAnswer = JSON.parse(configAnswerResult.content[0].text);
+    assert.equal(configAnswer.answerVerified, true);
+    assert.ok(configAnswer.assertions.some(item => item.claim === 'Configuration port in evidence-config.json is 4321.'));
+    assert.ok(configAnswer.evidence.some(item => item.source.path === 'evidence-config.json' && item.source.line === 1 && item.source.freshness === 'current'));
+    const decisionResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What decision was recorded about task creation before routing?' } });
+    const decisionPacket = JSON.parse(decisionResult.content[0].text);
+    assert.equal(decisionPacket.answerVerified, false);
+    assert.ok(decisionPacket.records.some(item => item.statement === 'Task creation validates input before routing.'));
+    assert.ok(decisionPacket.evidence.some(item => item.source.path === 'Architecture.md' && item.excerpt.includes('Decision: Task creation validates input before routing.')));
     const restored = await restarted.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
     assert.equal(restored.structuredContent.lease.status, 'active');
     assert.equal(restored.structuredContent.lease.recordedOwner, 'package-agent-b');

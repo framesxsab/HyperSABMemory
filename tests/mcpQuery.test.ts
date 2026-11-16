@@ -110,17 +110,48 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
       const tools = await client.listTools();
       expect(tools.tools.some(tool => tool.name === 'hypersabmemory_query_evidence')).toBe(true);
-      const result = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What value is in the local port configuration?' } });
+      const result = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What port is configured for the local service?' } });
       const packet = JSON.parse(result.content[0].text);
-      expect(packet.question).toBe('What value is in the local port configuration?');
+      console.log('PACKET', JSON.stringify(packet));
+      expect(packet.question).toBe('What port is configured for the local service?');
       expect(packet.records[0]).toMatchObject({ attribution: 'recorded_memory', artifacts: ['prefs.json'] });
       expect(packet.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ source: expect.objectContaining({ path: 'prefs.json', freshness: 'current', sha256: expect.any(String) }) })]));
-      expect(packet.answerVerified).toBe(false);
+      expect(packet.answerVerified).toBe(true);
+      expect(packet.assertions).toEqual([expect.objectContaining({ claim: expect.stringContaining('Configuration port in prefs.json is 4317.'), sourcePath: 'prefs.json' })]);
       expect(packet.limitations.join(' ')).toContain('does not prove');
+      fs.writeFileSync(path.join(dir, 'secondary.json'), '{\n  "port": 4318\n}\n');
+      memory.remember('decision', 'The project port is 4318.', [], { artifacts: ['secondary.json'] });
+      const conflictResult = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What port is configured for the local service?' } });
+      const conflict = JSON.parse(conflictResult.content[0].text);
+      expect(conflict.answerVerified).toBe(false);
+      expect(conflict.assertions).toEqual([]);
+      expect(conflict.status).toBe('evidence_found');
+      expect(conflict.limitations.join(' ')).toContain('deterministic verifier');
       const missing = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'Which carrier handles these parcels?' } });
       const abstention = JSON.parse(missing.content[0].text);
       expect(abstention.answerVerified).toBe(false);
       expect(abstention.assertions).toEqual([]);
+    } finally { await client.close(); }
+  });
+
+  it('returns recorded decision and rationale excerpts with unverified implementation status', async () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'arbitrary-notes.md'), 'Decision: Validate names locally.\nRationale: Avoid a hosted dependency.\n');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'Validate names locally.', [], { artifacts: ['arbitrary-notes.md'] });
+    const server = new HyperSABMemoryMcpServer(dir);
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+    const client = new Client({ name: 'evidence-decision-test', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const response = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What was decided about name validation and why?' } });
+      const packet = JSON.parse(response.content[0].text);
+      expect(packet.records[0]).toMatchObject({ attribution: 'recorded_memory', statement: 'Validate names locally.' });
+      expect(packet.evidence.some((item: any) => item.source.path === 'arbitrary-notes.md' && item.source.freshness === 'current' && item.excerpt.includes('Decision: Validate names locally.'))).toBe(true);
+      expect(packet.answerVerified).toBe(false);
+      expect(packet.limitations.join(' ')).toContain('implementation compliance');
     } finally { await client.close(); }
   });
 

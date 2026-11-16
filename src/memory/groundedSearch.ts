@@ -8,6 +8,7 @@ export interface GroundedTiming { candidateMs: number; rankingMs: number; indexi
 
 export const GROUNDED_SUPPORT_THRESHOLD = 0.3;
 const CONFIG_QUERY = /^\s*what\s+is\s+the\s+value\s+of\s+`([^`]+)`\s+in\s+`([^`]+\.json)`\s*\??\s*$/i;
+const CONFIG_KEY_QUERY = /^\s*what\s+(?:is\s+)?(?:the\s+)?([A-Za-z][\w-]*)\s+(?:is\s+)?(?:configured|set|defined)\b/i;
 const QUOTATION_QUERY = /^\s*does\s+`([^`]+)`\s+contain\s+`([^`\r\n]+)`\s*\??\s*$/i;
 const sourceTokenCache = new Map<string, Set<string>>();
 let sourceTokenCacheBytes = 0;
@@ -67,7 +68,7 @@ function explicitSymbol(query: string): string | undefined {
 }
 
 export function isExplicitGroundedQuery(query: string): boolean {
-  return Boolean(explicitSymbol(query) || CONFIG_QUERY.test(query) || QUOTATION_QUERY.test(query));
+  return Boolean(explicitSymbol(query) || CONFIG_QUERY.test(query) || CONFIG_KEY_QUERY.test(query) || QUOTATION_QUERY.test(query));
 }
 
 function stripStringsAndComments(source: string): string {
@@ -133,6 +134,8 @@ export function searchGrounded(
   const cacheWorkspace = path.resolve(workspaceDir);
   const symbol = explicitSymbol(query);
   const config = query.match(CONFIG_QUERY);
+  const configKey = config?.[1] ?? query.match(CONFIG_KEY_QUERY)?.[1];
+  const configPath = config?.[2];
   const quotation = query.match(QUOTATION_QUERY);
   const candidates = hybrid.searchRecordsWithScores(query, 50, timing);
   const references = new Map<string, TaskSource>();
@@ -143,13 +146,13 @@ export function searchGrounded(
     if (previousSource && previousSource.sha256 !== source.sha256) referenceConflicts.add(previousSource.path);
     if (!previousSource) references.set(key, source);
   }
-  const explicitPath = config?.[2] ?? quotation?.[1];
+  const explicitPath = configPath ?? quotation?.[1];
   const directSourceKeys = new Set<string>();
-  if (symbol || explicitPath) {
+  if (symbol || explicitPath || configKey) {
     const indexedPaths = new Set(candidates.flatMap(candidate => (candidate.record.artifacts ?? []).map(sourceKey)));
     for (const source of references.values()) {
       const filename = source.path;
-      if (indexedPaths.has(sourceKey(filename)) || (explicitPath ? sourceKey(filename) !== sourceKey(explicitPath) : !/\.[cm]?[jt]sx?$/i.test(filename))) continue;
+      if (indexedPaths.has(sourceKey(filename)) || (explicitPath ? sourceKey(filename) !== sourceKey(explicitPath) : symbol ? !/\.[cm]?[jt]sx?$/i.test(filename) : configKey ? !/\.json$/i.test(filename) : true)) continue;
       directSourceKeys.add(sourceKey(filename));
       candidates.push({
         record: { id: `source_ref:${filename}`, category: symbol ? 'symbol' : 'general', content: `Captured source reference: ${filename}`.slice(0, 320), artifacts: [filename], status: 'active', timestamp: new Date().toISOString() },
@@ -164,6 +167,7 @@ export function searchGrounded(
   const staleSources: TaskSourceInspection[] = [];
   const assertions: GroundedResult['assertions'] = [];
   const assertedDeclarations = new Set<string>();
+  const configValues = new Map<string, Set<string>>();
   const declarationPattern = symbol ? new RegExp(`^\\s*(?:(?:export|declare|abstract|default)\\s+)*(?:class|function|interface|type|const|let|var|enum)\\s+${escapeIdentifier(symbol)}(?![\\w$])`) : undefined;
   const naturalQuery = !symbol && !config && !quotation;
   for (const [candidateIndex, { record, queryTermEvidence }] of candidates.entries()) {
@@ -194,19 +198,22 @@ export function searchGrounded(
         }
         continue;
       }
-      if (config && sourceKey(filename) === sourceKey(config[2])) {
+      if (configKey && (!configPath || sourceKey(filename) === sourceKey(configPath)) && /\.json$/i.test(filename)) {
         try {
           const parsed: unknown = JSON.parse(text);
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, config[1])) {
-            const value = (parsed as Record<string, unknown>)[config[1]];
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, configKey)) {
+            const value = (parsed as Record<string, unknown>)[configKey];
             if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
-              const key = JSON.stringify(config[1]).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const key = JSON.stringify(configKey).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const valueText = JSON.stringify(value);
               const occurrences = [...text.matchAll(new RegExp(`${key}\\s*:`, 'g'))];
               const match = text.match(new RegExp(`${key}\\s*:\\s*${valueText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s*[,}])`));
               if (occurrences.length === 1 && match && match[0].length <= 320) {
                 potentialEvidence.push({ record, source, lexicalSupport: 1, content: text });
-                const claim = `Configuration ${config[1]} in ${filename} is ${valueText}.`;
+                const claim = `Configuration ${configKey} in ${filename} is ${valueText}.`;
+                const values = configValues.get(configKey) ?? new Set<string>();
+                values.add(valueText);
+                configValues.set(configKey, values);
                 const key = `${filename}\0${claim}`;
                 if (!assertedDeclarations.has(key)) {
                   assertedDeclarations.add(key);
@@ -289,6 +296,7 @@ export function searchGrounded(
     timing.decisionMs += performance.now() - started - (timing.candidateMs - previous.candidateMs) - (timing.rankingMs - previous.rankingMs) - (timing.pathMs - previous.pathMs) - (timing.readMs - previous.readMs) - (timing.hashMs - previous.hashMs) - (timing.excerptMs - previous.excerptMs);
   }
   if (declaredConflicts.length || referenceConflicts.size) return { status: 'CONFLICTING_EVIDENCE', conflictOrigin: declaredConflicts.length ? 'caller_declared' : 'source_hash_mismatch', conflictPaths: [...new Set([...declaredConflicts, ...referenceConflicts])], candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
+  if ([...configValues.values()].some(values => values.size > 1)) return { status: 'CONFLICTING_EVIDENCE', conflictOrigin: 'source_hash_mismatch', candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
   const supportedAssertions = assertions.filter(assertion => topEvidence.some(item => item.source.path === assertion.sourcePath));
   if (supportedAssertions.length) return { status: 'SUPPORTED', candidates: queryCandidates, evidence: topEvidence, assertions: supportedAssertions, staleSources, canAssert: true };
   if (topEvidence.length) return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
