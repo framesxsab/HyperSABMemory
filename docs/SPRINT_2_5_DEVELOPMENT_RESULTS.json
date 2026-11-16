@@ -1,0 +1,444 @@
+{
+  "maximumPrecisionAt5": 0.9818181818181819,
+  "retrieval": {
+    "answerableQueries": 11,
+    "noAnswerQueries": 10,
+    "precisionAt5": 0.5636363636363636,
+    "recallAt5": 0.5621212121212121,
+    "microPrecisionAt5": 0.5636363636363636,
+    "microRecallAt5": 0.5535714285714286,
+    "meanReciprocalRank": 0.8030303030303029,
+    "relevantReturned": 31,
+    "relevantTotal": 56,
+    "maximumPrecisionAt5": 0.9818181818181819,
+    "precisionGateValid": true,
+    "noAnswerFalsePositives": 8,
+    "answerableCoverage": 1,
+    "incorrectFirstResultRate": 0.5714285714285714,
+    "forgottenLeaks": 0
+  },
+  "grounded": {
+    "precisionAt5": 0.49090909090909085,
+    "recallAt5": 0.4803030303030303,
+    "microPrecisionAt5": 0.4909090909090909,
+    "microRecallAt5": 0.48214285714285715,
+    "meanReciprocalRank": 0.7575757575757575,
+    "relevantReturned": 27,
+    "relevantTotal": 56,
+    "noAnswerCandidateRate": 0.1,
+    "noAnswerUnsupportedAssertionRate": 0,
+    "noAnswerFalsePositives": 0,
+    "noAnswerCandidateEvidence": 1,
+    "answerableCandidateCoverage": 1,
+    "supportedAnswerCoverage": 0,
+    "verifiedSupportedAssertions": 0,
+    "correctSupportedAnswers": 0,
+    "correctSupportedAnswerRate": null,
+    "unsupportedAssertions": 0,
+    "unsupportedCandidateRate": 0.09523809523809523
+  },
+  "latencyMs": {
+    "samples": 105,
+    "p50": 48.085799999999836,
+    "p95": 149.8767000000007
+  },
+  "passed": false,
+  "diagnostics": [
+    {
+      "query": "How does task creation capture source hashes and restore a bounded capsule through MCP?",
+      "maximumRelevantRank": 9,
+      "gold": [
+        {
+          "path": "src/memory/taskLedger.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/taskSources.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/taskContext.ts",
+          "rank": 5,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/mcp/taskTools.ts",
+          "rank": 4,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/taskProcesses.test.ts",
+          "rank": 9,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    },
+    {
+      "query": "How does setup seed project facts, install agent rules, and connect the MCP server?",
+      "maximumRelevantRank": 27,
+      "gold": [
+        {
+          "path": "src/cli/oneShotSetup.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/seeding.ts",
+          "rank": 15,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/harness/universalAdapters.ts",
+          "rank": 27,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/harness/mcpAccess.ts",
+          "rank": 12,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/seeding.test.ts",
+          "rank": 6,
+          "missedBecause": "not_in_first_five_valid_evidence"
+        },
+        {
+          "path": "tests/harness.test.ts",
+          "rank": 7,
+          "missedBecause": "not_in_first_five_valid_evidence"
+        }
+      ]
+    },
+    {
+      "query": "How are task source paths contained and same-size source rewrites detected on restoration?",
+      "maximumRelevantRank": 7,
+      "gold": [
+        {
+          "path": "src/harness/taskSources.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/taskContext.ts",
+          "rank": 4,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/memory/taskLedger.ts",
+          "rank": 7,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/taskLedger.test.ts",
+          "rank": 2,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    },
+    {
+      "query": "How does an MCP context request combine active file state with graph and compact memory context?",
+      "maximumRelevantRank": 18,
+      "gold": [
+        {
+          "path": "src/mcp/server.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/contextHarness.ts",
+          "rank": 3,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/structuralGraph.ts",
+          "rank": 4,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/contextBlock.ts",
+          "rank": 13,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/mcpResources.test.ts",
+          "rank": 18,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    },
+    {
+      "query": "How does a remembered fact persist through JSON storage, temporal access, and MCP hybrid search?",
+      "maximumRelevantRank": 21,
+      "gold": [
+        {
+          "path": "src/memory/sqliteStore.ts",
+          "rank": 3,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/temporalMemory.ts",
+          "rank": 21,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/memory/hybridSearch.ts",
+          "rank": 7,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/mcp/server.ts",
+          "rank": 5,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/hybridSearch.test.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/mcpQuery.test.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        }
+      ]
+    },
+    {
+      "query": "How do forgotten and superseded facts stay out of active memory retrieval?",
+      "maximumRelevantRank": 39,
+      "gold": [
+        {
+          "path": "src/memory/sqliteStore.ts",
+          "rank": 3,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/temporalMemory.ts",
+          "rank": 4,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/hybridSearch.ts",
+          "rank": 32,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/sqliteStore.test.ts",
+          "rank": 17,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/hybridSearch.test.ts",
+          "rank": 39,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    },
+    {
+      "query": "How does rollback preserve a safety checkpoint and expose ghost paths in restored context?",
+      "maximumRelevantRank": 6,
+      "gold": [
+        {
+          "path": "src/hooks/autoCommit.ts",
+          "rank": 4,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/ghostPaths.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/harness/contextHarness.ts",
+          "rank": 3,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/autoCommit.test.ts",
+          "rank": 6,
+          "missedBecause": "not_in_first_five_valid_evidence"
+        },
+        {
+          "path": "tests/ghostPaths.test.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        }
+      ]
+    },
+    {
+      "query": "How do MCP task claims use the ledger lock and prevent simultaneous process ownership?",
+      "maximumRelevantRank": 19,
+      "gold": [
+        {
+          "path": "src/mcp/server.ts",
+          "rank": 6,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/mcp/taskTools.ts",
+          "rank": 5,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/memory/taskLedger.ts",
+          "rank": 3,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/fileLock.ts",
+          "rank": 19,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/taskProcesses.test.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        }
+      ]
+    },
+    {
+      "query": "How are task revisions fenced and task writes recovered after a process failure?",
+      "maximumRelevantRank": 25,
+      "gold": [
+        {
+          "path": "src/memory/taskLedger.ts",
+          "rank": 5,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/fileLock.ts",
+          "rank": 25,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/mcp/taskTools.ts",
+          "rank": 4,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/taskLedger.test.ts",
+          "rank": 2,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "tests/taskProcesses.test.ts",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        }
+      ]
+    },
+    {
+      "query": "How does the project file watcher trigger safe automatic checkpoints and suppress noisy paths?",
+      "maximumRelevantRank": 36,
+      "gold": [
+        {
+          "path": "src/hooks/fileWatcher.ts",
+          "rank": 2,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/hooks/autoCommit.ts",
+          "rank": 27,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/memory/fileLock.ts",
+          "rank": 36,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/fileWatcher.test.ts",
+          "rank": 3,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/autoCommitGuards.test.ts",
+          "rank": 34,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    },
+    {
+      "query": "What is the maintainer favorite color?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "How many unread email messages does the maintainer have?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "Which private calendar meeting is next?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "What is the balance in the maintainer bank account?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "Which password is saved in the maintainer browser password manager?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "What was the last web search made outside this repository?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "How many photographs are stored on the maintainer phone?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "What temperature is the maintainer laptop CPU running at?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "Which appointment is on the maintainer personal calendar?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "What did the maintainer discuss on their last phone call?",
+      "maximumRelevantRank": null,
+      "gold": []
+    },
+    {
+      "query": "What documented boundaries connect task coordination, persisted memory, and compact context delivery?",
+      "maximumRelevantRank": 35,
+      "gold": [
+        {
+          "path": "Architecture.md",
+          "rank": 1,
+          "missedBecause": "emitted_by_grounder"
+        },
+        {
+          "path": "src/memory/sqliteStore.ts",
+          "rank": 35,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/harness/contextHarness.ts",
+          "rank": 7,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "src/mcp/server.ts",
+          "rank": 6,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        },
+        {
+          "path": "tests/mcpResources.test.ts",
+          "rank": 8,
+          "missedBecause": "grounding_threshold_rejected_candidate"
+        }
+      ]
+    }
+  ]
+}

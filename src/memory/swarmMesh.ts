@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { withFileLock } from './fileLock.js';
+import { withFileLock, writeAtomicText } from './fileLock.js';
 
 export interface SwarmBroadcast {
   id: string;
@@ -102,19 +102,7 @@ export class SwarmMeshEngine {
   private saveState(): void {
     try {
       const payload = JSON.stringify(this.state, null, 2);
-      const tmpPath = `${this.swarmStatePath}.tmp`;
-
-      fs.writeFileSync(tmpPath, payload, 'utf-8');
-      try {
-        fs.renameSync(tmpPath, this.swarmStatePath);
-      } catch (renameErr) {
-        const code = (renameErr as NodeJS.ErrnoException).code;
-        if (code === 'EPERM' || code === 'EBUSY') {
-          fs.renameSync(tmpPath, this.swarmStatePath); // single retry (Win AV locks)
-        } else {
-          throw renameErr; // payload stays in .tmp
-        }
-      }
+      writeAtomicText(this.swarmStatePath, payload);
     } catch (err) {
       console.error('[HyperSABMemory :: SwarmMesh] Failed to write swarm state:', err);
     }

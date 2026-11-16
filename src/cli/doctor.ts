@@ -5,6 +5,7 @@ import * as net from 'net';
 import * as path from 'path';
 import type { McpLaunch } from '../harness/mcpAccess.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
+import { estimateNaiveCorpusTokens } from '../eval/tokenEfficiency.js';
 import { buildContextBlock } from '../memory/contextBlock.js';
 import { readStoreRecords } from './cliUtils.js';
 
@@ -135,20 +136,18 @@ export function verifyMcpLaunch(cwd: string, timeoutMs: number = 5000): Promise<
     let buffer = '';
     // shell:false keeps the exact configured command/args; the win32 `cmd /c`
     // wrapper written by connect() spawns correctly as spawn('cmd', ['/c', ...]).
-    const child = spawn(launch.command, launch.args, { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(launch.command, launch.args, { cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
 
     const finish = (check: DoctorCheck): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      child.removeAllListeners();
-      child.stdout?.removeAllListeners();
+      child.once('close', () => resolve(check));
       try {
         child.kill();
       } catch {
-        // already gone
+        resolve(check);
       }
-      resolve(check);
     };
 
     const timer = setTimeout(() => {
@@ -235,11 +234,7 @@ async function collectCounters(cwd: string): Promise<DoctorCounters> {
     const deliveredTokens = TokenCompressor.estimateTokens(
       buildContextBlock(active, `${active.length} item(s) recorded.`)
     );
-    const naiveCorpusTokens = active.reduce(
-      (sum, record) =>
-        sum + TokenCompressor.estimateTokens([record.content, (record.tags ?? []).join(' ')].filter(Boolean).join(' ')),
-      0
-    );
+    const naiveCorpusTokens = estimateNaiveCorpusTokens(active);
     if (naiveCorpusTokens > 0) {
       counters.estTokensSavedPct =
         Math.max(0, Math.round((1 - deliveredTokens / naiveCorpusTokens) * 1000) / 10);
@@ -266,6 +261,11 @@ export async function runDoctor(cwd: string = process.cwd(), options: DoctorOpti
   const checks: DoctorCheck[] = [
     await checkGitOnPath(),
     await checkInsideWorkTree(cwd),
+    {
+      name: 'checkpoint-scope',
+      ok: true,
+      detail: 'automatic checkpoints stage all trackable changes at the repository root; subdirectory workspaces are blocked'
+    },
     checkStoreParseable(cwd),
     checkMcpConfigs(cwd),
     await verifyMcpLaunch(cwd, options.verifyTimeoutMs ?? 5000),

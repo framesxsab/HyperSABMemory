@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
 import { SwarmMeshEngine } from '../src/memory/swarmMesh.js';
-import { spawn, execSync, type ChildProcess } from 'child_process';
+import { spawn, execFileSync, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -12,8 +13,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const FILE_LOCK_SPECIFIER = '../src/memory/fileLock.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const distCliEntry = path.join(repoRoot, 'dist', 'cli', 'index.js');
 const distStoreEntry = path.join(repoRoot, 'dist', 'memory', 'sqliteStore.js');
+const distTemporalMemoryEntry = path.join(repoRoot, 'dist', 'memory', 'temporalMemory.js');
 
 function uniqueSuffix(): string {
   return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
@@ -65,16 +66,8 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    for (const dir of dirs.splice(0)) {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    removeTestDirs(dirs);
   });
-
-  beforeAll(() => {
-    if (!fs.existsSync(distCliEntry)) {
-      execSync('npm run build', { cwd: repoRoot, stdio: 'ignore' });
-    }
-  }, 120_000);
 
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -153,6 +146,61 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
       expect(raw).toContain(`procA-content-${rand}-${i}`);
       expect(raw).toContain(`procB-content-${rand}-${i}`);
     }
+  }, 30_000);
+
+  it('(b2) concurrent remember operations persist complete supersede transactions', async () => {
+    const dir = tmpDir();
+    const prefix = `Shared concurrency memory fact ${uniqueSuffix()} with a common long prefix to serialize the writes safely: `;
+    const contents = [`${prefix}first version`, `${prefix}second version`];
+    const script = [
+      "const { TemporalMemoryEngine } = await import(process.argv[1]);",
+      "new TemporalMemoryEngine(process.argv[2]).remember('architecture', process.argv[3]);"
+    ].join('\n');
+
+    const children = contents.map((content) => spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        script,
+        pathToFileURL(distTemporalMemoryEntry).href,
+        dir,
+        content
+      ],
+      { stdio: 'ignore' }
+    ));
+
+    expect(await Promise.all(children.map(waitForExit))).toEqual([0, 0]);
+    const records = JSON.parse(readRawStore(path.join(dir, '.hypersabmemory'))) as Array<{
+      id: string;
+      content: string;
+      status?: string;
+      tags?: string[];
+    }>;
+    const matching = records.filter(({ content }) => contents.includes(content));
+    expect(matching).toHaveLength(2);
+    expect(matching.filter(({ status }) => status === 'active')).toHaveLength(1);
+    expect(matching.filter(({ status }) => status === 'superseded')).toHaveLength(1);
+    const active = matching.find(({ status }) => status === 'active');
+    const superseded = matching.find(({ status }) => status === 'superseded');
+    expect(active).toBeDefined();
+    expect(superseded?.tags).toContain(`superseded-by:${active?.id}`);
+  }, 30_000);
+
+  it('serializes checkpoints from separate processes on the same repository', async () => {
+    const dir = tmpDir();
+    const git = (args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+    git(['init']);
+    git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '--allow-empty', '-m', 'initial']);
+    fs.writeFileSync(path.join(dir, 'work.txt'), 'shared change');
+    const entry = pathToFileURL(path.join(repoRoot, 'dist/hooks/autoCommit.js')).href;
+    const script = "const { AutoCommitEngine } = await import(process.argv[1]); const result = await new AutoCommitEngine({ workspaceDir: process.argv[2] }).createCheckpoint(); if (result.status === 'failed') process.exitCode = 1;";
+    const children = Array.from({ length: 2 }, () => spawn(process.execPath,
+      ['--input-type=module', '-e', script, entry, dir], { stdio: 'ignore' }));
+
+    expect(await Promise.all(children.map(waitForExit))).toEqual([0, 0]);
+    expect(git(['rev-list', '--count', 'HEAD']).trim()).toBe('2');
+    expect(git(['status', '--porcelain']).trim()).toBe('');
   }, 30_000);
 
   it('(c) evicts a lock sentinel held by a dead pid within the 2s budget', async () => {

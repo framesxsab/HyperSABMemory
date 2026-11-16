@@ -6,6 +6,7 @@
  */
 
 import { execFileSync } from 'child_process';
+import { sleepSync } from '../memory/fileLock.js';
 
 /** Opt-out flag: HYPERSABMEMORY_GHOST_PATHS=off disables the scan entirely. */
 export const GHOST_PATHS_ENV = 'HYPERSABMEMORY_GHOST_PATHS';
@@ -38,10 +39,6 @@ function isIndexLockError(err: unknown): boolean {
   return err instanceof Error && /index\.lock/.test(err.message);
 }
 
-function waitSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
 /** Read-only git call; retries on index.lock contention, degrades to []. */
 function gitLines(workspaceDir: string, args: string[]): string[] {
   for (let attempt = 1; ; attempt++) {
@@ -54,7 +51,7 @@ function gitLines(workspaceDir: string, args: string[]): string[] {
       return stdout.split('\n').map((l) => l.trim()).filter(Boolean);
     } catch (err) {
       if (attempt < LOCK_RETRY_MAX && isIndexLockError(err)) {
-        waitSync(LOCK_RETRY_WAIT_MS);
+        sleepSync(LOCK_RETRY_WAIT_MS);
         continue;
       }
       return [];

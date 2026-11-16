@@ -9,6 +9,7 @@ import {
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine, HybridSearchResult } from '../src/memory/hybridSearch.js';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -21,9 +22,7 @@ function tmpDir(): string {
 }
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 function seedMemoryFixture(dir: string): { memory: TemporalMemoryEngine; hybrid: HybridSearchEngine } {

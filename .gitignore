@@ -24,6 +24,7 @@ graphify-out/
 
 # Temporary Scratch Files & Logs
 scratch/
+/.scratch-sprint2-package/
 *.log
 npm-debug.log*
 yarn-debug.log*

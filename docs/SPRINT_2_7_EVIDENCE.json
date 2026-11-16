@@ -1,0 +1,704 @@
+{
+  "controlledAfter": {
+    "methodology": {
+      "files": 72,
+      "answerable": 11,
+      "noAnswer": 10,
+      "sameSourceSnapshot": true,
+      "syntheticLabels": true,
+      "humanReviewed": false,
+      "staleAndForgottenTested": false
+    },
+    "baseline": {
+      "rawPrecisionAt5": 0.5636363636363636,
+      "rawMacroRecallAt5": 0.5621212121212121,
+      "groundedPrecisionAt5": 0.49090909090909085,
+      "groundedMacroRecallAt5": 0.4803030303030303,
+      "supportedAnswerable": 0,
+      "unsupportedNoAnswer": 0,
+      "noAnswerCandidates": 8
+    },
+    "candidate": {
+      "rawPrecisionAt5": 0.6181818181818183,
+      "rawMacroRecallAt5": 0.6106060606060606,
+      "groundedPrecisionAt5": 0.49090909090909085,
+      "groundedMacroRecallAt5": 0.4803030303030303,
+      "supportedAnswerable": 0,
+      "unsupportedNoAnswer": 0,
+      "noAnswerCandidates": 8
+    },
+    "retrieval": null,
+    "grounded": null,
+    "staleProbe": null,
+    "latencyMs": null,
+    "passed": null
+  },
+  "frozenAfter": {
+    "methodology": {
+      "reviewed": true,
+      "warmupsPerQuery": 1,
+      "samplesPerQuery": 5,
+      "answerability": "experimental lexical heuristic; not semantic proof",
+      "staleSourceTested": true
+    },
+    "baseline": null,
+    "candidate": null,
+    "retrieval": {
+      "answerableQueries": 20,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.48999999999999994,
+      "recallAt5": 0.7541666666666665,
+      "microPrecisionAt5": 0.49,
+      "microRecallAt5": 0.7424242424242424,
+      "meanReciprocalRank": 0.875,
+      "relevantReturned": 49,
+      "relevantTotal": 66,
+      "maximumPrecisionAt5": 0.6599999999999999,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 7,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.36666666666666664,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.3600000000000001,
+      "recallAt5": 0.5625,
+      "microPrecisionAt5": 0.36,
+      "microRecallAt5": 0.5454545454545454,
+      "meanReciprocalRank": 0.7916666666666667,
+      "relevantReturned": 36,
+      "relevantTotal": 66,
+      "noAnswerCandidateRate": 0.3,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 3,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.16666666666666666
+    },
+    "staleProbe": {
+      "attempted": 20,
+      "candidates": 20,
+      "flagged": 20,
+      "leaks": 0
+    },
+    "latencyMs": {
+      "samples": 150,
+      "p50": 48.973399999999856,
+      "p95": 112.3164999999999
+    },
+    "passed": false
+  },
+  "developmentBefore": {
+    "methodology": {
+      "reviewed": false,
+      "warmupsPerQuery": 1,
+      "samplesPerQuery": 5,
+      "answerability": "experimental lexical heuristic; not semantic proof",
+      "staleSourceTested": true
+    },
+    "baseline": null,
+    "candidate": null,
+    "retrieval": {
+      "answerableQueries": 11,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.5636363636363636,
+      "recallAt5": 0.5621212121212121,
+      "microPrecisionAt5": 0.5636363636363636,
+      "microRecallAt5": 0.5535714285714286,
+      "meanReciprocalRank": 0.7575757575757577,
+      "relevantReturned": 31,
+      "relevantTotal": 56,
+      "maximumPrecisionAt5": 0.9818181818181819,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 8,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.6190476190476191,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.49090909090909085,
+      "recallAt5": 0.4803030303030303,
+      "microPrecisionAt5": 0.4909090909090909,
+      "microRecallAt5": 0.48214285714285715,
+      "meanReciprocalRank": 0.7121212121212122,
+      "relevantReturned": 27,
+      "relevantTotal": 56,
+      "noAnswerCandidateRate": 0.1,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 1,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.09523809523809523
+    },
+    "staleProbe": {
+      "attempted": 11,
+      "candidates": 11,
+      "flagged": 11,
+      "leaks": 0
+    },
+    "latencyMs": {
+      "samples": 105,
+      "p50": 49.503600000000006,
+      "p95": 154.60449999999992
+    },
+    "passed": false
+  },
+  "benchmark500After": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 500,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 429,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 57.00170000000003,
+      "p95": 124.01760000000002
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 126.4564,
+        "p95": 136.068
+      },
+      "candidateMs": {
+        "p50": 43.12649999999999,
+        "p95": 51.893099999999976
+      },
+      "indexingMs": {
+        "p50": 37.92399999999998,
+        "p95": 46.277300000000025
+      },
+      "rankingMs": {
+        "p50": 28.372400000000027,
+        "p95": 37.45010000000002
+      },
+      "pathMs": {
+        "p50": 17.208600000000047,
+        "p95": 18.21870000000007
+      },
+      "readMs": {
+        "p50": 4.889999999999986,
+        "p95": 5.540800000000047
+      },
+      "hashMs": {
+        "p50": 0.6417999999999324,
+        "p95": 0.7667000000000712
+      },
+      "excerptMs": {
+        "p50": 9.327800000000025,
+        "p95": 15.780100000000004
+      },
+      "decisionMs": {
+        "p50": 8.529399999999839,
+        "p95": 9.438799999999901
+      }
+    },
+    "warm": {
+      "p50": 54.25160000000005,
+      "p95": 73.73430000000008
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 11.217599999999948,
+        "p95": 15.21309999999994
+      },
+      "indexingMs": {
+        "p50": 6.628499999999917,
+        "p95": 9.36200000000008
+      },
+      "rankingMs": {
+        "p50": 5.009700000000066,
+        "p95": 8.6257999999998
+      },
+      "pathMs": {
+        "p50": 19.46359999999993,
+        "p95": 25.525300000000243
+      },
+      "readMs": {
+        "p50": 5.911499999999705,
+        "p95": 7.992299999999432
+      },
+      "hashMs": {
+        "p50": 0.7693000000003849,
+        "p95": 0.9726999999957116
+      },
+      "excerptMs": {
+        "p50": 6.132599999999911,
+        "p95": 13.082600000000184
+      },
+      "decisionMs": {
+        "p50": 6.008200000000102,
+        "p95": 8.307500000000118
+      },
+      "groundingMs": {
+        "p50": 37.91590000000019,
+        "p95": 53.79160000000002
+      },
+      "serializationMs": {
+        "p50": 0.4157000000000153,
+        "p95": 0.6709999999998217
+      }
+    }
+  },
+  "blind": [
+    {
+      "id": "renewal",
+      "relevant": [
+        "src/invoices/renewal.ts",
+        "tests/invoices/renewal.test.ts",
+        "src/http/invoiceRoutes.ts",
+        "docs/billing.md"
+      ],
+      "status": "INSUFFICIENT_EVIDENCE",
+      "canAssert": false,
+      "assertions": 0,
+      "evidence": [
+        null
+      ],
+      "staleSources": []
+    },
+    {
+      "id": "upload",
+      "relevant": [
+        "src/uploads/expiry.ts",
+        "tests/uploads/expiry.test.ts",
+        "src/http/uploadRoutes.ts",
+        "docs/uploads.md"
+      ],
+      "status": "INSUFFICIENT_EVIDENCE",
+      "canAssert": false,
+      "assertions": 0,
+      "evidence": [
+        "docs/uploads.md"
+      ],
+      "staleSources": []
+    },
+    {
+      "id": "conflict",
+      "relevant": [
+        "src/notifications/digest.ts",
+        "tests/notifications/digest.test.ts",
+        "docs/digest-legacy.md"
+      ],
+      "status": "INSUFFICIENT_EVIDENCE",
+      "canAssert": false,
+      "assertions": 0,
+      "evidence": [
+        "src/notifications/digest.ts",
+        "tests/notifications/digest.test.ts",
+        "docs/digest-legacy.md"
+      ],
+      "staleSources": []
+    },
+    {
+      "id": "no-answer",
+      "relevant": [],
+      "status": "INSUFFICIENT_EVIDENCE",
+      "canAssert": false,
+      "assertions": 0,
+      "evidence": [
+        null
+      ],
+      "staleSources": []
+    },
+    {
+      "id": "stale",
+      "relevant": [
+        "src/uploads/expiry.ts"
+      ],
+      "status": "INSUFFICIENT_EVIDENCE",
+      "canAssert": false,
+      "assertions": 0,
+      "evidence": [
+        "docs/uploads.md"
+      ],
+      "staleSources": [
+        {
+          "path": "src/uploads/expiry.ts",
+          "status": "modified"
+        }
+      ]
+    }
+  ],
+  "benchmark500Before": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 500,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 429,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 44.974100000000135,
+      "p95": 108.48329999999999
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 86.732,
+        "p95": 106.64940000000001
+      },
+      "candidateMs": {
+        "p50": 43.54630000000003,
+        "p95": 55.39950000000002
+      },
+      "indexingMs": {
+        "p50": 39.41620000000003,
+        "p95": 47.6934
+      },
+      "rankingMs": {
+        "p50": 2.883199999999988,
+        "p95": 5.859899999999982
+      },
+      "pathMs": {
+        "p50": 14.276099999999872,
+        "p95": 26.740499999999884
+      },
+      "readMs": {
+        "p50": 3.971299999999985,
+        "p95": 5.385699999999986
+      },
+      "hashMs": {
+        "p50": 0.5166000000000395,
+        "p95": 0.7172999999999092
+      },
+      "excerptMs": {
+        "p50": 4.3887000000000285,
+        "p95": 6.1761000000000195
+      },
+      "decisionMs": {
+        "p50": 5.506800000000197,
+        "p95": 8.309999999999974
+      }
+    },
+    "warm": {
+      "p50": 36.44679999999971,
+      "p95": 56.63680000000022
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 10.2475000000004,
+        "p95": 15.741999999999962
+      },
+      "indexingMs": {
+        "p50": 6.270799999999781,
+        "p95": 9.06309999999985
+      },
+      "rankingMs": {
+        "p50": 1.485700000000179,
+        "p95": 3.8980999999998858
+      },
+      "pathMs": {
+        "p50": 13.768300000000409,
+        "p95": 19.216199999999844
+      },
+      "readMs": {
+        "p50": 3.8505999999997584,
+        "p95": 6.9004000000009
+      },
+      "hashMs": {
+        "p50": 0.47479999999904976,
+        "p95": 0.720299999999952
+      },
+      "excerptMs": {
+        "p50": 2.8618999999998778,
+        "p95": 5.929599999999937
+      },
+      "decisionMs": {
+        "p50": 2.7889999999995325,
+        "p95": 4.796900000000278
+      },
+      "groundingMs": {
+        "p50": 24.140899999999874,
+        "p95": 38.01809999999978
+      },
+      "serializationMs": {
+        "p50": 0.37270000000035,
+        "p95": 0.6487999999999374
+      }
+    }
+  },
+  "developmentAfter": {
+    "methodology": {
+      "reviewed": false,
+      "warmupsPerQuery": 1,
+      "samplesPerQuery": 5,
+      "answerability": "experimental lexical heuristic; not semantic proof",
+      "staleSourceTested": true
+    },
+    "baseline": null,
+    "candidate": null,
+    "retrieval": {
+      "answerableQueries": 11,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.6181818181818183,
+      "recallAt5": 0.6106060606060606,
+      "microPrecisionAt5": 0.6181818181818182,
+      "microRecallAt5": 0.6071428571428571,
+      "meanReciprocalRank": 0.9545454545454546,
+      "relevantReturned": 34,
+      "relevantTotal": 56,
+      "maximumPrecisionAt5": 0.9818181818181819,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 8,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.42857142857142855,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.49090909090909085,
+      "recallAt5": 0.4803030303030303,
+      "microPrecisionAt5": 0.4909090909090909,
+      "microRecallAt5": 0.48214285714285715,
+      "meanReciprocalRank": 0.712121212121212,
+      "relevantReturned": 27,
+      "relevantTotal": 56,
+      "noAnswerCandidateRate": 0.1,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 1,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.09523809523809523
+    },
+    "staleProbe": {
+      "attempted": 11,
+      "candidates": 11,
+      "flagged": 11,
+      "leaks": 0
+    },
+    "latencyMs": {
+      "samples": 105,
+      "p50": 63.65089999999964,
+      "p95": 135.72550000000047
+    },
+    "passed": false
+  },
+  "benchmark10000Before": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 10000,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 9929,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 119.63460000000032,
+      "p95": 197.08839999999998
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 179.6532,
+        "p95": 243.21300000000002
+      },
+      "candidateMs": {
+        "p50": 113.17609999999999,
+        "p95": 132.5451
+      },
+      "indexingMs": {
+        "p50": 100.12729999999999,
+        "p95": 114.52200000000002
+      },
+      "rankingMs": {
+        "p50": 4.022799999999961,
+        "p95": 48.37239999999997
+      },
+      "pathMs": {
+        "p50": 13.100599999999758,
+        "p95": 17.527500000000146
+      },
+      "readMs": {
+        "p50": 3.8086999999999875,
+        "p95": 5.06230000000005
+      },
+      "hashMs": {
+        "p50": 0.4519000000000801,
+        "p95": 0.6154000000000224
+      },
+      "excerptMs": {
+        "p50": 4.063300000000027,
+        "p95": 6.7683999999999855
+      },
+      "decisionMs": {
+        "p50": 6.412100000000123,
+        "p95": 10.625899999999774
+      }
+    },
+    "warm": {
+      "p50": 72.00540000000001,
+      "p95": 100.14510000000018
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 43.80490000000009,
+        "p95": 60.11160000000007
+      },
+      "indexingMs": {
+        "p50": 27.163800000000265,
+        "p95": 38.82719999999972
+      },
+      "rankingMs": {
+        "p50": 2.4544999999998254,
+        "p95": 21.910899999999856
+      },
+      "pathMs": {
+        "p50": 13.239300000002004,
+        "p95": 23.293999999998505
+      },
+      "readMs": {
+        "p50": 3.9081999999980326,
+        "p95": 6.558799999999792
+      },
+      "hashMs": {
+        "p50": 0.46329999999989013,
+        "p95": 0.9028000000007523
+      },
+      "excerptMs": {
+        "p50": 3.0864000000001397,
+        "p95": 5.164999999999964
+      },
+      "decisionMs": {
+        "p50": 2.4781999999995605,
+        "p95": 5.8926000000001295
+      },
+      "groundingMs": {
+        "p50": 23.936499999999796,
+        "p95": 40.405800000000454
+      },
+      "serializationMs": {
+        "p50": 0.32159999999930733,
+        "p95": 0.5718000000001666
+      }
+    }
+  },
+  "benchmark10000After": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 10000,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 9929,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 160.0015000000003,
+      "p95": 225.17589999999996
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 217.08279999999996,
+        "p95": 306.9814
+      },
+      "candidateMs": {
+        "p50": 112.78620000000001,
+        "p95": 135.5039
+      },
+      "indexingMs": {
+        "p50": 98.97609999999997,
+        "p95": 121.35989999999998
+      },
+      "rankingMs": {
+        "p50": 28.230000000000018,
+        "p95": 86.82310000000001
+      },
+      "pathMs": {
+        "p50": 18.186099999999954,
+        "p95": 22.25590000000011
+      },
+      "readMs": {
+        "p50": 5.212800000000016,
+        "p95": 5.6047000000000935
+      },
+      "hashMs": {
+        "p50": 0.6474000000000046,
+        "p95": 0.8542000000000485
+      },
+      "excerptMs": {
+        "p50": 6.089499999999987,
+        "p95": 15.05110000000002
+      },
+      "decisionMs": {
+        "p50": 8.446699999999936,
+        "p95": 9.390600000000063
+      }
+    },
+    "warm": {
+      "p50": 100.74250000000029,
+      "p95": 122.11779999999999
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 47.9092999999998,
+        "p95": 60.46849999999995
+      },
+      "indexingMs": {
+        "p50": 30.695600000000013,
+        "p95": 43.05110000000059
+      },
+      "rankingMs": {
+        "p50": 5.324999999999818,
+        "p95": 32.347299999999905
+      },
+      "pathMs": {
+        "p50": 20.55880000000161,
+        "p95": 24.988099999999577
+      },
+      "readMs": {
+        "p50": 6.255099999999402,
+        "p95": 7.4964999999965585
+      },
+      "hashMs": {
+        "p50": 0.7870999999986452,
+        "p95": 0.9617999999991298
+      },
+      "excerptMs": {
+        "p50": 7.090699999999742,
+        "p95": 13.700799999999617
+      },
+      "decisionMs": {
+        "p50": 5.609600000001592,
+        "p95": 7.118199999999888
+      },
+      "groundingMs": {
+        "p50": 41.1929999999993,
+        "p95": 52.629800000001524
+      },
+      "serializationMs": {
+        "p50": 0.4155000000000655,
+        "p95": 0.6342999999997119
+      }
+    }
+  }
+}

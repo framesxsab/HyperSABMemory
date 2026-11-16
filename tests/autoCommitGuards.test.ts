@@ -27,6 +27,11 @@ vi.mock('child_process', () => ({
   }
 }));
 
+vi.mock('../src/memory/fileLock.js', () => ({
+  acquireFileLockAsync: vi.fn().mockResolvedValue(undefined),
+  releaseFileLock: vi.fn()
+}));
+
 // eslint-disable-next-line import/first
 import { AutoCommitEngine } from '../src/hooks/autoCommit.js';
 

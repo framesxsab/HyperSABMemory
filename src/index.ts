@@ -8,6 +8,9 @@ export { TokenCompressor, type CompressionOptions } from './harness/tokenCompres
 export { HashAnchorEngine, type HashAnchor } from './harness/hashAnchor.js';
 export { MinimalChangeEngine, type MinimalChangeOptions, type MinimalChangeIntensity } from './harness/minimalChange.js';
 export { TemporalMemoryEngine } from './memory/temporalMemory.js';
+export { HybridSearchEngine, type HybridSearchResult, type ScoredMemoryRecord } from './memory/hybridSearch.js';
+export { searchGrounded, lexicalSupport, type GroundedResult } from './memory/groundedSearch.js';
+export type { TaskSource, TaskSourceInspection } from './harness/taskSources.js';
 export { buildContextBlock } from './memory/contextBlock.js';
 export { StructuralGraphEngine, type StructuralGraphData, type GraphNode } from './memory/structuralGraph.js';
 export { SqliteStore, type MemoryRecord, type MemoryStatus } from './memory/sqliteStore.js';

@@ -18,10 +18,12 @@ Most agent-memory tools store chat facts in a cloud or a sidecar database. Hyper
 |---|---|
 | Git-native checkpoints | Automatic snapshots every few minutes while you work, with read-only diff preview and guarded rollback |
 | Persistent decision log | Dated decisions, bug facts, and architecture notes that survive across sessions and IDEs |
-| Token-ceiling context block | A hard 1500-token budget on injected context, enforced by tests |
-| Structural knowledge graph | AST-level map of your codebase so agents reuse existing components instead of rewriting them |
+| Token-budgeted context block | A 1,500-token estimate limit on injected context, enforced by tests |
+| Structural graph support | Uses externally generated graph artifacts when available; it does not index source code itself |
 | Swarm coordination | File locks and broadcasts for parallel subagents working the same repo |
 | Multi-engine safe | MCP servers, dashboard, and CLI share one store through a file-lock CAS — no last-writer-wins memory loss |
+
+Automatic checkpoints stage all trackable changes at the repository root. Review your ignore rules for secrets and generated files before enabling them.
 
 Nothing here requires an account, an API key, or network access after install.
 
@@ -38,7 +40,7 @@ That command:
 1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
 2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
 3. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
-4. Seeds 5-10 first-boot facts from your README, package.json, and git history, then prints a `GENESIS <hash>` baseline checkpoint you can always return to
+4. Seeds first-boot facts from your README, package.json, and git history without creating a Git commit. Pass `--checkpoint` to opt into one initial local checkpoint; in a fresh Git repository it also records the `GENESIS <hash>` baseline.
 
 Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
@@ -57,7 +59,7 @@ npx hypersabmemory status
 
 | Tool | What it does |
 |---|---|
-| `hypersabmemory_get_context` | Harness header + Context Block (< 1500 tokens) |
+| `hypersabmemory_get_context` | Harness header + Context Block (< 1500 estimated tokens) |
 | `hypersabmemory_remember` | Save a decision / architecture / bug fact |
 | `hypersabmemory_query` | Search active memories |
 | `hypersabmemory_forget` | Invalidate a fact (dropped from Context Block) |
@@ -67,8 +69,19 @@ npx hypersabmemory status
 | `hypersabmemory_broadcast` | Share a finding with parallel subagents |
 | `hypersabmemory_claim_task` | Acquire/release an exclusive file lock |
 | `hypersabmemory_sync_swarm` | Pull live locks + broadcasts + your session id |
+| `hypersabmemory_task_grounded_query` | Search task source references and verify supported exact claims against captured hashes |
 
 Resource-aware clients can also pull the context block and memory log passively via MCP resources (`resources/list` + `resources/read`).
+
+The grounded task query takes a `taskId` and `query`, with optional `conflictingPaths`. It can retrieve bounded excerpts for natural questions and verify explicit symbol definitions, exact quoted source text, and uniquely stated top-level JSON scalar values directly from captured task sources, even without a separate memory record. Response-only `source_ref:` identifiers represent those references, not persisted memories. Natural-question results are candidate evidence, not proven claims. Sources are checked against captured hashes; conflicting hashes block assertions, and changed sources must be re-read and explicitly checkpointed.
+
+Retrieval can use static relative imports in indexed JavaScript or TypeScript record text as ranking hints between existing lexical candidates. Those links reflect the recorded text, not a verified current dependency graph; grounded evidence still requires source-hash checks.
+
+Symbol verification accepts complete questions such as `Where is createTask defined?`, `Where is the function createTask() defined?`, and `Which file defines TaskLedger?`, as well as backtick-quoted identifiers. Compound and negated questions do not qualify for a symbol assertion.
+
+Task-grounded responses include `requirements` for requested implementation, test, interface, configuration, and decision roles. Missing roles trigger a subject-focused search within matching captured sources. Candidate lists contain current, hash-checked sources; if no candidate is found, up to five `unrankedReferences` are offered as unverified navigation leads. A role remains `unresolved` until an agent verifies that a source actually supports the question.
+
+Lexical search splits code identifiers and normalizes English word forms with Porter stemming, so terms such as `validate` and `validation` can match. Exact identifier/path priorities and literal assertion verification continue to use the original text. Stemming is a retrieval heuristic and can also increase unrelated candidate matches.
 
 ## Everyday commands
 
@@ -100,9 +113,11 @@ to the context header (opt out with `HYPERSABMEMORY_GHOST_PATHS=off`).
 
 ## Benchmarked in the open
 
-Recall is gated by a local benchmark (`npm run eval`) with published thresholds and
-deterministic fixtures. No hosted numbers, no cherry-picking: CI runs the same gate
-inside its blocking test job on every push.
+Recall is gated by a local benchmark (`npm run eval`) with deterministic fixtures.
+The repository-grounded baseline (`npm run build && npm run eval:baseline`) reports
+precision/recall@5, stale-memory leaks, p50/p95 query latency, corpus size, and estimated
+header size; its distractors are synthetic, so it is not a real-user study. See
+[V2_BASELINE.md](./docs/V2_BASELINE.md) for the current measured run.
 
 | Gate | Threshold |
 |---|---|
@@ -110,7 +125,7 @@ inside its blocking test job on every push.
 | Forgotten-fact leaks into results | must be 0 |
 | Forgotten-fact leaks into Context Block | must be 0 |
 | Retrieval paths gated | direct engine, keyword index, fused memory+graph |
-| Header size under worst-case state | <= 1500 tokens enforced |
+| Header size under worst-case state | <= 1500 estimated tokens enforced |
 
 The fixture includes both active and deliberately forgotten facts, so invalidation is
 tested, not assumed. Run it yourself:
@@ -130,9 +145,9 @@ Verdict: all 3 retrieval paths passed (threshold 0.8).
 Token economics: 381 delivered / 1790 naive corpus tokens (78.7% saved, ratio 0.213)
 ```
 
-Achieved recall above is on the deterministic fixture (CI runs the same numbers).
+Achieved recall above is on the deterministic fixture. CI runs this gate inside its blocking test job.
 The token-economics line is measured against your workspace's own memory store:
-the injected context block is hard-capped (~400 tokens) while the raw fact corpus
+the injected context block is capped at an estimated ~400 tokens while the raw fact corpus
 grows unbounded, so savings climb as your store matures. Use `--json` for
 machine-readable output.
 
@@ -183,7 +198,7 @@ npm run eval
 npm run build
 ```
 
-CI runs the full matrix (Ubuntu + Windows, Node 20/22) with the recall gate inside the blocking test job on every push. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+The CI workflow is configured for Linux, Windows, and macOS on Node 20 compatibility and Node 22/24 LTS lanes. The recall gate runs in the blocking test job. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Blueprint docs: [Architecture.md](./Architecture.md), [PRD.md](./PRD.md), [Rules.md](./Rules.md), [Phases.md](./Phases.md).
 

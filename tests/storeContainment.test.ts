@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { OneShotSetupEngine } from '../src/cli/oneShotSetup.js';
@@ -23,9 +24,7 @@ function excludeLines(dir: string): string[] {
 }
 
 afterAll(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — store containment via .git/info/exclude (B2)', () => {

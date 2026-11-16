@@ -17,6 +17,8 @@ import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
+import { TaskLedger } from '../memory/taskLedger.js';
+import { TASK_TOOLS, TASK_LIST_RESOURCE, executeTaskTool, listActiveTasks } from './taskTools.js';
 import { MemoryRecord, StructuredMemory } from '../memory/sqliteStore.js';
 import { ContextHarness } from '../harness/contextHarness.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
@@ -119,6 +121,7 @@ export class HyperSABMemoryMcpServer {
   private graph: StructuralGraphEngine;
   private hybridSearch: HybridSearchEngine;
   private swarm: SwarmMeshEngine;
+  private tasks: TaskLedger;
   private workspaceDir: string;
 
   constructor(workspaceDir: string = process.cwd()) {
@@ -131,6 +134,7 @@ export class HyperSABMemoryMcpServer {
     this.graph = new StructuralGraphEngine(workspaceDir);
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
     this.swarm = new SwarmMeshEngine(workspaceDir);
+    this.tasks = new TaskLedger(workspaceDir);
 
     this.server = new Server(
       {
@@ -273,7 +277,8 @@ export class HyperSABMemoryMcpServer {
                 sessionId: { type: 'string', description: 'Optional explicit caller session id' }
               }
             }
-          }
+          },
+          ...TASK_TOOLS
         ]
       };
     });
@@ -283,6 +288,9 @@ export class HyperSABMemoryMcpServer {
       const { name, arguments: args } = request.params;
 
       try {
+        const taskResult = executeTaskTool(this.workspaceDir, this.tasks, name, args);
+        if (taskResult) return taskResult;
+
         if (name === 'hypersabmemory_get_context') {
           const activeFile = (args?.activeFile as string) || '';
           const cursorLine = (args?.cursorLine as number) || 1;
@@ -435,12 +443,19 @@ export class HyperSABMemoryMcpServer {
             name: 'Memory Log',
             description: 'Persistent decision log (Memory.md) at the workspace root.',
             mimeType: 'text/markdown'
-          }
+          },
+          TASK_LIST_RESOURCE
         ]
       };
     });
 
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {      const { uri } = request.params;
+
+      if (uri === TASK_LIST_RESOURCE.uri) {
+        return {
+          contents: [{ uri, mimeType: TASK_LIST_RESOURCE.mimeType, text: JSON.stringify(listActiveTasks(this.tasks), null, 2) }]
+        };
+      }
 
       if (uri === 'hypersabmemory://context-block') {
         return {

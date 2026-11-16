@@ -1,8 +1,5 @@
-# CI for HyperSABMemory
-# Matrix covers the declared engines range (node >=20) on both Linux and Windows:
-# the project is developed on Windows and has shipped a Windows-only chokidar bug,
-# so windows-latest is tested explicitly instead of assumed.
-# Node 20 is the floor because vitest 4 (dev toolchain) requires ^20 || ^22 || >=24.
+# CI for HyperSABMemory. Node 20 remains the compatibility floor; Node 22/24
+# are maintained LTS lines. All supported operating systems run these lanes.
 name: CI
 
 on:
@@ -23,8 +20,8 @@ jobs:
       # combo does not hide results from the rest of the matrix.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: [20, 22]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +33,8 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit # tsconfig.json exists at root; catches type errors before tests
       - run: npm test
-      - run: npm run build
+      - run: npm run eval:baseline
+      - run: npm run package:smoke
 
 # The recall/leak benchmark (tests/memorybench.test.ts, thresholds recall >= 0.80,
 # zero forgotten-fact leaks) runs inside the blocking matrix job via `npm test`,

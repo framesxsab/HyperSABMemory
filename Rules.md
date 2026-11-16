@@ -5,28 +5,33 @@
 When interacting with or extending HyperSABMemory, AI coding agents must strictly obey the following rules:
 
 ### R-1: Never Corrupt State or Block IDE Execution
-- File watcher hooks, state synthesis, and auto-commit tasks **MUST NEVER** throw uncaught errors or block the main thread.
-- If a file write or diff analysis fails, log silently to internal diagnostics and return the previous valid context snapshot.
+- File watcher hooks and state synthesis **MUST NOT** block the editor event loop.
+- A persistence operation that fails **MUST** report failure to its caller and keep the last successfully persisted record state authoritative.
+- Background watcher/checkpoint failures may be logged and surfaced through diagnostics, but must not claim that data was persisted or committed.
 
 ### R-2: Hyperfrequent Auto-Commit & Checkpointing (3-5 Min Interval)
 - HyperSABMemory includes an active Auto-Commit & Git Checkpoint engine.
-- Every 3-5 minutes (or on significant file save milestones), staged changes are automatically checkpointed with concise micro-commit messages (e.g., `hypersabmemory(snapshot): auto-checkpoint [active_file]`).
-- Provides bulletproof rollback safety so developers and agents can revert to exact historical states at any minute.
+- Every 3 minutes by default, the current implementation attempts a workspace-wide Git checkpoint; overlapping requests on one engine share one in-flight commit.
+- Checkpoint attempts from separate HyperSABMemory engines/processes serialize through a repository lock.
+- Checkpoints stage the workspace after merge/rebase and repository-root guards pass. This scope must be clearly disclosed during setup and in documentation.
+- Guarded rollback creates a safety checkpoint before reset so prior work can be recovered.
 
 - 
 
-### R-3: Strict Token Ceilings (< 1500 Tokens)
-- Generated context-harness context headers must stay within the 1500 token limit by default.
+### R-3: Default Context Budget (1,500 Estimated Tokens)
+- Generated context headers must stay within the default 1,500-token estimate.
+- The current estimator uses approximately four characters per token; do not describe this as a model-tokenizer measurement.
 - If the active file context or git diff exceeds token budget, apply lossy compression (summarize diffs, truncate old stack traces, collapse whitespace).
 
 
 ### R-4: Local-First Privacy Preservation
 - Do not transmit code snippets, file contents, or developer prompts to external web endpoints unless explicitly configured by the user.
-- Local SQLite database and `Memory.md` are the single source of truth.
+- `.hypersabmemory/memory_store.json` is the authoritative local memory store; `Memory.md` is its human-readable projection plus project guidance.
 - 
 
 ### R-5: Incremental Memory Updates
 - When `Memory.md` is updated after file edits, overwrite only changed sections or append structured state logs. Do not regenerate the entire memory document from scratch unnecessarily.
+- Keep transient workspace state separate from durable decisions; generated file-event observations must retain their provenance and must not silently supersede user-confirmed facts.
 
 ---
 

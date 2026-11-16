@@ -1,0 +1,424 @@
+{
+  "version": 2,
+  "provenance": "self-authored corrected expectations, fixed before running; not independent human review",
+  "scope": "ranking only; exactPathMatch is a ranking hint, not containment or unique-answer proof. Basename queries may mark all matching basenames. Case-insensitive ranking is current implementation behavior; filesystem containment is separate. Partial suffixes must not be represented as full-path equality.",
+  "cases": [
+    {
+      "id": "explicit",
+      "query": "Inspect config/prod/launch.yml.",
+      "paths": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "expectedExact": [
+        "config/prod/launch.yml"
+      ],
+      "unique": true
+    },
+    {
+      "id": "basename",
+      "query": "Inspect launch.yml.",
+      "paths": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "expectedExact": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "unique": false
+    },
+    {
+      "id": "partial",
+      "query": "Inspect prod/launch.yml.",
+      "paths": [
+        "config/prod/launch.yml",
+        "prod/launch.yml"
+      ],
+      "expectedExact": [
+        "prod/launch.yml"
+      ],
+      "unique": true
+    },
+    {
+      "id": "missing",
+      "query": "Inspect missing/launch.yml.",
+      "paths": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "expectedExact": [],
+      "unique": false
+    },
+    {
+      "id": "suffix",
+      "query": "Inspect core/metadata.ts.",
+      "paths": [
+        "core/metadata.ts",
+        "core/data.ts"
+      ],
+      "expectedExact": [
+        "core/metadata.ts"
+      ],
+      "unique": true
+    },
+    {
+      "id": "nested",
+      "query": "Inspect outer/inner/worker.ts.",
+      "paths": [
+        "outer/inner/worker.ts",
+        "inner/worker.ts"
+      ],
+      "expectedExact": [
+        "outer/inner/worker.ts"
+      ],
+      "unique": true
+    },
+    {
+      "id": "windows",
+      "query": "Inspect core\\tools\\reader.ts.",
+      "paths": [
+        "core/tools/reader.ts",
+        "test/tools/reader.ts"
+      ],
+      "expectedExact": [
+        "core/tools/reader.ts"
+      ],
+      "unique": true
+    },
+    {
+      "id": "case",
+      "query": "Inspect CORE/TOOLS/READER.TS.",
+      "paths": [
+        "core/tools/reader.ts",
+        "test/tools/reader.ts"
+      ],
+      "expectedExact": [
+        "core/tools/reader.ts"
+      ],
+      "unique": true
+    },
+    {
+      "id": "relative",
+      "query": "Inspect ./core/reader.ts.",
+      "paths": [
+        "core/reader.ts",
+        "other/reader.ts"
+      ],
+      "expectedExact": [
+        "core/reader.ts"
+      ],
+      "unique": true
+    },
+    {
+      "id": "extension",
+      "query": "Inspect client.tsx.",
+      "paths": [
+        "client.ts",
+        "client.tsx",
+        "client.tsx.bak"
+      ],
+      "expectedExact": [
+        "client.tsx"
+      ],
+      "unique": true
+    },
+    {
+      "id": "punctuation",
+      "query": "Inspect \"lib/tool.config.ts\", please.",
+      "paths": [
+        "lib/tool.config.ts",
+        "test/tool.config.ts"
+      ],
+      "expectedExact": [
+        "lib/tool.config.ts"
+      ],
+      "unique": true
+    }
+  ],
+  "results": [
+    {
+      "name": "applied",
+      "id": "explicit",
+      "expected": [
+        "config/prod/launch.yml"
+      ],
+      "exact": [
+        "config/prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "applied",
+      "id": "basename",
+      "expected": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "exact": [
+        "config/dev/launch.yml",
+        "config/prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "applied",
+      "id": "partial",
+      "expected": [
+        "prod/launch.yml"
+      ],
+      "exact": [
+        "prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "prod/launch.yml"
+    },
+    {
+      "name": "applied",
+      "id": "missing",
+      "expected": [],
+      "exact": [],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "applied",
+      "id": "suffix",
+      "expected": [
+        "core/metadata.ts"
+      ],
+      "exact": [
+        "core/metadata.ts"
+      ],
+      "pass": true,
+      "first": "core/metadata.ts"
+    },
+    {
+      "name": "applied",
+      "id": "nested",
+      "expected": [
+        "outer/inner/worker.ts"
+      ],
+      "exact": [
+        "inner/worker.ts",
+        "outer/inner/worker.ts"
+      ],
+      "pass": false,
+      "first": "outer/inner/worker.ts"
+    },
+    {
+      "name": "applied",
+      "id": "windows",
+      "expected": [
+        "core/tools/reader.ts"
+      ],
+      "exact": [
+        "core/tools/reader.ts"
+      ],
+      "pass": true,
+      "first": "core/tools/reader.ts"
+    },
+    {
+      "name": "applied",
+      "id": "case",
+      "expected": [
+        "core/tools/reader.ts"
+      ],
+      "exact": [
+        "core/tools/reader.ts"
+      ],
+      "pass": true,
+      "first": "core/tools/reader.ts"
+    },
+    {
+      "name": "applied",
+      "id": "relative",
+      "expected": [
+        "core/reader.ts"
+      ],
+      "exact": [
+        "core/reader.ts"
+      ],
+      "pass": true,
+      "first": "core/reader.ts"
+    },
+    {
+      "name": "applied",
+      "id": "extension",
+      "expected": [
+        "client.tsx"
+      ],
+      "exact": [
+        "client.tsx"
+      ],
+      "pass": true,
+      "first": "client.tsx"
+    },
+    {
+      "name": "applied",
+      "id": "punctuation",
+      "expected": [
+        "lib/tool.config.ts"
+      ],
+      "exact": [
+        "lib/tool.config.ts"
+      ],
+      "pass": true,
+      "first": "lib/tool.config.ts"
+    },
+    {
+      "name": "pending",
+      "id": "explicit",
+      "expected": [
+        "config/prod/launch.yml"
+      ],
+      "exact": [
+        "config/prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "pending",
+      "id": "basename",
+      "expected": [
+        "config/prod/launch.yml",
+        "config/dev/launch.yml"
+      ],
+      "exact": [
+        "config/dev/launch.yml",
+        "config/prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "pending",
+      "id": "partial",
+      "expected": [
+        "prod/launch.yml"
+      ],
+      "exact": [
+        "prod/launch.yml"
+      ],
+      "pass": true,
+      "first": "prod/launch.yml"
+    },
+    {
+      "name": "pending",
+      "id": "missing",
+      "expected": [],
+      "exact": [],
+      "pass": true,
+      "first": "config/prod/launch.yml"
+    },
+    {
+      "name": "pending",
+      "id": "suffix",
+      "expected": [
+        "core/metadata.ts"
+      ],
+      "exact": [
+        "core/metadata.ts"
+      ],
+      "pass": true,
+      "first": "core/metadata.ts"
+    },
+    {
+      "name": "pending",
+      "id": "nested",
+      "expected": [
+        "outer/inner/worker.ts"
+      ],
+      "exact": [
+        "outer/inner/worker.ts"
+      ],
+      "pass": true,
+      "first": "outer/inner/worker.ts"
+    },
+    {
+      "name": "pending",
+      "id": "windows",
+      "expected": [
+        "core/tools/reader.ts"
+      ],
+      "exact": [
+        "core/tools/reader.ts"
+      ],
+      "pass": true,
+      "first": "core/tools/reader.ts"
+    },
+    {
+      "name": "pending",
+      "id": "case",
+      "expected": [
+        "core/tools/reader.ts"
+      ],
+      "exact": [
+        "core/tools/reader.ts"
+      ],
+      "pass": true,
+      "first": "core/tools/reader.ts"
+    },
+    {
+      "name": "pending",
+      "id": "relative",
+      "expected": [
+        "core/reader.ts"
+      ],
+      "exact": [],
+      "pass": false,
+      "first": "core/reader.ts"
+    },
+    {
+      "name": "pending",
+      "id": "extension",
+      "expected": [
+        "client.tsx"
+      ],
+      "exact": [
+        "client.tsx"
+      ],
+      "pass": true,
+      "first": "client.tsx"
+    },
+    {
+      "name": "pending",
+      "id": "punctuation",
+      "expected": [
+        "lib/tool.config.ts"
+      ],
+      "exact": [
+        "lib/tool.config.ts"
+      ],
+      "pass": true,
+      "first": "lib/tool.config.ts"
+    }
+  ],
+  "safety": [
+    {
+      "variant": "applied",
+      "containment": true,
+      "forgottenExcluded": true,
+      "sameSizeStaleExcluded": true
+    },
+    {
+      "variant": "pending",
+      "containment": true,
+      "forgottenExcluded": true,
+      "sameSizeStaleExcluded": true
+    }
+  ],
+  "implementationHashes": {
+    "applied": "4623cf9062bc64a8d0c0c6b6fad90cfbeda5a329611994dea3d629d72450e6b1",
+    "pending": "b9e723477b02fed5abec339e3a8383a6d0ec5859c542d72c89e8dd2dd0357b0c"
+  },
+  "limitations": [
+    "Self-authored after observing prior flawed fixture; not independent blind review.",
+    "Case-insensitive ranking does not define filesystem containment semantics.",
+    "No symlink probe or latency measurement in this revision.",
+    "No further candidate tuning after this comparison."
+  ]
+}

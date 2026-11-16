@@ -8,6 +8,7 @@ import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { Command } from 'commander';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -20,9 +21,7 @@ function tmpDir(): string {
 }
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — CLI completeness + bugfix sweep (P12)', () => {

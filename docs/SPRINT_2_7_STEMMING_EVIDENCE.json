@@ -1,0 +1,397 @@
+{
+  "benchmark500": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 500,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 429,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 89.45349999999962,
+      "p95": 131.54430000000002
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 142.4958,
+        "p95": 206.94800000000004
+      },
+      "candidateMs": {
+        "p50": 61.548100000000005,
+        "p95": 81.50039999999998
+      },
+      "indexingMs": {
+        "p50": 55.54069999999999,
+        "p95": 75.7893
+      },
+      "rankingMs": {
+        "p50": 27.908100000000047,
+        "p95": 41.80150000000003
+      },
+      "pathMs": {
+        "p50": 18.71879999999993,
+        "p95": 27.391600000000096
+      },
+      "readMs": {
+        "p50": 5.7594000000001415,
+        "p95": 7.730399999999918
+      },
+      "hashMs": {
+        "p50": 0.7026000000000749,
+        "p95": 1.0593999999999255
+      },
+      "excerptMs": {
+        "p50": 8.054700000000025,
+        "p95": 31.845799999999997
+      },
+      "decisionMs": {
+        "p50": 9.670200000000193,
+        "p95": 12.727900000000034
+      }
+    },
+    "warm": {
+      "p50": 59.46549999999979,
+      "p95": 85.60100000000057
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 11.350199999999859,
+        "p95": 17.41280000000006
+      },
+      "indexingMs": {
+        "p50": 7.30370000000039,
+        "p95": 11.548399999999674
+      },
+      "rankingMs": {
+        "p50": 5.077800000000025,
+        "p95": 8.794799999999668
+      },
+      "pathMs": {
+        "p50": 19.772100000000137,
+        "p95": 27.350499999997737
+      },
+      "readMs": {
+        "p50": 6.021099999999024,
+        "p95": 8.452900000000227
+      },
+      "hashMs": {
+        "p50": 0.7599000000009255,
+        "p95": 1.0549000000000888
+      },
+      "excerptMs": {
+        "p50": 7.635500000000093,
+        "p95": 15.172000000000025
+      },
+      "decisionMs": {
+        "p50": 7.81939999999986,
+        "p95": 12.461100000000442
+      },
+      "groundingMs": {
+        "p50": 40.542599999999766,
+        "p95": 60.58860000000004
+      },
+      "serializationMs": {
+        "p50": 0.4252000000001317,
+        "p95": 0.701799999999821
+      }
+    }
+  },
+  "benchmark10000": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 10000,
+    "realSourceFiles": 71,
+    "syntheticDistractors": 9929,
+    "queries": 6,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "samples": 30,
+    "coldFirstQueryCalls": {
+      "p50": 127.18629999999985,
+      "p95": 306.87610000000006
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 231.97639999999998,
+        "p95": 291.5843
+      },
+      "candidateMs": {
+        "p50": 125.32390000000001,
+        "p95": 138.96869999999998
+      },
+      "indexingMs": {
+        "p50": 111.77349999999998,
+        "p95": 124.1166
+      },
+      "rankingMs": {
+        "p50": 21.65010000000001,
+        "p95": 77.70959999999997
+      },
+      "pathMs": {
+        "p50": 18.460199999999986,
+        "p95": 20.433200000000056
+      },
+      "readMs": {
+        "p50": 5.0463000000000875,
+        "p95": 7.008500000000083
+      },
+      "hashMs": {
+        "p50": 0.7271999999999821,
+        "p95": 0.8197000000001253
+      },
+      "excerptMs": {
+        "p50": 11.26709999999997,
+        "p95": 19.929599999999994
+      },
+      "decisionMs": {
+        "p50": 8.987899999999854,
+        "p95": 12.84009999999978
+      }
+    },
+    "warm": {
+      "p50": 102.66880000000037,
+      "p95": 138.59420000000046
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 49.89509999999973,
+        "p95": 70.20370000000003
+      },
+      "indexingMs": {
+        "p50": 33.30060000000003,
+        "p95": 43.600099999999884
+      },
+      "rankingMs": {
+        "p50": 6.586900000000242,
+        "p95": 35.33249999999998
+      },
+      "pathMs": {
+        "p50": 21.14980000000014,
+        "p95": 26.909999999999854
+      },
+      "readMs": {
+        "p50": 6.244400000000951,
+        "p95": 7.78240000000369
+      },
+      "hashMs": {
+        "p50": 0.795799999998053,
+        "p95": 1.0032000000001062
+      },
+      "excerptMs": {
+        "p50": 7.809799999999996,
+        "p95": 17.378099999999904
+      },
+      "decisionMs": {
+        "p50": 6.4923000000017055,
+        "p95": 8.75829999999496
+      },
+      "groundingMs": {
+        "p50": 42.81800000000021,
+        "p95": 60.00869999999941
+      },
+      "serializationMs": {
+        "p50": 0.40310000000044965,
+        "p95": 0.6095000000000255
+      }
+    }
+  },
+  "controlled": {
+    "files": 72,
+    "cases": 21,
+    "sameSnapshot": true,
+    "humanReviewed": false,
+    "baseline": {
+      "rawP5": 0.6181818181818183,
+      "rawRecall5": 0.6106060606060606,
+      "groundedP5": 0.509090909090909,
+      "groundedRecall5": 0.503030303030303,
+      "supportedAnswerable": 0,
+      "unsupportedNoAnswer": 0,
+      "noAnswerCandidates": 8,
+      "combinedLatency": {
+        "p50": 63.279599999999846,
+        "p95": 124.5637999999999
+      },
+      "perQuery": [
+        {
+          "query": "How does task creation capture source hashes and restore a bounded capsule through MCP?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How does setup seed project facts, install agent rules, and connect the MCP server?",
+          "rawHits": 2,
+          "groundedHits": 1
+        },
+        {
+          "query": "How are task source paths contained and same-size source rewrites detected on restoration?",
+          "rawHits": 3,
+          "groundedHits": 2
+        },
+        {
+          "query": "How does an MCP context request combine active file state with graph and compact memory context?",
+          "rawHits": 3,
+          "groundedHits": 3
+        },
+        {
+          "query": "How does a remembered fact persist through JSON storage, temporal access, and MCP hybrid search?",
+          "rawHits": 5,
+          "groundedHits": 4
+        },
+        {
+          "query": "How do forgotten and superseded facts stay out of active memory retrieval?",
+          "rawHits": 2,
+          "groundedHits": 2
+        },
+        {
+          "query": "How does rollback preserve a safety checkpoint and expose ghost paths in restored context?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How do MCP task claims use the ledger lock and prevent simultaneous process ownership?",
+          "rawHits": 4,
+          "groundedHits": 3
+        },
+        {
+          "query": "How are task revisions fenced and task writes recovered after a process failure?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How does the project file watcher trigger safe automatic checkpoints and suppress noisy paths?",
+          "rawHits": 2,
+          "groundedHits": 0
+        },
+        {
+          "query": "What documented boundaries connect task coordination, persisted memory, and compact context delivery?",
+          "rawHits": 1,
+          "groundedHits": 1
+        }
+      ]
+    },
+    "porter": {
+      "rawP5": 0.6363636363636364,
+      "rawRecall5": 0.6257575757575758,
+      "groundedP5": 0.5818181818181819,
+      "groundedRecall5": 0.5696969696969697,
+      "supportedAnswerable": 0,
+      "unsupportedNoAnswer": 0,
+      "noAnswerCandidates": 10,
+      "combinedLatency": {
+        "p50": 90.67399999999998,
+        "p95": 177.06669999999986
+      },
+      "perQuery": [
+        {
+          "query": "How does task creation capture source hashes and restore a bounded capsule through MCP?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How does setup seed project facts, install agent rules, and connect the MCP server?",
+          "rawHits": 3,
+          "groundedHits": 2
+        },
+        {
+          "query": "How are task source paths contained and same-size source rewrites detected on restoration?",
+          "rawHits": 3,
+          "groundedHits": 2
+        },
+        {
+          "query": "How does an MCP context request combine active file state with graph and compact memory context?",
+          "rawHits": 3,
+          "groundedHits": 3
+        },
+        {
+          "query": "How does a remembered fact persist through JSON storage, temporal access, and MCP hybrid search?",
+          "rawHits": 5,
+          "groundedHits": 5
+        },
+        {
+          "query": "How do forgotten and superseded facts stay out of active memory retrieval?",
+          "rawHits": 2,
+          "groundedHits": 2
+        },
+        {
+          "query": "How does rollback preserve a safety checkpoint and expose ghost paths in restored context?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How do MCP task claims use the ledger lock and prevent simultaneous process ownership?",
+          "rawHits": 4,
+          "groundedHits": 3
+        },
+        {
+          "query": "How are task revisions fenced and task writes recovered after a process failure?",
+          "rawHits": 4,
+          "groundedHits": 4
+        },
+        {
+          "query": "How does the project file watcher trigger safe automatic checkpoints and suppress noisy paths?",
+          "rawHits": 2,
+          "groundedHits": 2
+        },
+        {
+          "query": "What documented boundaries connect task coordination, persisted memory, and compact context delivery?",
+          "rawHits": 1,
+          "groundedHits": 1
+        }
+      ]
+    }
+  },
+  "development": {
+    "retrieval": {
+      "answerableQueries": 11,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.6363636363636364,
+      "recallAt5": 0.6257575757575758,
+      "microPrecisionAt5": 0.6363636363636364,
+      "microRecallAt5": 0.625,
+      "meanReciprocalRank": 0.9318181818181818,
+      "relevantReturned": 35,
+      "relevantTotal": 56,
+      "maximumPrecisionAt5": 0.9818181818181819,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 10,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.5238095238095238,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.5818181818181819,
+      "recallAt5": 0.5696969696969697,
+      "microPrecisionAt5": 0.5818181818181818,
+      "microRecallAt5": 0.5714285714285714,
+      "meanReciprocalRank": 0.7727272727272727,
+      "relevantReturned": 32,
+      "relevantTotal": 56,
+      "noAnswerCandidateRate": 0.4,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 4,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.19047619047619047
+    },
+    "staleProbe": {
+      "attempted": 11,
+      "candidates": 11,
+      "flagged": 11,
+      "leaks": 0
+    }
+  }
+}

@@ -68,7 +68,7 @@ export class OneShotSetupEngine {
   /**
    * Executes the full one-shot setup sequence.
    */
-  public async executeSetup(): Promise<SetupOutcome> {
+  public async executeSetup(options: { checkpoint?: boolean } = {}): Promise<SetupOutcome> {
     let createdFiles: string[] = [];
 
     try {
@@ -96,16 +96,14 @@ export class OneShotSetupEngine {
       const graph = new StructuralGraphEngine(this.targetDir);
       await graph.updateGraph();
 
-      // 4. Trigger initial git checkpoint
-      const autoCommit = new AutoCommitEngine({
-        workspaceDir: this.targetDir
-      });
-      await autoCommit.createCheckpoint('HyperSABMemory One-Shot Setup Complete');
-
-      // 5. GENESIS RITUAL — terminal step, fresh workspaces only (seeds already present => skip).
       let genesisHash: string | undefined;
-      if (contained && seedResult.seeded > 0) {
-        genesisHash = await this.runGenesisRitual(memory, autoCommit);
+      if (options.checkpoint) {
+        const autoCommit = new AutoCommitEngine({ workspaceDir: this.targetDir });
+        if (contained && seedResult.seeded > 0) {
+          genesisHash = await this.runGenesisRitual(memory, autoCommit);
+        } else {
+          await autoCommit.createCheckpoint('HyperSABMemory One-Shot Setup Complete');
+        }
       }
 
       return { success: true, createdFiles, ...(genesisHash ? { genesisHash } : {}) };
@@ -153,10 +151,12 @@ export class OneShotSetupEngine {
  */
 export function printSetupOutcome(outcome: SetupOutcome, workspaceDir: string = process.cwd()): void {
   if (outcome.success) {
-    console.log(picocolors.green('✔ Structural knowledge graph integrated.'));
+    console.log(picocolors.green('✔ Structural graph support ready (uses local graph inputs when present).'));
     console.log(picocolors.green('✔ Temporal memory store initialized.'));
     console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
-    console.log(picocolors.green('✔ 3-5 Min Auto-Commit engine configured.'));
+    console.log(picocolors.green('✔ Auto-checkpoints configured (3-minute default).'));
+    console.log(picocolors.yellow('Setup does not create Git commits unless run with --checkpoint.'));
+    console.log(picocolors.yellow('Note: checkpoints stage all trackable changes at the repository root; review ignore rules for private/generated files.'));
     console.log(picocolors.green('✔ Direct MCP access written (Cursor, Claude Code, VS Code).'));
     console.log(picocolors.cyan('\nFlow: reload the IDE → enable the hypersabmemory MCP server → call hypersabmemory_get_context.'));
     return;

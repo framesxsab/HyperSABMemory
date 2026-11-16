@@ -6,7 +6,6 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import * as path from 'path';
 import { readStoreRecords } from './cliUtils.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 import { StructuralGraphEngine } from '../memory/structuralGraph.js';

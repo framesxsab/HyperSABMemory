@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { deriveBootstrapFacts, seedWorkspace } from '../src/memory/seeding.js';
@@ -11,9 +12,7 @@ const dirs: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 function git(cwd: string, args: string[]): string[] {
@@ -126,6 +125,19 @@ describe('F1 seedWorkspace — idempotent direct-CAS writes', () => {
 });
 
 describe('F1 genesis ritual — terminal setup step', () => {
+  it('sets up a git workspace without creating an unsolicited checkpoint', async () => {
+    const fx = makeFixture();
+    const before = revCount(fx);
+
+    const result = await new OneShotSetupEngine(fx).executeSetup();
+
+    expect(result.success).toBe(true);
+    expect(revCount(fx)).toBe(before);
+    expect(git(fx, ['log', '--pretty=%s'])).not.toContain('feat: HyperSABMemory One-Shot Setup Complete');
+    expect(fs.existsSync(path.join(fx, '.cursor', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(fx, '.hypersabmemory', 'memory_store.json'))).toBe(true);
+  }, 60000);
+
   it('writes exactly one genesis record, creates the named checkpoint, prints a valid GENESIS hash', async () => {
     // Given: a fresh fixture repo and a captured stdout
     const fx = makeFixture();
@@ -136,7 +148,7 @@ describe('F1 genesis ritual — terminal setup step', () => {
     });
 
     // When: one-shot setup executes
-    const result = await new OneShotSetupEngine(fx).executeSetup();
+    const result = await new OneShotSetupEngine(fx).executeSetup({ checkpoint: true });
 
     // Then: setup succeeds with exactly one genesis record via direct set
     expect(result.success).toBe(true);
@@ -172,7 +184,7 @@ describe('F1 genesis ritual — terminal setup step', () => {
   it('skips the whole ritual on rerun: no new seed/genesis records, no GENESIS output', async () => {
     // Given: a workspace that already went through setup once
     const fx = makeFixture();
-    await new OneShotSetupEngine(fx).executeSetup();
+    await new OneShotSetupEngine(fx).executeSetup({ checkpoint: true });
     const storePath = path.join(fx, '.hypersabmemory');
     const before = new SqliteStore(storePath).getAll();
     const logs: string[] = [];

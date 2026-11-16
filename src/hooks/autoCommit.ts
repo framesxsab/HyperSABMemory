@@ -7,6 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { acquireFileLockAsync, releaseFileLock } from '../memory/fileLock.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -42,6 +43,7 @@ export class AutoCommitEngine {
   private authorEmail: string;
   private timer: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  private checkpointInFlight: Promise<CheckpointResult> | null = null;
   private onCommit?: (hash: string, message: string) => void;
   private onError?: (error: Error) => void;
 
@@ -83,7 +85,20 @@ export class AutoCommitEngine {
     }
   }
 
-  public async createCheckpoint(customReason?: string): Promise<CheckpointResult> {
+  public createCheckpoint(customReason?: string): Promise<CheckpointResult> {
+    if (this.checkpointInFlight) return this.checkpointInFlight;
+
+    const operation = this.runCheckpoint(customReason);
+    this.checkpointInFlight = operation;
+    const clear = (): void => {
+      if (this.checkpointInFlight === operation) this.checkpointInFlight = null;
+    };
+    void operation.then(clear, clear);
+    return operation;
+  }
+
+  private async runCheckpoint(customReason?: string): Promise<CheckpointResult> {
+    let heldLock: string | undefined;
     try {
       let gitDirRaw: string;
       try {
@@ -92,6 +107,9 @@ export class AutoCommitEngine {
         return { committed: false, status: 'not-a-repo' };
       }
       const gitDir = path.resolve(this.workspaceDir, gitDirRaw.trim());
+      const lockPath = path.join(gitDir, 'hypersabmemory-checkpoint.lock');
+      await acquireFileLockAsync(lockPath, 30_000);
+      heldLock = lockPath;
 
       // Safety: staging mid-merge/rebase concludes the user's operation with conflict markers baked in.
       if (
@@ -176,6 +194,8 @@ export class AutoCommitEngine {
         this.onError(err);
       }
       return { committed: false, status: 'failed' };
+    } finally {
+      if (heldLock) releaseFileLock(heldLock);
     }
   }
 

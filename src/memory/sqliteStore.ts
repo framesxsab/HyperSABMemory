@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { withFileLock } from './fileLock.js';
+import { withFileLock, writeAtomicText } from './fileLock.js';
 
 export type MemoryStatus = 'active' | 'forgotten' | 'superseded';
 
@@ -31,11 +31,15 @@ export interface MemoryRecord extends StructuredMemory {
 export class SqliteStore {
   private storagePath: string;
   private memoryMap: Map<string, MemoryRecord> = new Map();
+  private loadedFile?: string;
+  private loadedContents?: string;
+  private failedTemporaryContents?: string;
+  private initialized = false;
 
-  constructor(baseDir: string = '.hypersabmemory') {
+  constructor(baseDir: string = '.hypersabmemory', deferLoad = false) {
     this.storagePath = path.join(baseDir, 'memory_store.json');
     this.ensureStorageDir(baseDir);
-    this.loadStore();
+    if (!deferLoad) this.loadStore();
   }
 
   private ensureStorageDir(dir: string): void {
@@ -49,6 +53,8 @@ export class SqliteStore {
   }
 
   private loadStore(warnWhenMissing: boolean = true): void {
+    warnWhenMissing ||= !this.initialized;
+    this.initialized = true;
     const tmpPath = `${this.storagePath}.tmp`;
     const bakPath = `${this.storagePath}.bak`;
 
@@ -69,6 +75,8 @@ export class SqliteStore {
     }
 
     this.memoryMap.clear();
+    this.loadedFile = undefined;
+    this.loadedContents = undefined;
     if (warnWhenMissing) {
       console.warn('[HyperSABMemory :: SqliteStore] No readable memory store found — starting clean.');
     }
@@ -78,33 +86,29 @@ export class SqliteStore {
     try {
       if (!fs.existsSync(file)) return false;
       const raw = fs.readFileSync(file, 'utf-8');
+      if (file === `${this.storagePath}.tmp` && raw === this.failedTemporaryContents) return false;
+      if (file === this.loadedFile && raw === this.loadedContents) return true;
       const data: MemoryRecord[] = JSON.parse(raw);
       if (!Array.isArray(data)) return false;
       this.memoryMap.clear();
       data.forEach(record => this.memoryMap.set(record.id, record));
+      this.loadedFile = file;
+      this.loadedContents = raw;
       return true;
     } catch {
       return false;
     }
   }
 
-  public saveStore(): void {
+  private writeRecords(records: Iterable<MemoryRecord>): void {
+    let payload: string | undefined;
     try {
-      const arrayData = Array.from(this.memoryMap.values());
-      const payload = JSON.stringify(arrayData, null, 2);
-      const tmpPath = `${this.storagePath}.tmp`;
-
-      fs.writeFileSync(tmpPath, payload, 'utf-8');
-      try {
-        fs.renameSync(tmpPath, this.storagePath);
-      } catch (renameErr) {
-        const code = (renameErr as NodeJS.ErrnoException).code;
-        if (code === 'EPERM' || code === 'EBUSY') {
-          fs.renameSync(tmpPath, this.storagePath); // single retry (Win AV locks)
-        } else {
-          throw renameErr; // payload stays in .tmp for loadStore recovery
-        }
-      }
+      const arrayData = Array.from(records);
+      payload = JSON.stringify(arrayData, null, 2);
+      writeAtomicText(this.storagePath, payload);
+      this.failedTemporaryContents = undefined;
+      this.loadedFile = undefined;
+      this.loadedContents = undefined;
 
       try {
         fs.copyFileSync(this.storagePath, `${this.storagePath}.bak`);
@@ -112,8 +116,17 @@ export class SqliteStore {
         // Mirror failure is non-fatal.
       }
     } catch (err) {
+      this.failedTemporaryContents = payload;
       console.error('[HyperSABMemory :: SqliteStore] Failed to write memory store:', err);
+      throw err;
     }
+  }
+
+  public saveStore(): void {
+    withFileLock(this.lockPath, () => {
+      if (!this.initialized) this.loadStore();
+      this.writeRecords(this.memoryMap.values());
+    });
   }
 
   public set(record: Omit<MemoryRecord, 'timestamp'> & { timestamp?: string }): MemoryRecord {
@@ -129,18 +142,58 @@ export class SqliteStore {
       status: record.status ?? 'active',
       timestamp: record.timestamp ?? new Date().toISOString()
     };
-    this.memoryMap.set(fullRecord.id, fullRecord);
-    this.saveStore();
+    const nextRecords = new Map(this.memoryMap);
+    nextRecords.set(fullRecord.id, fullRecord);
+    this.writeRecords(nextRecords.values());
+    this.memoryMap = nextRecords;
     return fullRecord;
   }
 
+  /** Persist a new fact and all matching supersedes as one locked JSON-store update. */
+  public setAndSupersede(
+    record: Omit<MemoryRecord, 'timestamp'> & { timestamp?: string },
+    shouldSupersede: (existing: MemoryRecord, incoming: MemoryRecord) => boolean
+  ): MemoryRecord {
+    return withFileLock(this.lockPath, () => {
+      this.loadStore(false);
+      const incoming: MemoryRecord = {
+        ...record,
+        status: record.status ?? 'active',
+        timestamp: record.timestamp ?? new Date().toISOString()
+      };
+      const nextRecords = new Map(this.memoryMap);
+      nextRecords.set(incoming.id, incoming);
+      const invalidAt = new Date().toISOString();
+
+      for (const existing of this.memoryMap.values()) {
+        if (
+          existing.id === incoming.id ||
+          (existing.status ?? 'active') !== 'active' ||
+          !shouldSupersede(existing, incoming)
+        ) continue;
+
+        nextRecords.set(existing.id, {
+          ...existing,
+          status: 'superseded',
+          invalidAt,
+          tags: [...(existing.tags ?? []), `superseded-by:${incoming.id}`]
+        });
+      }
+
+      this.writeRecords(nextRecords.values());
+      this.memoryMap = nextRecords;
+      return incoming;
+    });
+  }
+
   public get(id: string): MemoryRecord | undefined {
+    this.loadStore(false);
     return this.memoryMap.get(id);
   }
 
   public search(query: string): MemoryRecord[] {
     const q = query.toLowerCase();
-    return Array.from(this.memoryMap.values()).filter(record => 
+    return this.getAll().filter(record =>
       record.content.toLowerCase().includes(q) ||
       record.category.toLowerCase().includes(q) ||
       record.tags?.some(t => t.toLowerCase().includes(q))
@@ -148,6 +201,7 @@ export class SqliteStore {
   }
 
   public getAll(): MemoryRecord[] {
+    this.loadStore(false);
     return Array.from(this.memoryMap.values());
   }
 
@@ -185,8 +239,8 @@ export class SqliteStore {
   public clear(): void {
     withFileLock(this.lockPath, () => {
       this.loadStore(false);
-      this.memoryMap.clear();
-      this.saveStore();
+      this.writeRecords([]);
+      this.memoryMap = new Map();
     });
   }
 }

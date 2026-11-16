@@ -16,7 +16,7 @@ export class TemporalMemoryEngine {
 
   constructor(workspaceDir: string = '.') {
     const memoryDir = path.join(workspaceDir, '.hypersabmemory');
-    this.store = new SqliteStore(memoryDir);
+    this.store = new SqliteStore(memoryDir, true);
     this.memoryFilePath = path.join(workspaceDir, 'Memory.md');
   }
 
@@ -34,7 +34,7 @@ export class TemporalMemoryEngine {
       throw new Error('content must be a non-empty string');
     }
     const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const record = this.store.set({
+    const record = this.store.setAndSupersede({
       id,
       category,
       content,
@@ -44,29 +44,11 @@ export class TemporalMemoryEngine {
       ...(structured?.artifacts?.length ? { artifacts: structured.artifacts } : {}),
       ...(structured?.errorsAndFixes ? { errorsAndFixes: structured.errorsAndFixes } : {}),
       ...(structured?.nextSteps ? { nextSteps: structured.nextSteps } : {})
-    });
-
-    // Perf: SqliteStore's single-record mutators each rewrite the whole store,
-    // so flip all duplicates in memory and persist once instead of calling
-    // supersede() per record (which would cost one full save each).
-    const toSupersede: MemoryRecord[] = [];
-    for (const existing of this.store.getActive()) {
-      if (existing.id === record.id) continue;
-      if (existing.category !== category) continue;
-      if ((existing.tags ?? []).includes(SEED_TAG)) continue;
-      if (!this.isDuplicateOrContradiction(existing.content, content)) continue;
-      toSupersede.push(existing);
-    }
-
-    if (toSupersede.length > 0) {
-      const now = new Date().toISOString();
-      for (const existing of toSupersede) {
-        existing.status = 'superseded';
-        existing.invalidAt = now;
-        existing.tags = [...(existing.tags ?? []), `superseded-by:${record.id}`];
-      }
-      this.store.saveStore();
-    }
+    }, (existing, incoming) =>
+      existing.category === incoming.category &&
+      !(existing.tags ?? []).includes(SEED_TAG) &&
+      this.isDuplicateOrContradiction(existing.content, incoming.content)
+    );
 
     this.syncToMemoryFile();
     return record;

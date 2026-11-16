@@ -25,7 +25,20 @@ const MAX_BACKOFF_MS = 50;
 const BUDGET_MS = 2000;
 const UNPARSEABLE_GRACE_MS = 5000;
 
-function sleepSync(ms: number): void {
+// Leave the temporary file after a failed rename for store recovery.
+export function writeAtomicText(filePath: string, payload: string): void {
+  const tmpPath = `${filePath}.tmp`;
+  fs.writeFileSync(tmpPath, payload, 'utf-8');
+  try {
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPERM' || code === 'EBUSY') fs.renameSync(tmpPath, filePath);
+    else throw err;
+  }
+}
+
+export function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
@@ -66,7 +79,6 @@ function isHolderDead(lockPath: string): boolean {
       return false; // vanished; next spin just acquires
     }
   }
-  if (sentinel.pid === process.pid) return true; // engines are recreated constantly in tests
   try {
     process.kill(sentinel.pid, 0);
     return false; // holder alive
@@ -75,23 +87,15 @@ function isHolderDead(lockPath: string): boolean {
   }
 }
 
-function evict(lockPath: string): void {
-  try {
-    fs.unlinkSync(lockPath);
-  } catch {
-    // already gone or momentarily held; the acquire loop is deadline-bounded
-  }
-}
-
-export function acquireFileLock(lockPath: string, budgetMs: number = BUDGET_MS): void {
+export function acquireFileLock(lockPath: string, budgetMs: number = BUDGET_MS, recoverDead = true): void {
   const deadline = Date.now() + budgetMs;
   let backoffMs = START_BACKOFF_MS;
 
   while (true) {
     if (tryAcquire(lockPath)) return;
     if (Date.now() >= deadline) throw new LockAcquireError(lockPath, budgetMs);
-    if (isHolderDead(lockPath)) {
-      evict(lockPath);
+    if (recoverDead && isHolderDead(lockPath)) {
+      releaseFileLock(lockPath);
       continue; // immediate re-acquire attempt after eviction
     }
     sleepSync(Math.min(backoffMs, MAX_BACKOFF_MS));
@@ -107,8 +111,18 @@ export function releaseFileLock(lockPath: string): void {
   }
 }
 
-export function withFileLock<T>(lockPath: string, fn: () => T): T {
-  acquireFileLock(lockPath);
+/** Wait without blocking the event loop while an asynchronous operation owns the lock. */
+export async function acquireFileLockAsync(lockPath: string, budgetMs: number = BUDGET_MS): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (!tryAcquire(lockPath)) {
+    if (Date.now() >= deadline) throw new LockAcquireError(lockPath, budgetMs);
+    if (isHolderDead(lockPath)) releaseFileLock(lockPath);
+    else await new Promise<void>((resolve) => setTimeout(resolve, MAX_BACKOFF_MS));
+  }
+}
+
+export function withFileLock<T>(lockPath: string, fn: () => T, recoverDead = true): T {
+  acquireFileLock(lockPath, BUDGET_MS, recoverDead);
   try {
     return fn();
   } finally {

@@ -57,6 +57,7 @@ export class FileWatcherHook {
   public start(): void {
     const defaultIgnored = [
       '**/node_modules/**',
+      '**/.scratch-sprint2-package/**',
       '**/.git/**',
       '**/dist/**',
       '**/.hypersabmemory/**',
@@ -119,8 +120,12 @@ export class FileWatcherHook {
     const now = Date.now();
     const lastRemember = this.lastRememberAt.get(relativePath) ?? 0;
     if (now - lastRemember >= FileWatcherHook.REMEMBER_COOLDOWN_MS) {
-      this.memory.remember('architecture', formatFileEventFact(type, relativePath));
-      this.lastRememberAt.set(relativePath, now);
+      try {
+        this.memory.remember('architecture', formatFileEventFact(type, relativePath));
+        this.lastRememberAt.set(relativePath, now);
+      } catch (error) {
+        console.error(`[HyperSABMemory :: Hook] Could not persist file event for ${relativePath}:`, error);
+      }
     }
 
     // Update state header

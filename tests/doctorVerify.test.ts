@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { runDoctor } from '../src/cli/doctor.js';
@@ -35,15 +36,27 @@ function writeCursorConfig(dir: string, command: string, args: string[]): void {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — doctor MCP launch verification + factual counters (F3)', () => {
+  it('reports whole-repository checkpoint scope in doctor and setup output', async () => {
+    const dir = tmpDir();
+    const report = await runDoctor(dir);
+    const scope = report.checks.find((check) => check.name === 'checkpoint-scope');
+    expect(scope?.detail).toContain('stage all trackable changes at the repository root');
+
+    const logged: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(' '));
+    });
+    printSetupOutcome({ success: true, createdFiles: [] }, dir);
+    expect(logged.join('\n')).toContain('stage all trackable changes at the repository root');
+  });
+
   it('verifies a working configured launch via initialize + tools/list handshake', async () => {
     const dir = tmpDir();
-    writeCursorConfig(dir, process.execPath, ['-e', FAKE_SERVER]);
+    writeCursorConfig(dir, process.execPath, ['-e', `if (process.cwd() !== ${JSON.stringify(dir)}) process.exit(1);${FAKE_SERVER}`]);
 
     const report = await runDoctor(dir);
 

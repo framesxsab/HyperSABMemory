@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -15,9 +16,38 @@ describe('HyperSABMemory — Crash-safe Memory Store (P8)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    for (const dir of dirs.splice(0)) {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    removeTestDirs(dirs);
+  });
+
+  it('preserves existing data when a deferred store is saved before reading', () => {
+    const dir = tmpDir();
+    const writer = new SqliteStore(dir);
+    writer.set({ id: 'a', category: 'decision', content: 'retained fact' });
+    const deferred = new SqliteStore(dir, true);
+    deferred.saveStore();
+    expect(new SqliteStore(dir).get('a')?.content).toBe('retained fact');
+  });
+
+  it('reloads an external rewrite matching previously loaded bytes after a local write', () => {
+    const dir = tmpDir();
+    const file = path.join(dir, 'memory_store.json');
+    const original = JSON.stringify([{ id: 'a', category: 'decision', content: 'old fact', status: 'forgotten', timestamp: '2026-01-01T00:00:00.000Z' }]);
+    fs.writeFileSync(file, original);
+    const store = new SqliteStore(dir);
+    store.set({ id: 'a', category: 'decision', content: 'new fact', status: 'active' });
+    fs.writeFileSync(file, original);
+    expect(store.getActive()).toEqual([]);
+  });
+
+  it('refreshes direct reads and substring searches after another store forgets a record', () => {
+    const dir = tmpDir();
+    const writer = new SqliteStore(dir);
+    writer.set({ id: 'a', category: 'decision', content: 'shared decision' });
+    const reader = new SqliteStore(dir);
+    writer.forget('a');
+    expect(reader.get('a')?.status).toBe('forgotten');
+    expect(reader.getAll()[0].status).toBe('forgotten');
+    expect(reader.search('shared')[0].status).toBe('forgotten');
   });
 
   it('recovers the last good state from .bak when the primary store is corrupt', () => {
@@ -55,6 +85,18 @@ describe('HyperSABMemory — Crash-safe Memory Store (P8)', () => {
     const parsed = JSON.parse(raw);
     expect(raw).toBe(JSON.stringify(parsed, null, 2));
     expect(Array.isArray(parsed)).toBe(true);
+  });
+
+  it('surfaces persistence failures without exposing an unpersisted record', () => {
+    const dir = tmpDir();
+    const store = new SqliteStore(dir);
+    fs.mkdirSync(path.join(dir, 'memory_store.json.tmp'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => store.set({ id: 'failed', category: 'decision', content: 'Must not appear saved' })).toThrow();
+    expect(store.get('failed')).toBeUndefined();
+    expect(store.getAll()).toEqual([]);
+    expect(fs.existsSync(path.join(dir, 'memory_store.json'))).toBe(false);
   });
 
   it('recovers from a complete .tmp when the primary is missing', () => {

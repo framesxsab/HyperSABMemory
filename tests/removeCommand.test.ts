@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { removeInjection } from '../src/cli/removeCommand.js';
@@ -51,9 +52,7 @@ function seedFixtureWorkspace(): Fixture {
 }
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — remove command (H1)', () => {

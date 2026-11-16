@@ -18,18 +18,19 @@ It takes proven temporal-memory-store designs as its core reference architecture
 
 ### FR-1: State Harness Engine
 - **Dynamic Context Header**: Injects compressed state headers (active file, cursor line, git diff, modified tokens, key architectural focus) into the agent context window.
-- **Token Budget Compression**: Enforces strict token ceilings (< 1500 tokens) for harness prompts, compressing file states dynamically.
+- **Token Budget Compression**: Enforces a 1,500-token estimate ceiling for harness headers, compressing file state dynamically.
 - **Focus Anchor**: Prevents agents from drifting away from the primary file/task being modified.
 
 ### FR-2: Persistent Temporal Memory Layer
-- **Local-First Knowledge Graph & Vector Store**: Stores code symbols, semantic memories, architectural decisions, and bug history locally using fast SQLite / vector search.
-- **Universal Session Handoff**: Preserves project state (`Memory.md` + database) across IDE restarts, branch switches, and chat resets.
-- **MCP Server Protocol**: Exposes standardized tools (`hypersabmemory_get_context`, `hypersabmemory_remember`, `hypersabmemory_search`) for any MCP-compliant client.
+- **Local-First Memory Store**: Stores structured decisions and project facts in `.hypersabmemory/memory_store.json`; active records use lexical BM25 search, while optional graph results come from externally generated `graph.json` / `GRAPH_REPORT.md`.
+- **Session Handoff**: Preserves project decisions and workspace state in the local JSON store and the `Memory.md` human-readable projection across IDE restarts and chat resets.
+- **MCP Server Protocol**: Exposes tools including `hypersabmemory_get_context`, `hypersabmemory_remember`, and `hypersabmemory_query` for MCP-compliant clients.
 
 ### FR-3: Automatic Event Hooks ("After Every File Edit")
 - **File Watcher Hook**: Listens for file save, edit, and create events.
-- **Instant State Re-synthesis**: Automatically updates project `Memory.md` and memory graph after every file edit without blocking the user's IDE or editor UI.
-- **Incremental Diff Tracking**: Tracks modified lines and updates symbol index incrementally.
+- **Workspace State Refresh**: Updates the in-memory header from changed paths without blocking the user's IDE or editor UI.
+- **Event Provenance**: Any durable fact derived from file events must be distinguishable from user-confirmed knowledge and scoped to its source.
+- **Graph Freshness**: Reports the source and freshness of externally generated graph data; graph indexing is not performed by the watcher today.
 
 ### FR-4: Open Source Publication & CLI
 - **HyperSABMemory CLI**: Command-line tools (`hypersabmemory init`, `hypersabmemory status`, `hypersabmemory watch`, `hypersabmemory mcp`).
@@ -38,7 +39,7 @@ It takes proven temporal-memory-store designs as its core reference architecture
 ---
 
 ## 4. Non-Functional Requirements (NFR)
-- **Performance**: State capture and file hook processing completed in under 50ms.
+- **Performance**: Measure state capture, retrieval latency, and file-hook processing before setting release targets.
 - **Footprint**: Zero CPU overhead on idle, non-blocking asynchronous event loop.
 - **Privacy & Security**: 100% local-first data storage by default, zero telemetry or external API leaks unless configured.
 - **Cross-Platform**: Full support for Windows, macOS, and Linux.
@@ -46,6 +47,13 @@ It takes proven temporal-memory-store designs as its core reference architecture
 ---
 
 ## 5. Success Metrics
-- 70%+ reduction in agent token consumption during multi-turn coding sessions.
-- 0% context loss when starting new chat threads.
-- Sub-50ms execution speed for context generation after file saves.
+- Retrieval precision@5, recall@5, stale-memory leakage, and p50/p95 query latency on repository-grounded evals.
+- Estimated context-header tokens against the existing 1,500 default; future comparisons should use named model tokenizers.
+- First-run setup and MCP handshake success by supported host/runtime, measured without default telemetry.
+
+## 6. Current Baseline and V2 Guardrails
+
+- The store is JSON with atomic temp/rename writes and a backup file; `SqliteStore` is a legacy class name, not a SQLite implementation.
+- Search is lexical BM25 over active memories plus a substring-matched external graph leg. There is no vector index or built-in code indexer.
+- The context header remains capped at an estimated 1,500 tokens. Improve relevance and freshness before considering a larger budget.
+- V2 must preserve the JSON record format, existing CLI/MCP contracts, local-first behavior, and the setup/remove flow unless a migration and compatibility decision is explicitly documented.

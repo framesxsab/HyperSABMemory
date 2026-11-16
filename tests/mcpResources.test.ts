@@ -4,6 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { HyperSABMemoryMcpServer } from '../src/mcp/server.js';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -16,9 +17,7 @@ function tmpDir(): string {
 }
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 async function connectServer(dir: string): Promise<Client> {
@@ -30,14 +29,14 @@ async function connectServer(dir: string): Promise<Client> {
 }
 
 describe('HyperSABMemory — MCP Resources (F7)', () => {
-  it('lists exactly two resources with the context-block and memory-log URIs', async () => {
+  it('keeps existing resources and adds the task-list resource', async () => {
     const client = await connectServer(tmpDir());
 
     const { resources } = await client.listResources();
 
-    expect(resources).toHaveLength(2);
+    expect(resources).toHaveLength(3);
     const uris = resources.map((r) => r.uri).sort();
-    expect(uris).toEqual(['hypersabmemory://context-block', 'hypersabmemory://memory-log']);
+    expect(uris).toEqual(['hypersabmemory://context-block', 'hypersabmemory://memory-log', 'hypersabmemory://tasks']);
   });
 
   it('reads context-block byte-identical to the hypersabmemory_context_block tool output', async () => {

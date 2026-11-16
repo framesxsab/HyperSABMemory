@@ -9,14 +9,16 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "dev": "tsc --watch",
     "start": "node dist/cli/index.js start",
     "watch": "node dist/cli/index.js watch",
     "mcp": "node dist/cli/index.js mcp",
-    "test": "vitest run",
+    "test": "npm run build && vitest run --maxWorkers=2",
     "eval": "vitest run tests/memorybench.test.ts",
-    "prepublishOnly": "npm test && npm run eval && npm run build"
+    "eval:baseline": "node scripts/retrieval-baseline.mjs",
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "prepublishOnly": "npm test && npm run eval && npm run eval:baseline && npm run package:smoke"
   },
   "keywords": [
     "hypersabmemory",
@@ -56,14 +58,17 @@
     "SECURITY.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "stemmer": "2.0.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "12.9.0",
     "chokidar": "^4.0.1",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.5.4",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   }
 }

@@ -1,0 +1,573 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "tuning": "self-authored by implementation worker, no human review",
+    "validation": "separate coding agent authored and second agent reviewed before retrieval predictions; no human review",
+    "validationLabelSha256": "ddaebbbebacb552c79ce583da6ac3f6f37b4d7836055781096b4c8aeac6d20bb",
+    "snapshot": "SHA-256 per indexed source/test file; no frozen-release labels"
+  },
+  "snapshotFiles": {
+    "src/cli/cliUtils.ts": "917f25ac738b397a02e1319f82eccfdb7057cd318f8a16796e5b4dc2d7b83e31",
+    "src/cli/colors.ts": "8576ba5eab92112d9ae702097baf7ab25b8c09ea4b075b0596474cd5f1f44afa",
+    "src/cli/doctor.ts": "2b7a1d56a6948d9180c17d18da64e3e9b65236c882aefc2f1e1f89f6ea4a6af1",
+    "src/cli/evalCommand.ts": "35d14272907c2c8c3d619c73497efc20bf3619337aefaf13c27b0a2701721dcc",
+    "src/cli/handoffCommand.ts": "2775945518ba3ea15b5cb2b1d61253f56378f34f49a7975b5101fdad42c0873e",
+    "src/cli/index.ts": "c2830d4efd3b7014f38dc101529d8a9f8c12872693c653039a63d471f518dd4e",
+    "src/cli/memoryCommands.ts": "8215543d1e4d7267dee3fb4cdfb1cacbc01b6395f3514fe6930990a30c2f6fa3",
+    "src/cli/oneShotSetup.ts": "7af24c0eca02a095f8f0bd0629115e6ee7946ba19388bc4402e9c59f019aeb65",
+    "src/cli/removeCommand.ts": "3611896503709e4c9be5a8f8926b883cdeb73278af98f34c6420b295319bcca0",
+    "src/cli/setupOutput.ts": "e15a00485e2107b4f995b9e8ad7fc75c55f9cda31f9fa86f6370284bec2670e4",
+    "src/eval/memoryBench.ts": "40edd46dde607127989484516ea9248cf98816ea1e0ae1d5c8f0c0aaac2d2238",
+    "src/eval/repositoryBaseline.ts": "99af703853fa6107a7d645db8f839a0eb6d17339462b4585a39fdefb9273dfdd",
+    "src/eval/repositoryTaskEvaluation.ts": "777c2fa3143c51b45eb9e98c0c945c309c39e514de5f822ef2882c1b94942eb5",
+    "src/eval/repositoryTaskFixture.ts": "e3f7b9b138c9ac3f88b71e0d76e14a26db611db9ffbb76a206fedda10b4a599c",
+    "src/eval/sprint25DevelopmentFixture.ts": "b047930ca8144bfca043616e4d9bbe2020410c0713d8be142b7b8830a620abf6",
+    "src/eval/tokenEfficiency.ts": "237dc88d070268e47ed2b04904324640c8de27a6a1f7da5d21db6fab35d776e1",
+    "src/harness/contextHarness.ts": "95fe985ee93e6709202c1708a07878e903793edc86e75814917d2e7356452790",
+    "src/harness/ghostPaths.ts": "8ef4f6eaaa2820f47760fa8bf42a11ff32048a54231fa7117538af30d12f8ca4",
+    "src/harness/hashAnchor.ts": "5c44d0446b57a41ca215041410226bbcee3eb244c73fa38d174df8ad6d3031e5",
+    "src/harness/mcpAccess.ts": "bf4075cac90d6335e16f27338123e439a556634a31c72ce6d0d8142501d42f85",
+    "src/harness/minimalChange.ts": "ada0f9bef3d9d967bab2ce1c2fe5eae486fc5360be56140bf07733bbd27ea75e",
+    "src/harness/taskContext.ts": "9784b761da501e3a67f39f02582f3657fcfd9428c54df4fa0c65f8d89166f5b3",
+    "src/harness/taskSources.ts": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+    "src/harness/tokenCompressor.ts": "26512eae1ba74fdbfce1a961f1d361cd86238d538e2fe1b62bb93c43cc89123e",
+    "src/harness/universalAdapters.ts": "d0a6e71a8ac2dd7bfdbba896b8133f980af95b3d030ade15aea017de572eca76",
+    "src/hooks/autoCommit.ts": "a50a5a86925ab079dc6aed89fbe55e3cb23f2fa197bf73e4e4ff0945ac0ceab7",
+    "src/hooks/fileWatcher.ts": "955d1293f5d53a59613b9c78d45d0576258d03491500560e9b3761df1fff62e7",
+    "src/index.ts": "efba32dd117243fdb2d218b4fa23fc6c30868c809c6df7903ec2048230bd7cd5",
+    "src/mcp/server.ts": "a56f8d707b78daa64769a1581ccc1029542bba4846a783801afcfaa7ef8d4640",
+    "src/mcp/taskTools.ts": "0f2cbfee9bf79d1ceb0f1331d2d09026b3fa824e95fd4b16e94085d1150a134d",
+    "src/memory/contextBlock.ts": "368d6a74c557772839b71b217a2924ca8a8b14513bbd0dab125ae50f53b51216",
+    "src/memory/fileLock.ts": "a487e3229ae28146f906f84a3a226ff3a8d6970fdd4daf7c8a02caba9bd981cc",
+    "src/memory/groundedSearch.ts": "43b83872dd96d40a698a83292f961386f1d5b28fd15c6421657c6dbb74de2de7",
+    "src/memory/hybridSearch.ts": "8c8d0275b322b8ede9622e3db980e57b9a827fc0d7e1ac273556ef812e6f8694",
+    "src/memory/seeding.ts": "15996c6148dc002ccb9611dbd2dc90297a40194616615de81d4e1c5d291b6263",
+    "src/memory/sqliteStore.ts": "e602f144a45e8e64f31b802dcdd68a473499ef19355525128472534cbb220ab4",
+    "src/memory/structuralGraph.ts": "c0577994aa43def2c65e06454a03ba5a572298778416083f145b4864dcff4039",
+    "src/memory/swarmMesh.ts": "5fb381b415a2622ec1cf0cd0db3f331b0436eaeb0bc5faad212c2e1b7e5aebe2",
+    "src/memory/taskLedger.ts": "80348ce4035b15bb7c78667d8d3278ebc9c82120cba810590f2fb257a61514d8",
+    "src/memory/temporalMemory.ts": "b641d1164b7d77bbc7887520f97bea7229605874b3332b0ecb5fa9132c4c0429",
+    "src/server/dashboardServer.ts": "52b634731d499a670d0d90d8ea22aad03fc9f269c96d3a26d6137ac081f02859",
+    "src/version.ts": "27eef2b84267b5885aa6e7f5e4ffba4b605b016d63c2e54c38431ee03072de89",
+    "tests/atomicStoreWrites.test.ts": "d7c2c98a2d10322d205054eb4fc4eae7d17f84760cb4511cdabd388dbcadc939",
+    "tests/autoCommit.test.ts": "752403c1a31316440cf96f9ce815e6a9ed3ad7c22a756d46c5a7949630a2ab56",
+    "tests/autoCommitGuards.test.ts": "8848c727e576d7d5b7df84362ae00270ee07e797b8dd33797a84a5aa43b70f12",
+    "tests/benchReport.test.ts": "e38a1baf612ee496f6013945396e89e34728f0fea4f6484f3411f2abf0c942fc",
+    "tests/cli.test.ts": "efcc9a91bc3aed2b688b8de772875af02e33bc21455c8aa78ab1bc9f85f8e42d",
+    "tests/colors.test.ts": "fd535801a595f65df606065c6fcd3ea4070f666d36098f12a3e18614a89c6770",
+    "tests/concurrency.test.ts": "e4304d1a25d785d4b2d9e45763767cf1ed255b15af61d252629f8ba6ba9ff40f",
+    "tests/contextBlock.test.ts": "ea5048debe34d7045dc7c04900dd456feef1bfd938cf06f77dbd9c02fa14da60",
+    "tests/contextHeader.test.ts": "d8ac958b9949faa0f38fde7ef91e7f629659820f79649ea8b2afb3335d54c58c",
+    "tests/crossFileGrounded.test.ts": "7e70f7e2ce71282dd92d2688b2b64da771d98fcbca34332855214ea4d1c6feca",
+    "tests/dashboard.test.ts": "48c8c7e39f674eedb4d6b09cc3505003e0a11945bad50ffe7def2b12db287ae6",
+    "tests/doctorVerify.test.ts": "78c9349fd45cfa5ae83252093181ca0b0952d72338be39eea034222202cad69f",
+    "tests/efficientDecisionEvidence.test.ts": "6fe315fb9e2fce152c29cb084041c111c40dc3755bffacf62918ca2b42711627",
+    "tests/fileWatcher.test.ts": "77168626849581d1f4e94dbf41de7fa93049484ca25895cdd98283f642125a08",
+    "tests/ghostPaths.test.ts": "eccd5eb247416287ae78f518c19f210a626a01a8a51d1dcd4c040ebee24edc8d",
+    "tests/ghostPathsRetry.test.ts": "9f43400fec830136941e475d5d8058879008424c7427bca7c1b4f2cc0ddfc505",
+    "tests/groundedSearch.test.ts": "9c31b54e5684806639adff81e54f9a6ec24cd3fdcd36c6042b963deb52c0b066",
+    "tests/handoffCommand.test.ts": "48998580eee8a62043ef73ead0540765329adf796a749e5c6fbe0bc01f2fb0b4",
+    "tests/harness.test.ts": "6b1d6b1d83a985a0dd476ab65a192abaf78b3afa42d237e38711f91990382401",
+    "tests/hybridSearch.test.ts": "d892ee7ead88d13d904f7565915fb5dbfc11d3802dff3e94aac423d072d269f3",
+    "tests/mcpQuery.test.ts": "4a7da82183de59a26314ae60c7bd7c8c90d817db42d99085db1631f29a35295e",
+    "tests/mcpResources.test.ts": "9b77f6d1137755df964276391074c78f6f780eb3d3f14b9ee0b8946fc6c44e3b",
+    "tests/memorybench.test.ts": "b9e770b245c4feecde908fedee68ebce4b35b19a3d5dd58c557a2af51f4d631d",
+    "tests/packageMetadata.test.ts": "d894ab6e5b9beb0f272ad776df1282f9e7442acb5d72f1e3902ab292e9e670b4",
+    "tests/practicalRetrieval.test.ts": "5c60536e541aaf68e7e4586d805d6164062f3c92d022d5071a3714409402f9fb",
+    "tests/privacy.test.ts": "93731d6b1ab6ebd4521186c8fcc42d240c12eac16e2c3879cd5fe441daca2565",
+    "tests/removeCommand.test.ts": "3e3b0770e07d0a7413bcb27c9f4dd69bf2d9affbf31e7dc0010ebdbb8a997f61",
+    "tests/repositoryBaseline.test.ts": "debff675d330d4e4c419c14691bd695fb9addb6454299ea7274f775742d0f7d1",
+    "tests/repositoryTaskEvaluation.test.ts": "a2d37d0ea0d724d1af6a60b7aa090cb594f2b5db9a80164acb3de2bf3c1d3fe1",
+    "tests/seeding.test.ts": "96da519e8c19f064e2d9c526076bdb2bc61fe92b4c9fd279669e8a40a7a6ab5d",
+    "tests/setupOutput.test.ts": "8f2c4ba1096354691bcf9639d0aa8694c23c5649600d28d3ecfc177284111bd3",
+    "tests/sprint25DevelopmentFixture.test.ts": "00f0220af38b412ec66ca781e0e4aa24bc9604db183bedd1d387b50a86b37386",
+    "tests/sprint28FactReconciliation.test.ts": "e0ec4cf7e921d0e1469502845d5eade68e8e230dc187761926ec61a504daf8c0",
+    "tests/sqliteStore.test.ts": "4879642e9ecb8f13a26f14892a4ec314aae8e54e4c3ba36e43dc7fb80f4197f2",
+    "tests/storeContainment.test.ts": "a084f164ac912b656b7de7ab4ff9709557a557050d718a1ae6dcabcfd0241278",
+    "tests/swarmMesh.test.ts": "51ad09bafc563a1dc311bd3bc7a15d94dc6fff5cba539fc25287b6896ddcbec5",
+    "tests/taskAnswerBundle.test.ts": "040b1186184d5a06004208f6f7654975861ba6f447943d98e7b41384a7e3c8b9",
+    "tests/taskLedger.test.ts": "b0033008f965de601d45532993fcaaeb8b90efe3de9fd3b9a34de0511f67e9bc",
+    "tests/taskProcesses.test.ts": "45bef78fd66c468e565cc104ee643ec27a3c0e30e65e73ee50bf9a4d842e1811",
+    "tests/temporalMemory.test.ts": "e0505eb43358e58ebd2513ab38c4d179790d204bb99682509efaa1aa4f187b35",
+    "tests/testUtils.test.ts": "2fb32b7dfdaaf05b203b8cfd21186bb80311433b420b5d7cd9a5c9a8a6347dae",
+    "tests/testUtils.ts": "9c62ae2c190dd650a42d3c98dbba5d574879b2a2c920717b53ba520eb1e5e49c",
+    "Architecture.md": "06a749f8d8438c2202a3807b8ef98e5bf3422f5bdfbe4e232872e9e5d7a371d1"
+  },
+  "tuning": [
+    {
+      "id": "d01",
+      "question": "How are task source paths prevented from escaping the workspace?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "Resolved lexical source path must stay inside the workspace.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 42,
+              "end_line": 42,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "  if (!isContained(root, absolute) || absolute === root) throw new TaskSourceError(`source path escapes the workspace: ${sourcePath}`);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "The resolved real ancestor must stay inside the workspace.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 55,
+              "end_line": 55,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "      if (!isContained(root, real)) throw new TaskSourceError(`source path escapes the workspace through a symbolic link: ${sourcePath}`);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d02",
+      "question": "How does source inspection decide whether recorded bytes have changed?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "Source inspection reads the file content.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 130,
+              "end_line": 130,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "      const content = readContent(resolved.absolute);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "It computes SHA-256 over that content.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 132,
+              "end_line": 132,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "      const currentSha256 = createHash('sha256').update(content).digest('hex');"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "It compares the digest to the recorded hash to classify freshness.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 134,
+              "end_line": 134,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "      const status = !source.sha256 ? 'unavailable' : source.sha256 === currentSha256 ? 'current' : 'modified';"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d03",
+      "question": "How does task restoration inspect source references and compare their current bytes?",
+      "answerable": true,
+      "multi_source": true,
+      "claims": [
+        {
+          "text": "Task restoration passes source references to the source inspector.",
+          "evidence": [
+            {
+              "path": "src/harness/taskContext.ts",
+              "start_line": 79,
+              "end_line": 79,
+              "sha256": "9784b761da501e3a67f39f02582f3657fcfd9428c54df4fa0c65f8d89166f5b3",
+              "lines": [
+                "  const sources = inspectTaskSources(workspaceDir, task.sourceRefs, onContent);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "Source inspection hashes the current bytes and compares the digest to the captured hash.",
+          "evidence": [
+            {
+              "path": "src/harness/taskSources.ts",
+              "start_line": 132,
+              "end_line": 134,
+              "sha256": "f75fdd233857f99ff539012c97d05c7c4cd51717671d850642bc0e134795d736",
+              "lines": [
+                "      const currentSha256 = createHash('sha256').update(content).digest('hex');",
+                "      if (timing) timing.hashMs += performance.now() - started;",
+                "      const status = !source.sha256 ? 'unavailable' : source.sha256 === currentSha256 ? 'current' : 'modified';"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d04",
+      "question": "How does starting the file watcher relate to periodic checkpoint creation?",
+      "answerable": true,
+      "multi_source": true,
+      "claims": [
+        {
+          "text": "The file watcher starts the auto-commit engine.",
+          "evidence": [
+            {
+              "path": "src/hooks/fileWatcher.ts",
+              "start_line": 95,
+              "end_line": 96,
+              "sha256": "955d1293f5d53a59613b9c78d45d0576258d03491500560e9b3761df1fff62e7",
+              "lines": [
+                "    // Start 3-5 min hyperfrequent auto-commit engine",
+                "    this.autoCommit.start();"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "The engine performs an immediate checkpoint and schedules periodic checkpoints.",
+          "evidence": [
+            {
+              "path": "src/hooks/autoCommit.ts",
+              "start_line": 64,
+              "end_line": 66,
+              "sha256": "a50a5a86925ab079dc6aed89fbe55e3cb23f2fa197bf73e4e4ff0945ac0ceab7",
+              "lines": [
+                "    this.createCheckpoint();",
+                "    this.timer = setInterval(() => {",
+                "      this.createCheckpoint();"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d05",
+      "question": "What coordinates task ledger mutations?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "The ledger creates a SQLite coordinator transaction around task mutation.",
+          "evidence": [
+            {
+              "path": "src/memory/taskLedger.ts",
+              "start_line": 292,
+              "end_line": 295,
+              "sha256": "80348ce4035b15bb7c78667d8d3278ebc9c82120cba810590f2fb257a61514d8",
+              "lines": [
+                "      db = new Database(this.coordinator, { timeout: 4000 });",
+                "      db.pragma('synchronous = FULL');",
+                "      db.exec('CREATE TABLE IF NOT EXISTS task_writer (id INTEGER PRIMARY KEY CHECK (id = 1), generation INTEGER NOT NULL); INSERT OR IGNORE INTO task_writer (id, generation) VALUES (1, 0);');",
+                "      const transaction = db.transaction(() => {"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "The ledger executes that transaction in immediate mode.",
+          "evidence": [
+            {
+              "path": "src/memory/taskLedger.ts",
+              "start_line": 304,
+              "end_line": 304,
+              "sha256": "80348ce4035b15bb7c78667d8d3278ebc9c82120cba810590f2fb257a61514d8",
+              "lines": [
+                "      return transaction.immediate();"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d06",
+      "question": "How does the store select active memory records?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "The store selects records with active status, treating missing status as active.",
+          "evidence": [
+            {
+              "path": "src/memory/sqliteStore.ts",
+              "start_line": 208,
+              "end_line": 209,
+              "sha256": "e602f144a45e8e64f31b802dcdd68a473499ef19355525128472534cbb220ab4",
+              "lines": [
+                "  public getActive(): MemoryRecord[] {",
+                "    return this.getAll().filter((record) => (record.status ?? 'active') === 'active');"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "Only cited source behavior, not independently established runtime outcome."
+    },
+    {
+      "id": "d07",
+      "question": "What backward compatibility constraints does the architecture record for memory and MCP interfaces?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "The architecture records that existing JSON formats and MCP tool names and default response shapes must remain backward compatible.",
+          "classification": "direct",
+          "evidence": [
+            {
+              "path": "Architecture.md",
+              "start_line": 46,
+              "end_line": 46,
+              "sha256": "06a749f8d8438c2202a3807b8ef98e5bf3422f5bdfbe4e232872e9e5d7a371d1",
+              "lines": [
+                "- Keep the existing JSON record format, CLI commands, MCP tool names/default response shapes, setup configuration, and local-first behavior backward compatible."
+              ]
+            }
+          ]
+        }
+      ],
+      "limitation": "Recorded architectural constraint; implementation compliance is not independently verified."
+    },
+    {
+      "id": "dn01",
+      "question": "Which shipping carrier is selected by the task source hash inspector?",
+      "answerable": false,
+      "reason": "The cited source inspection code contains no carrier selection."
+    },
+    {
+      "id": "dn02",
+      "question": "Which private password authorizes the checkpoint timer?",
+      "answerable": false,
+      "reason": "The cited timer code contains no private password."
+    }
+  ],
+  "validation": [
+    {
+      "id": "r01",
+      "question": "How does getPackageVersion handle a missing version field and an exception?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "A missing version field produces 0.0.0.",
+          "evidence": [
+            {
+              "path": "src/version.ts",
+              "start_line": 10,
+              "end_line": 12,
+              "sha256": "27eef2b84267b5885aa6e7f5e4ffba4b605b016d63c2e54c38431ee03072de89",
+              "lines": [
+                "    const raw = fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8');",
+                "    const pkg = JSON.parse(raw) as { version?: string };",
+                "    return pkg.version ?? '0.0.0';"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "An exception produces 0.0.0.",
+          "evidence": [
+            {
+              "path": "src/version.ts",
+              "start_line": 13,
+              "end_line": 15,
+              "sha256": "27eef2b84267b5885aa6e7f5e4ffba4b605b016d63c2e54c38431ee03072de89",
+              "lines": [
+                "  } catch {",
+                "    return '0.0.0';",
+                "  }"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ]
+    },
+    {
+      "id": "r02",
+      "question": "Which digest algorithm and output length does HashAnchorEngine.computeHash use?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "It uses SHA-256.",
+          "evidence": [
+            {
+              "path": "src/harness/hashAnchor.ts",
+              "start_line": 18,
+              "end_line": 19,
+              "sha256": "5c44d0446b57a41ca215041410226bbcee3eb244c73fa38d174df8ad6d3031e5",
+              "lines": [
+                "  public static computeHash(content: string): string {",
+                "    return crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "It returns the first eight hexadecimal characters.",
+          "evidence": [
+            {
+              "path": "src/harness/hashAnchor.ts",
+              "start_line": 18,
+              "end_line": 19,
+              "sha256": "5c44d0446b57a41ca215041410226bbcee3eb244c73fa38d174df8ad6d3031e5",
+              "lines": [
+                "  public static computeHash(content: string): string {",
+                "    return crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ]
+    },
+    {
+      "id": "r03",
+      "question": "How does TokenCompressor estimate the token count of nonempty text?",
+      "answerable": true,
+      "multi_source": false,
+      "claims": [
+        {
+          "text": "It divides string length by four and rounds up.",
+          "evidence": [
+            {
+              "path": "src/harness/tokenCompressor.ts",
+              "start_line": 12,
+              "end_line": 13,
+              "sha256": "26512eae1ba74fdbfce1a961f1d361cd86238d538e2fe1b62bb93c43cc89123e",
+              "lines": [
+                "  // Approximate character-to-token ratio (4 chars \u2248 1 token)",
+                "  private static CHARS_PER_TOKEN = 4;"
+              ]
+            },
+            {
+              "path": "src/harness/tokenCompressor.ts",
+              "start_line": 18,
+              "end_line": 20,
+              "sha256": "26512eae1ba74fdbfce1a961f1d361cd86238d538e2fe1b62bb93c43cc89123e",
+              "lines": [
+                "  public static estimateTokens(text: string): number {",
+                "    if (!text) return 0;",
+                "    return Math.ceil(text.length / this.CHARS_PER_TOKEN);"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ],
+      "limitation": "JavaScript string length counts UTF-16 code units; source provides an approximation, not measured model-token accuracy."
+    },
+    {
+      "id": "r04",
+      "question": "When the local CLI build exists, what launch does setupNextStepsFlow pass into its flow description?",
+      "answerable": true,
+      "multi_source": true,
+      "claims": [
+        {
+          "text": "setupNextStepsFlow passes the result of resolveMcpLaunch for the workspace into describeFlow.",
+          "evidence": [
+            {
+              "path": "src/cli/setupOutput.ts",
+              "start_line": 6,
+              "end_line": 10,
+              "sha256": "e15a00485e2107b4f995b9e8ad7fc75c55f9cda31f9fa86f6370284bec2670e4",
+              "lines": [
+                "import { McpAccessEngine, resolveMcpLaunch } from '../harness/mcpAccess.js';",
+                "",
+                "export function setupNextStepsFlow(workspaceDir: string): string {",
+                "  const access = new McpAccessEngine(workspaceDir);",
+                "  return access.describeFlow({ launch: resolveMcpLaunch(workspaceDir), written: [] });"
+              ]
+            }
+          ],
+          "classification": "direct"
+        },
+        {
+          "text": "When dist/cli/index.js exists in the workspace, the resolved launch is node with arguments dist/cli/index.js and mcp.",
+          "evidence": [
+            {
+              "path": "src/harness/mcpAccess.ts",
+              "start_line": 36,
+              "end_line": 40,
+              "sha256": "bf4075cac90d6335e16f27338123e439a556634a31c72ce6d0d8142501d42f85",
+              "lines": [
+                "export function resolveMcpLaunch(workspaceDir: string): McpLaunch {",
+                "  const localBin = path.join(workspaceDir, 'dist', 'cli', 'index.js');",
+                "  if (fs.existsSync(localBin)) {",
+                "    return { command: 'node', args: ['dist/cli/index.js', 'mcp'] };",
+                "  }"
+              ]
+            }
+          ],
+          "classification": "direct"
+        }
+      ]
+    },
+    {
+      "id": "r05",
+      "question": "What real-world accuracy percentage does the token estimator achieve on production prompts?",
+      "answerable": false,
+      "multi_source": false,
+      "reason": "The selected code defines an approximation but provides no measured production accuracy.",
+      "distractors": [
+        {
+          "path": "src/harness/tokenCompressor.ts",
+          "start_line": 11,
+          "end_line": 20,
+          "sha256": "26512eae1ba74fdbfce1a961f1d361cd86238d538e2fe1b62bb93c43cc89123e"
+        }
+      ]
+    },
+    {
+      "id": "r06",
+      "question": "Who approved the choice of SHA-256 for hash anchors?",
+      "answerable": false,
+      "multi_source": false,
+      "reason": "The selected implementation shows the algorithm but identifies no approver.",
+      "distractors": [
+        {
+          "path": "src/harness/hashAnchor.ts",
+          "start_line": 14,
+          "end_line": 20,
+          "sha256": "5c44d0446b57a41ca215041410226bbcee3eb244c73fa38d174df8ad6d3031e5"
+        }
+      ]
+    }
+  ]
+}

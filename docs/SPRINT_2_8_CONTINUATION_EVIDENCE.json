@@ -1,0 +1,516 @@
+{
+  "benchmark500": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 500,
+    "samples": 30,
+    "warm": {
+      "p50": 56.25839999999971,
+      "p95": 68.36720000000014
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 140.81170000000003,
+        "p95": 164.5677
+      },
+      "candidateMs": {
+        "p50": 56.19449999999998,
+        "p95": 65.9418
+      },
+      "indexingMs": {
+        "p50": 50.7227,
+        "p95": 57.585500000000025
+      },
+      "rankingMs": {
+        "p50": 22.616199999999992,
+        "p95": 37.318899999999985
+      },
+      "pathMs": {
+        "p50": 15.403499999999838,
+        "p95": 17.322299999999927
+      },
+      "readMs": {
+        "p50": 4.872300000000109,
+        "p95": 5.487100000000055
+      },
+      "hashMs": {
+        "p50": 0.6474999999999795,
+        "p95": 0.7345000000000823
+      },
+      "excerptMs": {
+        "p50": 12.576900000000023,
+        "p95": 17.619100000000003
+      },
+      "decisionMs": {
+        "p50": 9.437600000000003,
+        "p95": 12.527600000000177
+      }
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 10.535100000000057,
+        "p95": 16.522699999999986
+      },
+      "indexingMs": {
+        "p50": 6.4211999999997715,
+        "p95": 10.528099999999995
+      },
+      "rankingMs": {
+        "p50": 5.393100000000004,
+        "p95": 8.611800000000017
+      },
+      "pathMs": {
+        "p50": 18.809699999999793,
+        "p95": 25.007599999999
+      },
+      "readMs": {
+        "p50": 6.106300000000601,
+        "p95": 7.944600000000264
+      },
+      "hashMs": {
+        "p50": 0.7987000000002809,
+        "p95": 1.0087999999991553
+      },
+      "excerptMs": {
+        "p50": 8.85590000000002,
+        "p95": 16.132500000000164
+      },
+      "decisionMs": {
+        "p50": 2.2938000000006014,
+        "p95": 3.247500000000855
+      },
+      "groundingMs": {
+        "p50": 36.97769999999991,
+        "p95": 51.682700000000295
+      },
+      "serializationMs": {
+        "p50": 0.4294999999999618,
+        "p95": 0.7154999999993379
+      }
+    }
+  },
+  "benchmark10000": {
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "records": 10000,
+    "samples": 30,
+    "warm": {
+      "p50": 102.1881000000003,
+      "p95": 120.1220000000003
+    },
+    "independentColdProcesses": {
+      "totalMs": {
+        "p50": 242.66340000000002,
+        "p95": 305.4761
+      },
+      "candidateMs": {
+        "p50": 134.9563,
+        "p95": 159.6039
+      },
+      "indexingMs": {
+        "p50": 116.3861,
+        "p95": 143.83929999999998
+      },
+      "rankingMs": {
+        "p50": 28.05699999999996,
+        "p95": 83.11959999999999
+      },
+      "pathMs": {
+        "p50": 15.243300000000147,
+        "p95": 19.823399999999936
+      },
+      "readMs": {
+        "p50": 5.030399999999872,
+        "p95": 6.10430000000008
+      },
+      "hashMs": {
+        "p50": 0.6662999999998647,
+        "p95": 0.7522999999999911
+      },
+      "excerptMs": {
+        "p50": 10.117599999999982,
+        "p95": 21.67360000000002
+      },
+      "decisionMs": {
+        "p50": 9.15560000000022,
+        "p95": 13.9101
+      }
+    },
+    "stages": {
+      "candidateMs": {
+        "p50": 50.24619999999959,
+        "p95": 60.48279999999977
+      },
+      "indexingMs": {
+        "p50": 31.884700000000066,
+        "p95": 39.0609000000004
+      },
+      "rankingMs": {
+        "p50": 7.111899999999878,
+        "p95": 39.827999999999975
+      },
+      "pathMs": {
+        "p50": 18.739799999999377,
+        "p95": 23.963000000000648
+      },
+      "readMs": {
+        "p50": 6.388900000003559,
+        "p95": 8.330500000000939
+      },
+      "hashMs": {
+        "p50": 0.8326000000024578,
+        "p95": 0.9714999999987413
+      },
+      "excerptMs": {
+        "p50": 9.54300000000012,
+        "p95": 15.934799999999996
+      },
+      "decisionMs": {
+        "p50": 2.4135000000005675,
+        "p95": 3.206700000001547
+      },
+      "groundingMs": {
+        "p50": 38.26669999999831,
+        "p95": 51.30169999999998
+      },
+      "serializationMs": {
+        "p50": 0.45859999999993306,
+        "p95": 0.6947000000000116
+      }
+    }
+  },
+  "frozen": {
+    "methodology": {
+      "reviewed": true,
+      "warmupsPerQuery": 1,
+      "samplesPerQuery": 5,
+      "answerability": "experimental lexical heuristic; not semantic proof",
+      "staleSourceTested": true
+    },
+    "retrieval": {
+      "answerableQueries": 20,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.51,
+      "recallAt5": 0.7875,
+      "microPrecisionAt5": 0.51,
+      "microRecallAt5": 0.7727272727272727,
+      "meanReciprocalRank": 0.95,
+      "relevantReturned": 51,
+      "relevantTotal": 66,
+      "maximumPrecisionAt5": 0.6599999999999999,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 9,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.3333333333333333,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.47000000000000003,
+      "recallAt5": 0.7249999999999999,
+      "microPrecisionAt5": 0.47,
+      "microRecallAt5": 0.7121212121212122,
+      "meanReciprocalRank": 0.8333333333333333,
+      "relevantReturned": 47,
+      "relevantTotal": 66,
+      "noAnswerCandidateRate": 0.4,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 4,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.16666666666666666
+    },
+    "staleProbe": {
+      "attempted": 20,
+      "candidates": 20,
+      "flagged": 20,
+      "leaks": 0
+    },
+    "latencyMs": {
+      "samples": 150,
+      "p50": 59.258599999999205,
+      "p95": 82.18870000000061
+    },
+    "passed": false
+  },
+  "bundle": {
+    "provenance": "Independently agent-authored development fixture; synthetic, not human-reviewed or blind.",
+    "execution": "MCP stdio using existing dist; no build; no agent answers generated.",
+    "latencyMs": {
+      "samples": 10,
+      "warmupsPerQuery": 1,
+      "p50": 57.2188000000001,
+      "p95": 60.88220000000001
+    },
+    "roleCandidateCoverage": [
+      {
+        "id": "holds",
+        "roles": [
+          {
+            "role": "implementation",
+            "expected": [
+              "src/holds/release.ts"
+            ],
+            "returned": [
+              "src/holds/release.ts",
+              "src/routes/holdRoutes.ts"
+            ],
+            "matched": [
+              "src/holds/release.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "test",
+            "expected": [
+              "tests/holds/release.test.ts"
+            ],
+            "returned": [
+              "tests/holds/release.test.ts"
+            ],
+            "matched": [
+              "tests/holds/release.test.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "interface",
+            "expected": [
+              "src/routes/holdRoutes.ts"
+            ],
+            "returned": [
+              "src/routes/holdRoutes.ts"
+            ],
+            "matched": [
+              "src/routes/holdRoutes.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "decision",
+            "expected": [
+              "docs/decisions/hold.md"
+            ],
+            "returned": [
+              "docs/decisions/hold.md"
+            ],
+            "matched": [
+              "docs/decisions/hold.md"
+            ],
+            "requirementStatus": "unresolved"
+          }
+        ],
+        "allExpectedRolesFound": true,
+        "canAssert": false,
+        "assertions": []
+      },
+      {
+        "id": "parcels",
+        "roles": [
+          {
+            "role": "implementation",
+            "expected": [
+              "src/parcels/dispatch.ts"
+            ],
+            "returned": [
+              "src/parcels/dispatch.ts",
+              "src/routes/parcelRoutes.ts"
+            ],
+            "matched": [
+              "src/parcels/dispatch.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "test",
+            "expected": [
+              "tests/parcels/dispatch.test.ts"
+            ],
+            "returned": [
+              "tests/parcels/dispatch.test.ts"
+            ],
+            "matched": [
+              "tests/parcels/dispatch.test.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "interface",
+            "expected": [
+              "src/routes/parcelRoutes.ts"
+            ],
+            "returned": [
+              "src/routes/parcelRoutes.ts"
+            ],
+            "matched": [
+              "src/routes/parcelRoutes.ts"
+            ],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "decision",
+            "expected": [
+              "docs/decisions/parcel.md"
+            ],
+            "returned": [
+              "docs/decisions/parcel.md"
+            ],
+            "matched": [
+              "docs/decisions/parcel.md"
+            ],
+            "requirementStatus": "unresolved"
+          }
+        ],
+        "allExpectedRolesFound": true,
+        "canAssert": false,
+        "assertions": []
+      },
+      {
+        "id": "absent",
+        "roles": [
+          {
+            "role": "implementation",
+            "expected": [],
+            "returned": [],
+            "matched": [],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "test",
+            "expected": [],
+            "returned": [],
+            "matched": [],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "interface",
+            "expected": [],
+            "returned": [],
+            "matched": [],
+            "requirementStatus": "unresolved"
+          },
+          {
+            "role": "decision",
+            "expected": [],
+            "returned": [],
+            "matched": [],
+            "requirementStatus": "unresolved"
+          }
+        ],
+        "allExpectedRolesFound": null,
+        "canAssert": false,
+        "assertions": []
+      }
+    ],
+    "deterministicAssertionCheck": {
+      "query": "Where is `releaseHold` defined?",
+      "canAssert": true,
+      "assertions": [
+        {
+          "claim": "Identifier releaseHold is defined in src/holds/release.ts.",
+          "sourcePath": "src/holds/release.ts",
+          "excerpt": "export function releaseHold(hold) { return { ...hold, state: \"released\" }; }",
+          "correctSourceAndExcerpt": true
+        }
+      ],
+      "correct": 1,
+      "total": 1
+    },
+    "conflict": {
+      "undeclared": {
+        "status": "INSUFFICIENT_EVIDENCE",
+        "canAssert": false,
+        "assertions": []
+      },
+      "declared": {
+        "status": "CONFLICTING_EVIDENCE",
+        "canAssert": false,
+        "assertions": []
+      }
+    },
+    "stale": [
+      {
+        "source": "src/stale.ts",
+        "status": "STALE_EVIDENCE",
+        "detected": true,
+        "evidenceLeaks": 0,
+        "assertionLeaks": 0
+      },
+      {
+        "source": "src/deleted.ts",
+        "status": "STALE_EVIDENCE",
+        "detected": true,
+        "evidenceLeaks": 0,
+        "assertionLeaks": 0
+      }
+    ]
+  },
+  "development": {
+    "methodology": {
+      "reviewed": false,
+      "warmupsPerQuery": 1,
+      "samplesPerQuery": 5,
+      "answerability": "experimental lexical heuristic; not semantic proof",
+      "staleSourceTested": true
+    },
+    "retrieval": {
+      "answerableQueries": 11,
+      "noAnswerQueries": 10,
+      "precisionAt5": 0.6363636363636364,
+      "recallAt5": 0.6257575757575758,
+      "microPrecisionAt5": 0.6363636363636364,
+      "microRecallAt5": 0.625,
+      "meanReciprocalRank": 0.9393939393939394,
+      "relevantReturned": 35,
+      "relevantTotal": 56,
+      "maximumPrecisionAt5": 0.9818181818181819,
+      "precisionGateValid": true,
+      "noAnswerFalsePositives": 10,
+      "answerableCoverage": 1,
+      "incorrectFirstResultRate": 0.5238095238095238,
+      "forgottenLeaks": 0
+    },
+    "grounded": {
+      "precisionAt5": 0.6000000000000001,
+      "recallAt5": 0.5878787878787879,
+      "microPrecisionAt5": 0.6,
+      "microRecallAt5": 0.5892857142857143,
+      "meanReciprocalRank": 0.7727272727272727,
+      "relevantReturned": 33,
+      "relevantTotal": 56,
+      "noAnswerCandidateRate": 0.4,
+      "noAnswerUnsupportedAssertionRate": 0,
+      "noAnswerFalsePositives": 0,
+      "noAnswerCandidateEvidence": 4,
+      "answerableCandidateCoverage": 1,
+      "supportedAnswerCoverage": 0,
+      "verifiedSupportedAssertions": 0,
+      "correctSupportedAnswers": 0,
+      "correctSupportedAnswerRate": null,
+      "unsupportedAssertions": 0,
+      "unsupportedCandidateRate": 0.19047619047619047
+    },
+    "staleProbe": {
+      "attempted": 11,
+      "candidates": 11,
+      "flagged": 11,
+      "leaks": 0
+    },
+    "latencyMs": {
+      "samples": 105,
+      "p50": 65.1898000000001,
+      "p95": 127.6193000000003
+    },
+    "passed": false
+  }
+}

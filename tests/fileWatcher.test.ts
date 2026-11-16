@@ -66,6 +66,20 @@ function watcherOptions(): chokidar.ChokidarOptions {
 }
 
 describe('FileWatcherHook — event flood taming (C4b)', () => {
+  it('reports a persistence failure and retries the next event without crashing', () => {
+    const workspace = startHook();
+    const remember = vi.spyOn(TemporalMemoryEngine.prototype, 'remember')
+      .mockImplementationOnce(() => { throw new Error('disk unavailable'); });
+    const onChange = fakeWatcher.on.mock.calls.find(([event]) => event === 'change')?.[1] as (file: string) => void;
+    const file = path.join(workspace, 'src', 'app.ts');
+
+    expect(() => onChange(file)).not.toThrow();
+    expect(console.error).toHaveBeenCalled();
+    onChange(file);
+    expect(remember).toHaveBeenCalledTimes(2);
+    expect(hooks[0].getLatestHeader()).toContain('src');
+  });
+
   it('ignores .venv, build, target, out, coverage and vendor directories', () => {
     // Given: a started watcher with the default ignore configuration
     const workspace = startHook();

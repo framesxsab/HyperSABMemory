@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { execSync, execFileSync } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { buildHandoffBrief } from '../src/cli/handoffCommand.js';
@@ -36,9 +37,7 @@ function seedStore(dir: string): void {
 }
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — handoff command (F2)', () => {

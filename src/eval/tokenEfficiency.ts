@@ -6,6 +6,7 @@
 
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
+import type { MemoryRecord } from '../memory/sqliteStore.js';
 
 export interface TokenEfficiency {
   deliveredTokens: number;
@@ -14,15 +15,17 @@ export interface TokenEfficiency {
   compressionRatio: number;
 }
 
+export function estimateNaiveCorpusTokens(records: MemoryRecord[]): number {
+  return records.reduce(
+    (sum, record) =>
+      sum + TokenCompressor.estimateTokens([record.content, (record.tags ?? []).join(' ')].filter(Boolean).join(' ')),
+    0
+  );
+}
+
 export function computeTokenEfficiency(engine: TemporalMemoryEngine): TokenEfficiency {
   const deliveredTokens = TokenCompressor.estimateTokens(engine.getContextBlock());
-  const naiveCorpusTokens = engine
-    .getActive()
-    .reduce(
-      (sum, record) =>
-        sum + TokenCompressor.estimateTokens([record.content, (record.tags ?? []).join(' ')].filter(Boolean).join(' ')),
-      0
-    );
+  const naiveCorpusTokens = estimateNaiveCorpusTokens(engine.getActive());
 
   const savingsPct =
     naiveCorpusTokens === 0 ? 0 : Math.max(0, Math.round((1 - deliveredTokens / naiveCorpusTokens) * 1000) / 10);

@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
+import fsDefault from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
@@ -9,9 +12,7 @@ const dirs: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 function tmpWorkspace(): string {
@@ -19,6 +20,44 @@ function tmpWorkspace(): string {
   dirs.push(dir);
   return dir;
 }
+
+it('reads the current store once on first use and detects later same-size rewrites', () => {
+  const workspace = tmpWorkspace();
+  const dir = path.join(workspace, '.hypersabmemory');
+  fs.mkdirSync(dir);
+  const filename = path.join(dir, 'memory_store.json');
+  const record = { id: 'a', category: 'general', content: 'alpha', status: 'active', timestamp: '2026-01-01T00:00:00.000Z' };
+  fs.writeFileSync(filename, JSON.stringify([record]));
+  const read = fsDefault.readFileSync;
+  let reads = 0;
+  try {
+    vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, options?: unknown) => {
+      if (String(file) === filename) reads++;
+      return read(file, options as never);
+    }) as typeof fs.readFileSync);
+    syncBuiltinESMExports();
+    const engine = new TemporalMemoryEngine(workspace);
+    expect(reads).toBe(0);
+    fs.writeFileSync(filename, JSON.stringify([{ ...record, content: 'bravo' }]));
+    expect(engine.getActive()[0].content).toBe('bravo');
+    expect(reads).toBe(1);
+    fs.writeFileSync(filename, JSON.stringify([{ ...record, content: 'delta' }]));
+    expect(engine.getActive()[0].content).toBe('delta');
+    expect(reads).toBe(2);
+  } finally { vi.restoreAllMocks(); syncBuiltinESMExports(); }
+});
+
+it('recovers a backup on first use of a deferred memory engine', () => {
+  const workspace = tmpWorkspace();
+  const dir = path.join(workspace, '.hypersabmemory');
+  const writer = new SqliteStore(dir);
+  writer.set({ id: 'a', category: 'decision', content: 'recoverable fact' });
+  fs.writeFileSync(path.join(dir, 'memory_store.json'), '{invalid');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const memory = new TemporalMemoryEngine(workspace);
+  expect(memory.getActive().map(item => item.content)).toEqual(['recoverable fact']);
+  expect(warn).toHaveBeenCalled();
+});
 
 describe('TemporalMemoryEngine.remember — seeded facts are never superseded (F1)', () => {
   it('keeps an active seeded fact untouched when a near-duplicate user fact arrives', () => {
@@ -51,8 +90,8 @@ describe('TemporalMemoryEngine.remember — seeded facts are never superseded (F
   });
 });
 
-describe('TemporalMemoryEngine.remember — batched persistence (C4a)', () => {
-  it('saves the store exactly once for all supersedes when one remember supersedes multiple records', () => {
+describe('TemporalMemoryEngine.remember — transactional persistence', () => {
+  it('writes one transaction for every matching supersede', () => {
     // Given: three active architecture facts that all duplicate the incoming content
     const workspace = tmpWorkspace();
     const seeder = new SqliteStore(path.join(workspace, '.hypersabmemory'));
@@ -65,7 +104,7 @@ describe('TemporalMemoryEngine.remember — batched persistence (C4a)', () => {
       });
     }
     const engine = new TemporalMemoryEngine(workspace);
-    const saveSpy = vi.spyOn(SqliteStore.prototype, 'saveStore');
+    const transactionSpy = vi.spyOn(SqliteStore.prototype, 'setAndSupersede');
 
     // When: a single remember() call supersedes all three duplicates
     const record = engine.remember(
@@ -73,11 +112,8 @@ describe('TemporalMemoryEngine.remember — batched persistence (C4a)', () => {
       'Watcher floods the store with architecture facts per changed file'
     );
 
-    // Then: exactly ONE save happens after the supersede loop completes.
-    // The first call is set()'s own inherent persist (pinned contract: set()
-    // keeps persisting on every call); everything after the loop must be one
-    // batched save, not one save per superseded record.
-    expect(saveSpy.mock.calls.length - 1).toBe(1);
+    // Then: the new fact and every supersede use one store transaction.
+    expect(transactionSpy).toHaveBeenCalledTimes(1);
 
     // And semantics are preserved: the single batched save persisted every flip
     const persisted = new SqliteStore(path.join(workspace, '.hypersabmemory'));
@@ -90,17 +126,34 @@ describe('TemporalMemoryEngine.remember — batched persistence (C4a)', () => {
     expect(persisted.get(record.id)?.status).toBe('active');
   });
 
-  it('keeps set() as the only save when remember finds no duplicates', () => {
+  it('uses one transaction when remember finds no duplicates', () => {
     // Given: an empty store and a fresh engine
     const workspace = tmpWorkspace();
     const engine = new TemporalMemoryEngine(workspace);
-    const saveSpy = vi.spyOn(SqliteStore.prototype, 'saveStore');
+    const transactionSpy = vi.spyOn(SqliteStore.prototype, 'setAndSupersede');
 
     // When: a remember() with no duplicate/contradiction matches runs
     const record = engine.remember('decision', 'Unique QUANTUMWIDGET routing fact with no twins');
 
-    // Then: only set()'s own save happened and the record is active
-    expect(saveSpy).toHaveBeenCalledTimes(1);
+    // Then: one atomic store transaction happened and the record is active
+    expect(transactionSpy).toHaveBeenCalledTimes(1);
     expect(record.status).toBe('active');
+  });
+
+  it('does not expose a new fact or supersede old facts when the atomic write fails', () => {
+    const workspace = tmpWorkspace();
+    const storeDir = path.join(workspace, '.hypersabmemory');
+    const seeder = new SqliteStore(storeDir);
+    seeder.set({ id: 'old', category: 'architecture', content: 'The stable widget route uses local state.' });
+    const engine = new TemporalMemoryEngine(workspace);
+    fs.mkdirSync(path.join(storeDir, 'memory_store.json.tmp'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => engine.remember('architecture', 'The stable widget route uses local state. Updated.')).toThrow();
+
+    const persisted = new SqliteStore(storeDir);
+    expect(persisted.get('old')?.status).toBe('active');
+    expect(persisted.getAll()).toHaveLength(1);
+    expect(engine.getActive().map(({ id }) => id)).toEqual(['old']);
   });
 });

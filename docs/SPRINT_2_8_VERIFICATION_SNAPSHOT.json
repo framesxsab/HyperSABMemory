@@ -1,0 +1,695 @@
+{
+  "createdAt": "2026-11-11T16:57:53.624Z",
+  "workspace": "C:\\Users\\singa\\Desktop\\hypermemory-sprint2.5",
+  "head": "592f054acb5409d3ee93bc4eb2e7fdeb581fa9fa",
+  "branch": "feature/sprint2.5-20261106",
+  "gitStatus": [
+    " M .agents/skills/hypersabmemory/SKILL.md",
+    " M .github/ISSUE_TEMPLATE/bug_report.md",
+    " M .github/ISSUE_TEMPLATE/config.yml",
+    " M .github/ISSUE_TEMPLATE/feature_request.md",
+    " M .github/PULL_REQUEST_TEMPLATE.md",
+    " M .github/workflows/ci.yml",
+    " M .github/workflows/release.yml",
+    " M .gitignore",
+    " M Architecture.md",
+    " M CHANGELOG.md",
+    " M CODE_OF_CONDUCT.md",
+    " M CONTRIBUTING.md",
+    " M Design.md",
+    " M PRD.md",
+    " M Phases.md",
+    " M README.md",
+    " M Rules.md",
+    " M SECURITY.md",
+    " M package-lock.json",
+    " M package.json",
+    " M src/cli/doctor.ts",
+    " M src/cli/evalCommand.ts",
+    " M src/cli/handoffCommand.ts",
+    " M src/cli/index.ts",
+    " M src/cli/memoryCommands.ts",
+    " M src/cli/oneShotSetup.ts",
+    " M src/eval/tokenEfficiency.ts",
+    " M src/harness/ghostPaths.ts",
+    " M src/hooks/autoCommit.ts",
+    " M src/hooks/fileWatcher.ts",
+    " M src/index.ts",
+    " M src/mcp/server.ts",
+    " M src/memory/fileLock.ts",
+    " M src/memory/hybridSearch.ts",
+    " M src/memory/sqliteStore.ts",
+    " M src/memory/structuralGraph.ts",
+    " M src/memory/swarmMesh.ts",
+    " M src/memory/temporalMemory.ts",
+    " M src/version.ts",
+    " M tests/autoCommit.test.ts",
+    " M tests/autoCommitGuards.test.ts",
+    " M tests/benchReport.test.ts",
+    " M tests/cli.test.ts",
+    " M tests/concurrency.test.ts",
+    " M tests/contextHeader.test.ts",
+    " M tests/doctorVerify.test.ts",
+    " M tests/fileWatcher.test.ts",
+    " M tests/handoffCommand.test.ts",
+    " M tests/hybridSearch.test.ts",
+    " M tests/mcpQuery.test.ts",
+    " M tests/mcpResources.test.ts",
+    " M tests/privacy.test.ts",
+    " M tests/removeCommand.test.ts",
+    " M tests/seeding.test.ts",
+    " M tests/sqliteStore.test.ts",
+    " M tests/storeContainment.test.ts",
+    " M tests/temporalMemory.test.ts",
+    "?? CLEANUP-RESULTS.md",
+    "?? cleanup-inventory.md",
+    "?? code-cleanup-audit.md",
+    "?? docs/SPRINT_2_1_EVALUATION.md",
+    "?? docs/SPRINT_2_3_RETRIEVAL_DIAGNOSIS.json",
+    "?? docs/SPRINT_2_3_RETRIEVAL_DIAGNOSIS.md",
+    "?? docs/SPRINT_2_4_RESULTS.md",
+    "?? docs/SPRINT_2_4_RETRIEVAL_DIAGNOSIS.json",
+    "?? docs/SPRINT_2_5_DEVELOPMENT_RESULTS.json",
+    "?? docs/SPRINT_2_5_RESULTS.md",
+    "?? docs/SPRINT_2_6_RESULTS.md",
+    "?? docs/SPRINT_2_7_CLOSEOUT.json",
+    "?? docs/SPRINT_2_7_EVIDENCE.json",
+    "?? docs/SPRINT_2_7_RESULTS.md",
+    "?? docs/SPRINT_2_7_STEMMING_EVIDENCE.json",
+    "?? docs/SPRINT_2_8_CONTINUATION_EVIDENCE.json",
+    "?? docs/SPRINT_2_8_EVIDENCE.json",
+    "?? docs/SPRINT_2_8_RESULTS.md",
+    "?? docs/V2_BASELINE.md",
+    "?? docs/V2_RESEARCH_AND_SPRINT.md",
+    "?? scheduled-tasks-audit.md",
+    "?? scheduled-tasks-inventory.csv",
+    "?? scheduled-tasks-triage.csv",
+    "?? scripts/assertion-eligibility.mjs",
+    "?? scripts/build.mjs",
+    "?? scripts/cleanup-dry-run.ps1",
+    "?? scripts/cleanup-safe.ps1",
+    "?? scripts/grounded-benchmark.mjs",
+    "?? scripts/grounded-source-ref-benchmark.mjs",
+    "?? scripts/package-smoke.mjs",
+    "?? scripts/repository-ranking-experiment.mjs",
+    "?? scripts/repository-task-calibrate.mjs",
+    "?? scripts/repository-task-diagnose.mjs",
+    "?? scripts/repository-task-eval.mjs",
+    "?? scripts/retrieval-baseline.mjs",
+    "?? scripts/sprint25-development-eval.mjs",
+    "?? scripts/sprint26-blind-eval.mjs",
+    "?? scripts/sprint26-dev-ranking-probe.mjs",
+    "?? scripts/sprint26-field-probe.mjs",
+    "?? scripts/sprint26-graph-blind-eval.mjs",
+    "?? scripts/sprint27-blind-agent-eval.mjs",
+    "?? scripts/sprint27-controlled-dev-eval.mjs",
+    "?? scripts/sprint27-diversity-probe.mjs",
+    "?? scripts/sprint27-evidence-probe.mjs",
+    "?? scripts/sprint27-relationship-probe.mjs",
+    "?? scripts/sprint27-stemming-probe.mjs",
+    "?? scripts/sprint28-evidence-eval.mjs",
+    "?? src/cli/colors.ts",
+    "?? src/eval/repositoryBaseline.ts",
+    "?? src/eval/repositoryTaskEvaluation.ts",
+    "?? src/eval/repositoryTaskFixture.ts",
+    "?? src/eval/sprint25DevelopmentFixture.ts",
+    "?? src/harness/taskContext.ts",
+    "?? src/harness/taskSources.ts",
+    "?? src/mcp/taskTools.ts",
+    "?? src/memory/groundedSearch.ts",
+    "?? src/memory/taskLedger.ts",
+    "?? tests/atomicStoreWrites.test.ts",
+    "?? tests/colors.test.ts",
+    "?? tests/ghostPathsRetry.test.ts",
+    "?? tests/groundedSearch.test.ts",
+    "?? tests/packageMetadata.test.ts",
+    "?? tests/repositoryBaseline.test.ts",
+    "?? tests/repositoryTaskEvaluation.test.ts",
+    "?? tests/sprint25DevelopmentFixture.test.ts",
+    "?? tests/sprint28FactReconciliation.test.ts",
+    "?? tests/taskLedger.test.ts",
+    "?? tests/taskProcesses.test.ts",
+    "?? tests/testUtils.test.ts",
+    "?? tests/testUtils.ts",
+    "?? vitest.config.ts"
+  ],
+  "files": [
+    {
+      "path": "package-lock.json",
+      "bytes": 102089,
+      "sha256": "5233f80390717d76571120c7d3be733ba05139241dad973f55da788e26444334"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2005,
+      "sha256": "0fae7131ba08796416db986a48f133ff92899303c052e276534f216865b95659"
+    },
+    {
+      "path": "scripts/assertion-eligibility.mjs",
+      "bytes": 2580,
+      "sha256": "a1ca4104f67fcab54d6244fa0c6913386332db060fbf109325b1fef3e1a684ec"
+    },
+    {
+      "path": "scripts/build.mjs",
+      "bytes": 576,
+      "sha256": "aa945c131437709910730d5a7dabc7a033915704f2ba87595b580d143bd2c97e"
+    },
+    {
+      "path": "scripts/cleanup-dry-run.ps1",
+      "bytes": 86,
+      "sha256": "42062e9d167b88b2ef6b3e6e438aecf9bed22031b33eb522bb357ec72ea49d6a"
+    },
+    {
+      "path": "scripts/cleanup-safe.ps1",
+      "bytes": 88,
+      "sha256": "99a9c31d6bb6ef96a703e9ccd4593a8459d1912662791b8e225c0d73fb43fa69"
+    },
+    {
+      "path": "scripts/grounded-benchmark.mjs",
+      "bytes": 5287,
+      "sha256": "184cc0a260bfc8cd687dff24bb10c398efed6dd9985ba304b26f973995f88d54"
+    },
+    {
+      "path": "scripts/grounded-source-ref-benchmark.mjs",
+      "bytes": 1775,
+      "sha256": "43fd4a2f083cff9ac1fafb9ac2598023be08fdcbb369a739918c580a87510568"
+    },
+    {
+      "path": "scripts/package-smoke.mjs",
+      "bytes": 16455,
+      "sha256": "e9827daed38aa07d01a6b01745c0982d2f2dd2224a899ea0e1573b300a91f1b2"
+    },
+    {
+      "path": "scripts/repository-ranking-experiment.mjs",
+      "bytes": 2333,
+      "sha256": "3aa5e52666c239ff4cc747e93ad0bb7e050e3ff9a04e156223c2db6915259815"
+    },
+    {
+      "path": "scripts/repository-task-calibrate.mjs",
+      "bytes": 181,
+      "sha256": "8a03dfc3a57a0a9c24583510861ddf36a1210a5c02563b8605f664edae682515"
+    },
+    {
+      "path": "scripts/repository-task-diagnose.mjs",
+      "bytes": 1811,
+      "sha256": "fec4ecd93903ed2eed4cf8e40b34e0bd3e1ab9f9aed258aa9214bc67ee6d3cda"
+    },
+    {
+      "path": "scripts/repository-task-eval.mjs",
+      "bytes": 252,
+      "sha256": "1ff0c50e526b6b8b489c682e0d3eaa342bf4b05be40e0a232da756eedf5baa0f"
+    },
+    {
+      "path": "scripts/retrieval-baseline.mjs",
+      "bytes": 319,
+      "sha256": "04c624dcec03abcfdb82c0f9b23395afafb7231a3458a77c2eb7875bc9bcdfb9"
+    },
+    {
+      "path": "scripts/sprint25-development-eval.mjs",
+      "bytes": 993,
+      "sha256": "4b6e238122bd31efa94048fa8fa539f16953e9772e89f234126f9dc613c7eb42"
+    },
+    {
+      "path": "scripts/sprint26-blind-eval.mjs",
+      "bytes": 8247,
+      "sha256": "5416aeb74e59e86ec03c2b3c32a835a246a3bdc480048530255aba53599bf48a"
+    },
+    {
+      "path": "scripts/sprint26-dev-ranking-probe.mjs",
+      "bytes": 4044,
+      "sha256": "60ec16997e0d88cd03ab53211524f6ee959665e28f66268215d4b7437660a895"
+    },
+    {
+      "path": "scripts/sprint26-field-probe.mjs",
+      "bytes": 4685,
+      "sha256": "fd0dfb2ea3e1c5dd97c3a3ef3e40df0f37fa90ec1f7b38a7a8376d1d4c79cbc3"
+    },
+    {
+      "path": "scripts/sprint26-graph-blind-eval.mjs",
+      "bytes": 6394,
+      "sha256": "0f38f0552605c236555a7bfd48fb585cff6ce4436293f40310e083ca8c3c05dc"
+    },
+    {
+      "path": "scripts/sprint27-blind-agent-eval.mjs",
+      "bytes": 6235,
+      "sha256": "418757205606c86604d7b095e3c68da9a68f2898cf644998cbaf725317725c24"
+    },
+    {
+      "path": "scripts/sprint27-controlled-dev-eval.mjs",
+      "bytes": 5496,
+      "sha256": "6409b8eae1ec2cb987fd92ee757097b7a67055ccc48ecbf5ecba3759ee6c57e0"
+    },
+    {
+      "path": "scripts/sprint27-diversity-probe.mjs",
+      "bytes": 3602,
+      "sha256": "3261d6742955106df41d0efee88dd4f80563c637fc005ba6930f360b123d426d"
+    },
+    {
+      "path": "scripts/sprint27-evidence-probe.mjs",
+      "bytes": 6649,
+      "sha256": "7cdb3e50fd8261eb536c0845c52080f79950022db01bdb9b5fbb3e1efa663ded"
+    },
+    {
+      "path": "scripts/sprint27-relationship-probe.mjs",
+      "bytes": 4226,
+      "sha256": "a303dedfb9adb987723489184b875e7296db3a5338a692f6955e245cc59b42d2"
+    },
+    {
+      "path": "scripts/sprint27-stemming-probe.mjs",
+      "bytes": 6093,
+      "sha256": "bad02a556f4fbaaf7839178bd9b7ea6501349467b32089c096f38f893b25d4b0"
+    },
+    {
+      "path": "scripts/sprint28-evidence-eval.mjs",
+      "bytes": 7812,
+      "sha256": "2917b54d1d9fc6548f92ea0c7ed9475e502e48d73523b46619f1ff9c8989c013"
+    },
+    {
+      "path": "src/cli/cliUtils.ts",
+      "bytes": 1099,
+      "sha256": "917f25ac738b397a02e1319f82eccfdb7057cd318f8a16796e5b4dc2d7b83e31"
+    },
+    {
+      "path": "src/cli/colors.ts",
+      "bytes": 750,
+      "sha256": "8576ba5eab92112d9ae702097baf7ab25b8c09ea4b075b0596474cd5f1f44afa"
+    },
+    {
+      "path": "src/cli/doctor.ts",
+      "bytes": 9913,
+      "sha256": "2b7a1d56a6948d9180c17d18da64e3e9b65236c882aefc2f1e1f89f6ea4a6af1"
+    },
+    {
+      "path": "src/cli/evalCommand.ts",
+      "bytes": 1914,
+      "sha256": "35d14272907c2c8c3d619c73497efc20bf3619337aefaf13c27b0a2701721dcc"
+    },
+    {
+      "path": "src/cli/handoffCommand.ts",
+      "bytes": 5635,
+      "sha256": "2775945518ba3ea15b5cb2b1d61253f56378f34f49a7975b5101fdad42c0873e"
+    },
+    {
+      "path": "src/cli/index.ts",
+      "bytes": 18696,
+      "sha256": "c2830d4efd3b7014f38dc101529d8a9f8c12872693c653039a63d471f518dd4e"
+    },
+    {
+      "path": "src/cli/memoryCommands.ts",
+      "bytes": 3229,
+      "sha256": "8215543d1e4d7267dee3fb4cdfb1cacbc01b6395f3514fe6930990a30c2f6fa3"
+    },
+    {
+      "path": "src/cli/oneShotSetup.ts",
+      "bytes": 7390,
+      "sha256": "7af24c0eca02a095f8f0bd0629115e6ee7946ba19388bc4402e9c59f019aeb65"
+    },
+    {
+      "path": "src/cli/removeCommand.ts",
+      "bytes": 4363,
+      "sha256": "3611896503709e4c9be5a8f8926b883cdeb73278af98f34c6420b295319bcca0"
+    },
+    {
+      "path": "src/cli/setupOutput.ts",
+      "bytes": 422,
+      "sha256": "e15a00485e2107b4f995b9e8ad7fc75c55f9cda31f9fa86f6370284bec2670e4"
+    },
+    {
+      "path": "src/eval/memoryBench.ts",
+      "bytes": 16606,
+      "sha256": "40edd46dde607127989484516ea9248cf98816ea1e0ae1d5c8f0c0aaac2d2238"
+    },
+    {
+      "path": "src/eval/repositoryBaseline.ts",
+      "bytes": 12148,
+      "sha256": "99af703853fa6107a7d645db8f839a0eb6d17339462b4585a39fdefb9273dfdd"
+    },
+    {
+      "path": "src/eval/repositoryTaskEvaluation.ts",
+      "bytes": 21279,
+      "sha256": "777c2fa3143c51b45eb9e98c0c945c309c39e514de5f822ef2882c1b94942eb5"
+    },
+    {
+      "path": "src/eval/repositoryTaskFixture.ts",
+      "bytes": 7558,
+      "sha256": "e3f7b9b138c9ac3f88b71e0d76e14a26db611db9ffbb76a206fedda10b4a599c"
+    },
+    {
+      "path": "src/eval/sprint25DevelopmentFixture.ts",
+      "bytes": 4063,
+      "sha256": "b047930ca8144bfca043616e4d9bbe2020410c0713d8be142b7b8830a620abf6"
+    },
+    {
+      "path": "src/eval/tokenEfficiency.ts",
+      "bytes": 1390,
+      "sha256": "237dc88d070268e47ed2b04904324640c8de27a6a1f7da5d21db6fab35d776e1"
+    },
+    {
+      "path": "src/harness/contextHarness.ts",
+      "bytes": 3749,
+      "sha256": "95fe985ee93e6709202c1708a07878e903793edc86e75814917d2e7356452790"
+    },
+    {
+      "path": "src/harness/ghostPaths.ts",
+      "bytes": 3677,
+      "sha256": "8ef4f6eaaa2820f47760fa8bf42a11ff32048a54231fa7117538af30d12f8ca4"
+    },
+    {
+      "path": "src/harness/hashAnchor.ts",
+      "bytes": 1491,
+      "sha256": "5c44d0446b57a41ca215041410226bbcee3eb244c73fa38d174df8ad6d3031e5"
+    },
+    {
+      "path": "src/harness/mcpAccess.ts",
+      "bytes": 3903,
+      "sha256": "bf4075cac90d6335e16f27338123e439a556634a31c72ce6d0d8142501d42f85"
+    },
+    {
+      "path": "src/harness/minimalChange.ts",
+      "bytes": 2239,
+      "sha256": "ada0f9bef3d9d967bab2ce1c2fe5eae486fc5360be56140bf07733bbd27ea75e"
+    },
+    {
+      "path": "src/harness/taskContext.ts",
+      "bytes": 4862,
+      "sha256": "744423f78c5943339376578c0ac4022a2b3dbfd45c93683f1230da9e091be4a2"
+    },
+    {
+      "path": "src/harness/taskSources.ts",
+      "bytes": 8239,
+      "sha256": "7cc8c4048b5a096a5d77ddf5e3129b9c775f4118f9db7d1d326207d6c71b2cfa"
+    },
+    {
+      "path": "src/harness/tokenCompressor.ts",
+      "bytes": 2250,
+      "sha256": "26512eae1ba74fdbfce1a961f1d361cd86238d538e2fe1b62bb93c43cc89123e"
+    },
+    {
+      "path": "src/harness/universalAdapters.ts",
+      "bytes": 8053,
+      "sha256": "d0a6e71a8ac2dd7bfdbba896b8133f980af95b3d030ade15aea017de572eca76"
+    },
+    {
+      "path": "src/hooks/autoCommit.ts",
+      "bytes": 12251,
+      "sha256": "a50a5a86925ab079dc6aed89fbe55e3cb23f2fa197bf73e4e4ff0945ac0ceab7"
+    },
+    {
+      "path": "src/hooks/fileWatcher.ts",
+      "bytes": 5456,
+      "sha256": "955d1293f5d53a59613b9c78d45d0576258d03491500560e9b3761df1fff62e7"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 2141,
+      "sha256": "efba32dd117243fdb2d218b4fa23fc6c30868c809c6df7903ec2048230bd7cd5"
+    },
+    {
+      "path": "src/mcp/server.ts",
+      "bytes": 19548,
+      "sha256": "a56f8d707b78daa64769a1581ccc1029542bba4846a783801afcfaa7ef8d4640"
+    },
+    {
+      "path": "src/mcp/taskTools.ts",
+      "bytes": 21876,
+      "sha256": "23193cc682a74cfe888338604a8081debfa0eb8da60af2850d89d5a7cad45fb0"
+    },
+    {
+      "path": "src/memory/contextBlock.ts",
+      "bytes": 3555,
+      "sha256": "368d6a74c557772839b71b217a2924ca8a8b14513bbd0dab125ae50f53b51216"
+    },
+    {
+      "path": "src/memory/fileLock.ts",
+      "bytes": 4169,
+      "sha256": "a487e3229ae28146f906f84a3a226ff3a8d6970fdd4daf7c8a02caba9bd981cc"
+    },
+    {
+      "path": "src/memory/groundedSearch.ts",
+      "bytes": 17479,
+      "sha256": "43b83872dd96d40a698a83292f961386f1d5b28fd15c6421657c6dbb74de2de7"
+    },
+    {
+      "path": "src/memory/hybridSearch.ts",
+      "bytes": 17784,
+      "sha256": "d04dd19db650e6a92828c4b3ee2f9ecac1a2270823564c9be95f543a7cefa659"
+    },
+    {
+      "path": "src/memory/seeding.ts",
+      "bytes": 6040,
+      "sha256": "15996c6148dc002ccb9611dbd2dc90297a40194616615de81d4e1c5d291b6263"
+    },
+    {
+      "path": "src/memory/sqliteStore.ts",
+      "bytes": 7805,
+      "sha256": "09e66a8f49b85e1d1b7eca0d0f1f8bb36becd89ba362ce701fb7eb72b720db0a"
+    },
+    {
+      "path": "src/memory/structuralGraph.ts",
+      "bytes": 2979,
+      "sha256": "c0577994aa43def2c65e06454a03ba5a572298778416083f145b4864dcff4039"
+    },
+    {
+      "path": "src/memory/swarmMesh.ts",
+      "bytes": 8184,
+      "sha256": "5fb381b415a2622ec1cf0cd0db3f331b0436eaeb0bc5faad212c2e1b7e5aebe2"
+    },
+    {
+      "path": "src/memory/taskLedger.ts",
+      "bytes": 20394,
+      "sha256": "80348ce4035b15bb7c78667d8d3278ebc9c82120cba810590f2fb257a61514d8"
+    },
+    {
+      "path": "src/memory/temporalMemory.ts",
+      "bytes": 5752,
+      "sha256": "d0970436d11365b1e1efba2c5323562ffaf0e42edd5174e3a83c807624f9f60b"
+    },
+    {
+      "path": "src/server/dashboardServer.ts",
+      "bytes": 26267,
+      "sha256": "52b634731d499a670d0d90d8ea22aad03fc9f269c96d3a26d6137ac081f02859"
+    },
+    {
+      "path": "src/version.ts",
+      "bytes": 500,
+      "sha256": "27eef2b84267b5885aa6e7f5e4ffba4b605b016d63c2e54c38431ee03072de89"
+    },
+    {
+      "path": "tests/atomicStoreWrites.test.ts",
+      "bytes": 2833,
+      "sha256": "d7c2c98a2d10322d205054eb4fc4eae7d17f84760cb4511cdabd388dbcadc939"
+    },
+    {
+      "path": "tests/autoCommit.test.ts",
+      "bytes": 11374,
+      "sha256": "752403c1a31316440cf96f9ce815e6a9ed3ad7c22a756d46c5a7949630a2ab56"
+    },
+    {
+      "path": "tests/autoCommitGuards.test.ts",
+      "bytes": 3203,
+      "sha256": "8848c727e576d7d5b7df84362ae00270ee07e797b8dd33797a84a5aa43b70f12"
+    },
+    {
+      "path": "tests/benchReport.test.ts",
+      "bytes": 4393,
+      "sha256": "e38a1baf612ee496f6013945396e89e34728f0fea4f6484f3411f2abf0c942fc"
+    },
+    {
+      "path": "tests/cli.test.ts",
+      "bytes": 6412,
+      "sha256": "efcc9a91bc3aed2b688b8de772875af02e33bc21455c8aa78ab1bc9f85f8e42d"
+    },
+    {
+      "path": "tests/colors.test.ts",
+      "bytes": 1294,
+      "sha256": "fd535801a595f65df606065c6fcd3ea4070f666d36098f12a3e18614a89c6770"
+    },
+    {
+      "path": "tests/concurrency.test.ts",
+      "bytes": 11138,
+      "sha256": "e4304d1a25d785d4b2d9e45763767cf1ed255b15af61d252629f8ba6ba9ff40f"
+    },
+    {
+      "path": "tests/contextBlock.test.ts",
+      "bytes": 8443,
+      "sha256": "ea5048debe34d7045dc7c04900dd456feef1bfd938cf06f77dbd9c02fa14da60"
+    },
+    {
+      "path": "tests/contextHeader.test.ts",
+      "bytes": 3015,
+      "sha256": "d8ac958b9949faa0f38fde7ef91e7f629659820f79649ea8b2afb3335d54c58c"
+    },
+    {
+      "path": "tests/dashboard.test.ts",
+      "bytes": 9381,
+      "sha256": "48c8c7e39f674eedb4d6b09cc3505003e0a11945bad50ffe7def2b12db287ae6"
+    },
+    {
+      "path": "tests/doctorVerify.test.ts",
+      "bytes": 5953,
+      "sha256": "78c9349fd45cfa5ae83252093181ca0b0952d72338be39eea034222202cad69f"
+    },
+    {
+      "path": "tests/fileWatcher.test.ts",
+      "bytes": 6369,
+      "sha256": "77168626849581d1f4e94dbf41de7fa93049484ca25895cdd98283f642125a08"
+    },
+    {
+      "path": "tests/ghostPaths.test.ts",
+      "bytes": 6891,
+      "sha256": "eccd5eb247416287ae78f518c19f210a626a01a8a51d1dcd4c040ebee24edc8d"
+    },
+    {
+      "path": "tests/ghostPathsRetry.test.ts",
+      "bytes": 732,
+      "sha256": "9f43400fec830136941e475d5d8058879008424c7427bca7c1b4f2cc0ddfc505"
+    },
+    {
+      "path": "tests/groundedSearch.test.ts",
+      "bytes": 35357,
+      "sha256": "9c31b54e5684806639adff81e54f9a6ec24cd3fdcd36c6042b963deb52c0b066"
+    },
+    {
+      "path": "tests/handoffCommand.test.ts",
+      "bytes": 4171,
+      "sha256": "48998580eee8a62043ef73ead0540765329adf796a749e5c6fbe0bc01f2fb0b4"
+    },
+    {
+      "path": "tests/harness.test.ts",
+      "bytes": 8959,
+      "sha256": "6b1d6b1d83a985a0dd476ab65a192abaf78b3afa42d237e38711f91990382401"
+    },
+    {
+      "path": "tests/hybridSearch.test.ts",
+      "bytes": 15126,
+      "sha256": "d79d83d053bbb36a8af48a587d7634e5f2f324852ce3d348f36e2c9fd3f5708e"
+    },
+    {
+      "path": "tests/mcpQuery.test.ts",
+      "bytes": 5797,
+      "sha256": "4a7da82183de59a26314ae60c7bd7c8c90d817db42d99085db1631f29a35295e"
+    },
+    {
+      "path": "tests/mcpResources.test.ts",
+      "bytes": 3200,
+      "sha256": "9b77f6d1137755df964276391074c78f6f780eb3d3f14b9ee0b8946fc6c44e3b"
+    },
+    {
+      "path": "tests/memorybench.test.ts",
+      "bytes": 8934,
+      "sha256": "b9e770b245c4feecde908fedee68ebce4b35b19a3d5dd58c557a2af51f4d631d"
+    },
+    {
+      "path": "tests/packageMetadata.test.ts",
+      "bytes": 1687,
+      "sha256": "d894ab6e5b9beb0f272ad776df1282f9e7442acb5d72f1e3902ab292e9e670b4"
+    },
+    {
+      "path": "tests/privacy.test.ts",
+      "bytes": 1522,
+      "sha256": "93731d6b1ab6ebd4521186c8fcc42d240c12eac16e2c3879cd5fe441daca2565"
+    },
+    {
+      "path": "tests/removeCommand.test.ts",
+      "bytes": 4650,
+      "sha256": "3e3b0770e07d0a7413bcb27c9f4dd69bf2d9affbf31e7dc0010ebdbb8a997f61"
+    },
+    {
+      "path": "tests/repositoryBaseline.test.ts",
+      "bytes": 1586,
+      "sha256": "debff675d330d4e4c419c14691bd695fb9addb6454299ea7274f775742d0f7d1"
+    },
+    {
+      "path": "tests/repositoryTaskEvaluation.test.ts",
+      "bytes": 2059,
+      "sha256": "a2d37d0ea0d724d1af6a60b7aa090cb594f2b5db9a80164acb3de2bf3c1d3fe1"
+    },
+    {
+      "path": "tests/seeding.test.ts",
+      "bytes": 8158,
+      "sha256": "96da519e8c19f064e2d9c526076bdb2bc61fe92b4c9fd279669e8a40a7a6ab5d"
+    },
+    {
+      "path": "tests/setupOutput.test.ts",
+      "bytes": 983,
+      "sha256": "8f2c4ba1096354691bcf9639d0aa8694c23c5649600d28d3ecfc177284111bd3"
+    },
+    {
+      "path": "tests/sprint25DevelopmentFixture.test.ts",
+      "bytes": 1825,
+      "sha256": "00f0220af38b412ec66ca781e0e4aa24bc9604db183bedd1d387b50a86b37386"
+    },
+    {
+      "path": "tests/sprint28FactReconciliation.test.ts",
+      "bytes": 5765,
+      "sha256": "a17754e02902af6e8341fc4bbfc512b5eead74e0a873112774934788ece70eb6"
+    },
+    {
+      "path": "tests/sqliteStore.test.ts",
+      "bytes": 6554,
+      "sha256": "00c495c75eaad69551374be910ee7603338dc5b255bb4f4c7cb2eca8683a8cc0"
+    },
+    {
+      "path": "tests/storeContainment.test.ts",
+      "bytes": 2760,
+      "sha256": "a084f164ac912b656b7de7ab4ff9709557a557050d718a1ae6dcabcfd0241278"
+    },
+    {
+      "path": "tests/swarmMesh.test.ts",
+      "bytes": 6085,
+      "sha256": "51ad09bafc563a1dc311bd3bc7a15d94dc6fff5cba539fc25287b6896ddcbec5"
+    },
+    {
+      "path": "tests/taskLedger.test.ts",
+      "bytes": 9569,
+      "sha256": "ef3b0b53f90472da9e70d7f05c17d4254607a5cc9422c279ff30a17afe4086e2"
+    },
+    {
+      "path": "tests/taskProcesses.test.ts",
+      "bytes": 25971,
+      "sha256": "fe472441fa4460083153587bb94b272e8d1708c7065bb139dfc720ea4468a750"
+    },
+    {
+      "path": "tests/temporalMemory.test.ts",
+      "bytes": 5024,
+      "sha256": "c6cb6507b455bd1f0e05cfb97480b7241fb80e02e670630b8e485b0651216754"
+    },
+    {
+      "path": "tests/testUtils.test.ts",
+      "bytes": 501,
+      "sha256": "2fb32b7dfdaaf05b203b8cfd21186bb80311433b420b5d7cd9a5c9a8a6347dae"
+    },
+    {
+      "path": "tests/testUtils.ts",
+      "bytes": 170,
+      "sha256": "9c62ae2c190dd650a42d3c98dbba5d574879b2a2c920717b53ba520eb1e5e49c"
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 478,
+      "sha256": "b21e9b3812acdc01770340f4edb5d81879cd91e3e7fd70ec87f78a434045edaa"
+    },
+    {
+      "path": "vitest.config.ts",
+      "bytes": 180,
+      "sha256": "10e320afbbf7fd68c59cc967bc42b27ae6077e6af5e3c089f1dd41c47790b8a1"
+    }
+  ],
+  "existingDist": [
+    {
+      "path": "dist/cli/index.js",
+      "sha256": "f5ba1624364de6d92c9a9a8b1ed3ed007c1db6d6474a1d9f9ceffc1e396f1f28",
+      "modified": "2026-11-11T10:32:51.067Z"
+    },
+    {
+      "path": "dist/mcp/taskTools.js",
+      "sha256": "4b8b5b694f7daff56ee16964e4074dbe6dc75f5fd7ed5cd2465c372be2b8fa92",
+      "modified": "2026-11-11T10:32:50.731Z"
+    },
+    {
+      "path": "dist/memory/groundedSearch.js",
+      "sha256": "836293f9cd8ad87ba4891193511a88c6dc356ec34487236ef02279421a3d0726",
+      "modified": "2026-11-11T10:32:50.466Z"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "environment": {
+    "node": "v22.14.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "methodology": {
+    "reviewed": true,
+    "warmupsPerQuery": 1,
+    "samplesPerQuery": 5,
+    "answerability": "experimental lexical heuristic; not semantic proof",
+    "staleSourceTested": true
+  },
+  "retrieval": {
+    "answerableQueries": 20,
+    "noAnswerQueries": 10,
+    "precisionAt5": 0.5,
+    "recallAt5": 0.7708333333333333,
+    "microPrecisionAt5": 0.5,
+    "microRecallAt5": 0.7575757575757576,
+    "meanReciprocalRank": 0.925,
+    "relevantReturned": 50,
+    "relevantTotal": 66,
+    "maximumPrecisionAt5": 0.6599999999999999,
+    "precisionGateValid": true,
+    "noAnswerFalsePositives": 9,
+    "answerableCoverage": 1,
+    "incorrectFirstResultRate": 0.36666666666666664,
+    "forgottenLeaks": 0
+  },
+  "grounded": {
+    "precisionAt5": 0.45,
+    "recallAt5": 0.6916666666666667,
+    "microPrecisionAt5": 0.45,
+    "microRecallAt5": 0.6818181818181818,
+    "meanReciprocalRank": 0.875,
+    "relevantReturned": 45,
+    "relevantTotal": 66,
+    "noAnswerCandidateRate": 0.4,
+    "noAnswerUnsupportedAssertionRate": 0,
+    "noAnswerFalsePositives": 0,
+    "noAnswerCandidateEvidence": 4,
+    "answerableCandidateCoverage": 1,
+    "supportedAnswerCoverage": 0,
+    "verifiedSupportedAssertions": 0,
+    "correctSupportedAnswers": 0,
+    "correctSupportedAnswerRate": null,
+    "unsupportedAssertions": 0,
+    "unsupportedCandidateRate": 0.16666666666666666
+  },
+  "staleProbe": {
+    "attempted": 20,
+    "candidates": 20,
+    "flagged": 20,
+    "leaks": 0
+  },
+  "latencyMs": {
+    "samples": 150,
+    "p50": 40.42979999999989,
+    "p95": 58.42580000000089
+  },
+  "passed": false
+}

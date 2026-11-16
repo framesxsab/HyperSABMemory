@@ -12,11 +12,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
-      - run: npm run build
+      - name: Verify release tag matches package version
+        run: node -e "const p = require('./package.json'); if (process.env.GITHUB_REF_NAME !== 'v' + p.version) throw new Error('tag/package version mismatch')"
       - run: npm test
-      - run: npm run eval
+      - run: npm run eval:baseline
+      - run: npm run package:smoke
 
   publish:
     needs: gates
@@ -25,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm publish

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AutoCommitEngine } from '../src/hooks/autoCommit.js';
 import { execSync, execFileSync } from 'child_process';
 import * as fs from 'fs';
+import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -39,9 +40,7 @@ const dirs: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeTestDirs(dirs);
 });
 
 describe('HyperSABMemory — Safe Rollback + History + Diff (P11)', () => {
@@ -91,6 +90,39 @@ describe('HyperSABMemory — Safe Rollback + History + Diff (P11)', () => {
     const outside = await new AutoCommitEngine({ workspaceDir: bare }).createCheckpoint();
     expect(outside.committed).toBe(false);
     expect(outside.status).toBe('not-a-repo');
+  });
+
+  it('coalesces overlapping timer/manual checkpoint requests into one commit', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'shared work', 'utf-8');
+    const before = Number(runGit(dir, ['rev-list', '--count', 'HEAD']).trim());
+    const engine = new AutoCommitEngine({ workspaceDir: dir });
+
+    const [first, overlapping] = await Promise.all([
+      engine.createCheckpoint('first request'),
+      engine.createCheckpoint('overlapping request')
+    ]);
+
+    expect(first).toBe(overlapping);
+    expect(first.committed).toBe(true);
+    expect(Number(runGit(dir, ['rev-list', '--count', 'HEAD']).trim())).toBe(before + 1);
+    expect(runGit(dir, ['show', '-s', '--format=%s', 'HEAD']).trim()).toBe('feat: first request');
+  });
+
+  it('serializes independent engines sharing one repository', async () => {
+    const dir = initRepo();
+    dirs.push(dir);
+    commitFile(dir, 'a.txt', 'v1', 'first');
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'shared work', 'utf-8');
+    const results = await Promise.all([
+      new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint(),
+      new AutoCommitEngine({ workspaceDir: dir }).createCheckpoint()
+    ]);
+
+    expect(results.map(({ status }) => status).sort()).toEqual(['clean', 'committed']);
+    expect(runGit(dir, ['rev-list', '--count', 'HEAD']).trim()).toBe('2');
   });
 
   it('still rolls back when the safety checkpoint itself fails', async () => {

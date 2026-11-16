@@ -72,11 +72,12 @@ program
 // Command: setup (One-shot installer)
 program
   .command('setup')
-  .description('One-shot setup: Installs IDE adapters + temporal memory store + structural knowledge graph rules + 3-5m Auto-Commits')
-  .action(async () => {
+  .description('One-shot setup: Installs IDE adapters, local memory, MCP access, and project context')
+  .option('--checkpoint', 'Create an initial local Git checkpoint during setup')
+  .action(async (options) => {
     console.log(picocolors.cyan('\n[HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
-    const result = await setupEngine.executeSetup();
+    const result = await setupEngine.executeSetup({ checkpoint: options.checkpoint === true });
     printSetupOutcome(result);
     if (result.success) {
       console.log(picocolors.cyan(`\n${setupNextStepsFlow(process.cwd())}`));

@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Memory writes now surface persistence errors, and remember-plus-supersede persists as one locked transaction.
+- Checkpoint requests serialize across engines/processes; overlapping requests on one engine share an in-flight commit.
+- Background file watching reports persistence failures and retries subsequent events.
+- Builds clear generated output before compilation so removed source modules cannot remain in the package.
+- Updated existing MCP SDK v1 and Vitest dependencies plus compatible transitive patches; the clean install reports zero npm advisories.
+- Doctor launches MCP checks in the requested workspace and waits for the child process to close.
+
+### Added
+
+- Package/lockfile metadata checks, a packed-install CLI smoke check, and a repository-grounded retrieval/context baseline.
+
+## [1.4.1] - 2026-08-23
+
+### Changed
+
+- Bumped the package version to 1.4.1; this release contained no runtime behavior changes.
+
 ## [1.4.0] - 2026-08-23
 
 ### Fixed
