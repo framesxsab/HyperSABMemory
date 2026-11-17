@@ -1,5 +1,9 @@
 # HyperSABMemory Design Guidelines
 
+## Grounded multi-source answer shape
+
+Render each atomic claim with its exact source path, line, and current SHA-256. Render cross-file relationships separately with the source-reference line that establishes the link. Keep direct source recording distinct from semantic truth, and state that implementation compliance was not checked.
+
 ## Context header
 
 Keep the always-on header compact and scannable. Its current sections are workspace/branch/checkpoint, active focus, hashline, modified files, structural knowledge, temporal memory, and diff snapshot.

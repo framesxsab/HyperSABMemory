@@ -155,6 +155,56 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
     } finally { await client.close(); }
   });
 
+  it('returns bounded multi-source claims only when a current explicit source link is unique', async () => {
+    const dir = tmpDir();
+    const decisionPath = 'design/storage-choice.md';
+    const constraintPath = 'architecture/task-rules.md';
+    fs.mkdirSync(path.dirname(path.join(dir, decisionPath)), { recursive: true });
+    fs.mkdirSync(path.dirname(path.join(dir, constraintPath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, decisionPath), '\uFEFFDecision: Use SQLite for task coordination.\nRationale: Preserve atomic task transitions.\n');
+    fs.writeFileSync(path.join(dir, constraintPath), `\uFEFFDecision-Source: ${decisionPath}\nConstraint: Task updates must use a transactional coordinator.\n`);
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'SQLite task coordination preserves atomic transitions.', [], { artifacts: [decisionPath] });
+    memory.remember('architecture', 'The implementation constraint requires transactional task updates.', [], { artifacts: [constraintPath] });
+    const server = new HyperSABMemoryMcpServer(dir);
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+    const client = new Client({ name: 'multi-source-evidence-test', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const ask = async () => {
+        const response = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What storage design was chosen, why, and what implementation constraint follows?' } });
+        return JSON.parse(response.content[0].text);
+      };
+      const packet = await ask();
+      expect(packet.compoundAnswer).toMatchObject({ status: 'source_verified', implementationCompliance: 'not_verified' });
+      expect(packet.claims).toHaveLength(3);
+      expect(packet.claims.map((claim: any) => claim.source.path)).toEqual([decisionPath, decisionPath, constraintPath]);
+      expect(packet.claims.map((claim: any) => claim.source.line)).toEqual([1, 2, 2]);
+      expect(packet.claims.every((claim: any) => claim.directlyRecorded && claim.source.freshness === 'current' && /^[a-f0-9]{64}$/.test(claim.source.sha256))).toBe(true);
+      expect(packet.relationships).toEqual([expect.objectContaining({ status: 'verified', evidence: expect.objectContaining({ path: constraintPath, line: 1, excerpt: `Decision-Source: ${decisionPath}` }) })]);
+      expect(packet.compoundAnswer.text).toContain('Preserve atomic task transitions.');
+      expect(packet.compoundAnswer.limitation).toContain('implementation compliance');
+      const alternate = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'Why was this persistence design selected, and what task update rule is explicitly linked to it?' } });
+      expect(JSON.parse(alternate.content[0].text).compoundAnswer.status).toBe('source_verified');
+
+      const conflictingPath = 'architecture/alternate-rule.md';
+      fs.writeFileSync(path.join(dir, conflictingPath), `Decision-Source: ${decisionPath}\nConstraint: Task updates may use an uncoordinated write.\n`);
+      memory.remember('architecture', 'The conflicting implementation constraint permits uncoordinated task writes.', [], { artifacts: [conflictingPath] });
+      const conflict = await ask();
+      expect(conflict.compoundAnswer).toBeUndefined();
+      expect(conflict.relationships).toEqual([]);
+      expect(conflict.claims).toEqual([]);
+      const decisionRecord = packet.records.find((record: any) => record.artifacts.includes(decisionPath));
+      expect(decisionRecord).toBeDefined();
+      await client.callTool({ name: 'hypersabmemory_forget', arguments: { id: decisionRecord.id } });
+      const forgotten = await ask();
+      expect(forgotten.compoundAnswer).toBeUndefined();
+      expect(forgotten.records.some((record: any) => record.id === decisionRecord.id)).toBe(false);
+    } finally { await client.close(); }
+  });
+
   it('constructs the MCP server over a temp workspace without throwing', () => {
     const dir = tmpDir();
     expect(() => new HyperSABMemoryMcpServer(dir)).not.toThrow();

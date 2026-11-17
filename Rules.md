@@ -33,6 +33,10 @@ When interacting with or extending HyperSABMemory, AI coding agents must strictl
 - When `Memory.md` is updated after file edits, overwrite only changed sections or append structured state logs. Do not regenerate the entire memory document from scratch unnecessarily.
 - Keep transient workspace state separate from durable decisions; generated file-event observations must retain their provenance and must not silently supersede user-confirmed facts.
 
+### R-6: Grounded Compound Answers
+- Every returned claim must cite an exact current source line and hash; keep cross-file relationships separate and require an explicit source reference or deterministic rule.
+- Abstain on missing, stale, ambiguous, or conflicting links. Do not infer implementation compliance from recorded decisions or constraints.
+
 ---
 
 ## 2. Codebase Standards & Guidelines

@@ -110,6 +110,12 @@ try {
     writeFileSync(path.join(workspace, 'unindexed.json'), '{"port": 4321}');
     writeFileSync(path.join(workspace, 'evidence-config.json'), '{"port": 4321}');
     await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'decision', content: 'The local service port is configured explicitly.', artifacts: ['evidence-config.json'] } });
+    mkdirSync(path.join(workspace, 'design'), { recursive: true });
+    mkdirSync(path.join(workspace, 'architecture'), { recursive: true });
+    writeFileSync(path.join(workspace, 'design', 'storage-choice.md'), 'Decision: Use SQLite for task coordination.\nRationale: Preserve atomic task transitions.\n');
+    writeFileSync(path.join(workspace, 'architecture', 'task-rules.md'), 'Decision-Source: design/storage-choice.md\nConstraint: Task updates must use a transactional coordinator.\n');
+    await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'decision', content: 'SQLite coordination preserves atomic task transitions.', artifacts: ['design/storage-choice.md'] } });
+    await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'architecture', content: 'The task implementation constraint requires transactional updates.', artifacts: ['architecture/task-rules.md'] } });
     writeFileSync(path.join(workspace, 'src', 'paymentFlow.ts'), 'export function checkPayment() { return "payment validation policy"; }\n');
     writeFileSync(path.join(workspace, 'tests', 'paymentFlow.test.ts'), 'test("payment validation policy", () => checkPayment());\n');
     const created = await agentA.callTool({ name: 'hypersabmemory_task_create', arguments: {
@@ -185,6 +191,14 @@ try {
     assert.equal(configAnswer.answerVerified, true);
     assert.ok(configAnswer.assertions.some(item => item.claim === 'Configuration port in evidence-config.json is 4321.'));
     assert.ok(configAnswer.evidence.some(item => item.source.path === 'evidence-config.json' && item.source.line === 1 && item.source.freshness === 'current'));
+    const compoundResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What storage approach was chosen, why, and what implementation constraint follows?' } });
+    const compound = JSON.parse(compoundResult.content[0].text);
+    assert.equal(compound.compoundAnswer.status, 'source_verified');
+    assert.equal(compound.compoundAnswer.implementationCompliance, 'not_verified');
+    assert.equal(compound.claims.length, 3);
+    assert.ok(compound.claims.every(item => item.directlyRecorded && item.source.freshness === 'current' && /^[a-f0-9]{64}$/.test(item.source.sha256)));
+    assert.equal(compound.relationships[0].evidence.path, 'architecture/task-rules.md');
+    assert.equal(compound.relationships[0].evidence.excerpt, 'Decision-Source: design/storage-choice.md');
     const decisionResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What decision was recorded about task creation before routing?' } });
     const decisionPacket = JSON.parse(decisionResult.content[0].text);
     assert.equal(decisionPacket.answerVerified, false);

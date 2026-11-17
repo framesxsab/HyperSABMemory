@@ -26,6 +26,11 @@ It takes proven temporal-memory-store designs as its core reference architecture
 - **Session Handoff**: Preserves project decisions and workspace state in the local JSON store and the `Memory.md` human-readable projection across IDE restarts and chat resets.
 - **MCP Server Protocol**: Exposes tools including `hypersabmemory_get_context`, `hypersabmemory_remember`, and `hypersabmemory_query` for MCP-compliant clients.
 
+### FR-5: Multi-Source Grounded Evidence
+- `hypersabmemory_query_evidence` may return bounded atomic claims from current source files, each with an exact line, SHA-256, and direct-recording status.
+- Cross-file relationships are supported only by explicit source references or deterministic verification; lexical similarity never establishes a link.
+- Conflicts and missing/stale evidence remain unverified. Source-recorded decisions do not establish implementation compliance.
+
 ### FR-3: Automatic Event Hooks ("After Every File Edit")
 - **File Watcher Hook**: Listens for file save, edit, and create events.
 - **Workspace State Refresh**: Updates the in-memory header from changed paths without blocking the user's IDE or editor UI.

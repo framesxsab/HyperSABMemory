@@ -7,6 +7,7 @@ import { HybridSearchEngine, recordSearchText, tokenizeSearchQuery, tokenizeSear
 import { excerptFor, isExplicitGroundedQuery, searchGrounded, sourceKey, type GroundedResult } from '../memory/groundedSearch.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import type { MemoryRecord } from '../memory/sqliteStore.js';
+import { findDecisionClaims } from './evidenceClaims.js';
 
 const text = { type: 'string' };
 const nonemptyText = { type: 'string', minLength: 1 };
@@ -33,33 +34,24 @@ function crossFileAnswer(workspaceDir: string, task: TaskRecord, sources: TaskSo
   const inspected = inspectTaskSourceContents(workspaceDir, refs);
   const stale = inspected.filter(item => item.status !== 'current').map(({ content: _content, ...item }) => item);
   if (stale.length) return empty('STALE_EVIDENCE', 'A supporting source is changed, missing or unavailable.', { staleSources: stale });
-  const decisionText = inspected[0].content?.toString('utf8') ?? '';
-  const constraintText = inspected[1].content?.toString('utf8') ?? '';
-  const decision = decisionText.match(/^(?:# ([^\r\n]{1,200})\r?\n)?Decision: ([^\r\n]{1,280})(?:\r?\nRationale: [^\r\n]{1,280})?\r?\n?$/);
-  const constraint = constraintText.match(CONSTRAINT_DOCUMENT);
-  if (!decision || !constraint || sourceKey(constraint[1]) !== keys[0] || !decision[2].trim() || !constraint[2].trim() || /<!--|-->/.test(decisionText + constraintText)) return empty('INSUFFICIENT_EVIDENCE', 'The required single decision and explicit source-linked constraint were not established.');
-  const checked = inspectTaskSourceContents(workspaceDir, refs);
-  const changed = checked.filter(item => item.status !== 'current').map(({ content: _content, ...item }) => item);
-  if (changed.length) return empty('STALE_EVIDENCE', 'A supporting source changed during verification.', { staleSources: changed });
-  const decisionLine = `Decision: ${decision[2]}`;
-  const decisionLineNumber = decision[1] ? 2 : 1;
-  const referenceLine = `Decision-Source: ${constraint[1]}`;
-  const constraintLine = `Constraint: ${constraint[2]}`;
-  const citations = [
-    { path: refs[0].path, sha256: refs[0].sha256, line: decisionLineNumber, excerpt: decisionLine },
-    { path: refs[1].path, sha256: refs[1].sha256, line: 1, excerpt: referenceLine },
-    { path: refs[1].path, sha256: refs[1].sha256, line: 2, excerpt: constraintLine }
-  ];
-  const evidence = refs.map((ref, index) => {
-    const { content: _content, ...source } = checked[index];
-    const excerpt = index === 0 ? decisionLine : `${referenceLine}\n${constraintLine}`;
-    const record: MemoryRecord = { id: `source_ref:${ref.path}`, category: 'general', content: excerpt, artifacts: [ref.path], status: 'active', timestamp: new Date().toISOString() };
-    return { record, source, lexicalSupport: 1, excerpt, line: index === 0 ? decisionLineNumber : 1 };
+  const verified = findDecisionClaims(workspaceDir, refs, 'decision rationale constraint');
+  if (!verified) {
+    const changed = inspectTaskSourceContents(workspaceDir, refs).filter(item => item.status !== 'current').map(({ content: _content, ...item }) => item);
+    return changed.length ? empty('STALE_EVIDENCE', 'A supporting source changed during verification.', { staleSources: changed }) : empty('INSUFFICIENT_EVIDENCE', 'The required single decision and explicit source-linked constraint were not established.');
+  }
+  const uniqueClaims = new Map(verified.claims.map(claim => [sourceKey(claim.source.path), claim]));
+  const evidence = [...uniqueClaims.values()].map(claim => {
+    const source = { path: claim.source.path, sha256: claim.source.sha256, currentSha256: claim.source.sha256, status: 'current' as const };
+    const record: MemoryRecord = { id: `source_ref:${source.path}`, category: 'general', content: claim.source.excerpt, artifacts: [source.path], status: 'active', timestamp: new Date().toISOString() };
+    return { record, source, lexicalSupport: 1, excerpt: claim.source.excerpt, line: claim.source.line };
   });
+  const decision = verified.claims.find(claim => claim.claim.startsWith('Recorded decision:'))!;
+  const constraint = verified.claims.find(claim => claim.claim.startsWith('Recorded constraint:'))!;
+  const citations = [decision.source, verified.relationships[0].evidence, constraint.source].map(({ path, sha256, line, excerpt }) => ({ path, sha256, line, excerpt }));
   return { status: 'SUPPORTED', canAssert: true, candidates: [], evidence, assertions: [
-    { claim: `The source records the decision: ${decision[2]}`, sourcePath: refs[0].path, excerpt: decisionLine },
-    { claim: `The source records the constraint and explicitly references ${refs[0].path}: ${constraint[2]}`, sourcePath: refs[1].path, excerpt: `${referenceLine}\n${constraintLine}` }
-  ], staleSources: [], requirements: [], answer: { text: `The recorded constraint is ${constraint[2]} The constraint source explicitly references the decision source, which records: ${decision[2]}`, relationship: 'explicit_source_reference', sources: citations, limitation: 'This reports source statements; semantic consistency and implementation compliance are not verified.' } };
+    { claim: `The source records the decision: ${decision.value}`, sourcePath: decision.source.path, excerpt: decision.source.excerpt },
+    { claim: `The source records the constraint and explicitly references ${decision.source.path}: ${constraint.value}`, sourcePath: constraint.source.path, excerpt: `${verified.relationships[0].evidence.excerpt}\n${constraint.source.excerpt}` }
+  ], staleSources: [], requirements: [], answer: { text: verified.text, relationship: 'explicit_source_reference', sources: citations, limitation: verified.limitation } };
 }
 
 function taskAnswerBundle(workspaceDir: string, task: TaskRecord) {
