@@ -432,6 +432,7 @@ export class HyperSABMemoryMcpServer {
             records,
             evidence,
             claims: grounded.claims ?? [],
+            ...(grounded.implementationEvidence ? { implementationEvidence: grounded.implementationEvidence } : {}),
             assertions: grounded.assertions,
             relationships: grounded.relationships ?? [],
             ...(compound ? { compoundAnswer: { text: compound.text, status: 'source_verified', implementationCompliance: 'not_verified', limitation: compound.limitation } } : {}),

@@ -63,12 +63,12 @@
     "better-sqlite3": "12.9.0",
     "chokidar": "^4.0.1",
     "commander": "^12.1.0",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "typescript": "^5.5.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "^22.0.0",
-    "typescript": "^5.5.4",
     "vitest": "^4.1.12"
   }
 }

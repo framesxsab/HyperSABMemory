@@ -11,6 +11,15 @@ import { acquireFileLock, releaseFileLock } from '../src/memory/fileLock.js';
 import Database from 'better-sqlite3';
 
 describe('task ledger', () => {
+  it('rejects a second agent claiming an exclusively held task', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-exclusive-claim-'));
+    try {
+      const ledger = new TaskLedger(dir);
+      const task = ledger.create({ goal: 'Review ownership', acceptanceCriteria: ['One owner'] });
+      ledger.claim({ taskId: task.id, agentId: 'first' });
+      expect(() => ledger.claim({ taskId: task.id, agentId: 'second' })).toThrow('Task is already claimed.');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
   it('restores adjacent recorded rationales from multiple fresh sources without inventing links', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-task-rationale-'));
     try {

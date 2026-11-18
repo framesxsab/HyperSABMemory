@@ -99,6 +99,15 @@ try {
     const [agentA, agentB] = await Promise.all([connect('package-smoke-a'), connect('package-smoke-b')]);
     const tools = await agentA.listTools();
     assert.ok(tools.tools.some((tool) => tool.name === 'hypersabmemory_task_checkpoint'));
+    for (const [file, description] of [
+      ['src/memory/taskLedger.ts', 'Exclusive task claiming implementation, lease ownership and task coordination'],
+      ['tests/taskLedger.test.ts', 'Exclusive task claiming tests and ownership assertions']
+    ]) {
+      mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
+      writeFileSync(path.join(workspace, file), readFileSync(path.join(repoRoot, file)));
+      const recorded = await agentA.callTool({ name: 'hypersabmemory_remember', arguments: { category: 'architecture', content: description, artifacts: [file] } });
+      assert.ok(!recorded.isError);
+    }
     for (const [content, artifact] of [
       ['Task creation validates input before routing.', 'Architecture.md'],
       ['createTask task creation implementation', 'src/tasks.ts'],
@@ -179,6 +188,39 @@ try {
     const sample = await restarted.callTool({ name: 'hypersabmemory_task_grounded_query', arguments: { taskId: sampleTask.structuredContent.taskId, query: 'What decision was recorded about invoice queues?' } });
     assert.equal(sample.structuredContent.canAssert, false);
     assert.deepEqual(sample.structuredContent.requirements.find(item => item.role === 'decision').verifiedFacts, []);
+    const implementationQuery = async query => {
+      const result = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query } });
+      assert.ok(!result.isError);
+      return JSON.parse(result.content[0].text);
+    };
+    for (const [kind, query] of [
+      ['code', 'Where is exclusive task claiming implemented?'],
+      ['code-and-test', 'Where is exclusive task claiming implemented, and what evidence supports its behavior?'],
+      ['unsupported', 'Is exclusive task claiming race-free under all circumstances?']
+    ]) {
+      const packet = await implementationQuery(query);
+      assert.equal(packet.answerVerified, false);
+      if (kind === 'unsupported') assert.equal(packet.implementationEvidence, undefined);
+      else {
+        const claim = packet.implementationEvidence.code.find(item => item.symbol === 'TaskLedger.claim');
+        assert.ok(claim?.facts.some(fact => fact.source.excerpt.includes('this.mutate(')));
+        assert.ok(claim.facts.some(fact => fact.source.excerpt.includes('CLAIM_CONFLICT')));
+        assert.match(claim.source.sha256, /^[a-f0-9]{64}$/);
+        if (kind === 'code-and-test') {
+          const test = packet.implementationEvidence.tests.find(item => item.name === 'rejects a second agent claiming an exclusively held task');
+          assert.equal(test?.execution, 'unverified');
+          console.log('Implementation evidence:', JSON.stringify({ claim: claim.source, test: test.source, facts: claim.facts }));
+        }
+      }
+      const samples = [];
+      for (let i = 0; i < 30; i++) {
+        const start = performance.now();
+        await implementationQuery(query);
+        samples.push(performance.now() - start);
+      }
+      samples.sort((a, b) => a - b);
+      console.log('Implementation latency:', JSON.stringify({ kind, n: samples.length, p50: samples[14], p95: samples[28] }));
+    }
     const evidenceResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What did the project record about task creation before routing?' } });
     const evidencePacket = JSON.parse(evidenceResult.content[0].text);
     assert.equal(evidencePacket.question, 'What did the project record about task creation before routing?');

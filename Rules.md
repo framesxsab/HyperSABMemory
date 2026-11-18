@@ -34,6 +34,7 @@ When interacting with or extending HyperSABMemory, AI coding agents must strictl
 - Keep transient workspace state separate from durable decisions; generated file-event observations must retain their provenance and must not silently supersede user-confirmed facts.
 
 ### R-6: Grounded Compound Answers
+- A source call or throw is a code fact. Test definitions identify written assertions. A passing result requires attributable execution evidence.
 - Every returned claim must cite an exact current source line and hash; keep cross-file relationships separate and require an explicit source reference or deterministic rule.
 - Abstain on missing, stale, ambiguous, or conflicting links. Do not infer implementation compliance from recorded decisions or constraints.
 - Task role matches remain unresolved unless their role-specific verifier supports the requested relation; a general source-recorded claim does not establish task completion.

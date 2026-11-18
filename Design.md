@@ -2,6 +2,8 @@
 
 ## Grounded multi-source answer shape
 
+Implementation results include the symbol, source span, hash, and observed statements. Related test entries cite the assertion and import and mark execution as unverified.
+
 Render each atomic claim with its exact source path, line, and current SHA-256. Render cross-file relationships separately with the source-reference line that establishes the link. Keep direct source recording distinct from semantic truth, and state that implementation compliance was not checked.
 
 The same claim and citation representation is returned by general grounded search and the evidence MCP tool. A recorded statement supports only that the source records it; a task role or runtime behavior needs its own verifier.

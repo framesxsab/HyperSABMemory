@@ -3,6 +3,7 @@ import type { MemoryRecord } from './sqliteStore.js';
 import { HybridSearchEngine, queryIdentifiers, tokenizeSearchQuery, tokenizeSearchText } from './hybridSearch.js';
 import { performance } from 'node:perf_hooks';
 import * as path from 'node:path';
+import { collectImplementationEvidence, wantsImplementationEvidence } from './implementationEvidence.js';
 import { verifyJsonScalarClaim, verifyQuotedTextClaim, verifyRecordedClaims, type AtomicEvidenceClaim, type ClaimSourceSnapshot, type EvidenceRelationship } from './claimVerification.js';
 
 export interface GroundedTiming { candidateMs: number; rankingMs: number; indexingMs?: number; pathMs: number; readMs: number; hashMs: number; excerptMs: number; decisionMs: number }
@@ -49,6 +50,7 @@ export interface GroundedResult {
   claims?: AtomicEvidenceClaim[];
   relationships?: EvidenceRelationship[];
   compoundAnswer?: { text: string; limitation: string };
+  implementationEvidence?: ReturnType<typeof collectImplementationEvidence>;
   staleSources: TaskSourceInspection[];
   conflictOrigin?: 'caller_declared' | 'source_hash_mismatch';
   conflictPaths?: string[];
@@ -319,7 +321,27 @@ export function searchGrounded(
   }
   const declaredConflicts = [...new Set(conflictingPaths)];
   const queryCandidates = candidates.slice(0, 20).map(({ record, score }) => ({ recordId: record.id, sourcePaths: record.artifacts ?? [], score }));
-  const rechecked = inspectTaskSourceContents(workspaceDir, evidence.map(item => item.source), timing);
+  const implementation = !declaredConflicts.length && !referenceConflicts.size && wantsImplementationEvidence(query)
+    ? collectImplementationEvidence(query, currentSources.values()) : undefined;
+  const finalSources = new Map<string, TaskSource>(evidence.map(item => [item.source.path, item.source]));
+  for (const item of [...(implementation?.code ?? []), ...(implementation?.tests ?? [])]) {
+    const source = references.get(sourceKey(item.source.path));
+    if (source) finalSources.set(source.path, source);
+  }
+  const checked = inspectTaskSourceContents(workspaceDir, [...finalSources.values()], timing);
+  const rechecked = evidence.map(item => checked.find(source => source.path === item.source.path)!);
+  const evidencePaths = new Set(evidence.map(item => item.source.path));
+  for (const { content: _content, ...source } of checked) {
+    if (source.status !== 'current' && !evidencePaths.has(source.path)) staleSources.push(source);
+  }
+  const current = new Map(checked.filter(source => source.status === 'current').map(source => [source.path, source.currentSha256]));
+  const assessment = implementation && {
+    ...implementation,
+    code: implementation.code.filter(item => current.get(item.source.path) === item.source.sha256),
+    tests: implementation.tests.filter(item => current.get(item.source.path) === item.source.sha256 &&
+      current.get(item.target.path) === item.target.sha256)
+  };
+  const implementationFields = assessment && (assessment.code.length || assessment.tests.length) ? { implementationEvidence: assessment } : {};
   const topEvidence = evidence.flatMap((item, index) => {
     const { content, ...source } = rechecked[index];
     if (source.status !== 'current') {
@@ -351,8 +373,8 @@ export function searchGrounded(
     status: 'CONFLICTING_EVIDENCE', conflictOrigin: 'source_hash_mismatch', conflictPaths: [...configConflicts],
     candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], staleSources, canAssert: false
   };
-  if (supportedAssertions.length) return { status: 'SUPPORTED', candidates: queryCandidates, evidence: topEvidence, assertions: supportedAssertions, claims: returnedClaims, relationships: returnedRelationships, ...(compoundAnswer ? { compoundAnswer } : {}), staleSources, canAssert: true };
-  if (topEvidence.length) return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
+  if (supportedAssertions.length) return { status: 'SUPPORTED', candidates: queryCandidates, evidence: topEvidence, assertions: supportedAssertions, claims: returnedClaims, relationships: returnedRelationships, ...(compoundAnswer ? { compoundAnswer } : {}), ...implementationFields, staleSources, canAssert: true };
+  if (topEvidence.length || assessment?.code.length) return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], ...implementationFields, staleSources, canAssert: false };
   if (staleSources.length) return { status: 'STALE_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
   return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
 }

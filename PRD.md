@@ -27,6 +27,7 @@ It takes proven temporal-memory-store designs as its core reference architecture
 - **MCP Server Protocol**: Exposes tools including `hypersabmemory_get_context`, `hypersabmemory_remember`, and `hypersabmemory_query` for MCP-compliant clients.
 
 ### FR-5: Multi-Source Grounded Evidence
+- Implementation queries identify code locations and source-backed test assertions for coding agents.
 - `hypersabmemory_query_evidence` may return bounded atomic claims from current source files, each with an exact line, SHA-256, and direct-recording status.
 - The general grounded-search API shares deterministic verification for unique JSON scalars and exact source-recorded decision/rationale statements.
 - Cross-file relationships are supported only by explicit source references or deterministic verification; lexical similarity never establishes a link.

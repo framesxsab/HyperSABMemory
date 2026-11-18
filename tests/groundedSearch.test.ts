@@ -7,6 +7,39 @@ import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { captureTaskSources, createTaskSourceContentInspector, inspectTaskSourceContents, inspectTaskSources } from '../src/harness/taskSources.js';
 import { excerptFor, searchGrounded } from '../src/memory/groundedSearch.js';
 
+it('links a test assertion to the imported implementation and rechecks both sources', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-implementation-'));
+  try {
+    const code = 'export function tallyCrates() {\n  return countItems();\n}\n';
+    const test = "import { it, expect } from 'vitest';\nimport { tallyCrates as tally } from './inventory.js';\nit('totals stock', () => {\n  expect(tally()).toBe(12);\n});\n";
+    fs.writeFileSync(path.join(dir, 'inventory.ts'), code);
+    fs.writeFileSync(path.join(dir, 'inventory.test.ts'), test);
+    fs.writeFileSync(path.join(dir, 'other.test.ts'), test.replace("  expect(tally())", "  const tally = () => 12;\n  expect(tally())"));
+    fs.writeFileSync(path.join(dir, 'scratch.ts'), code.replace('tallyCrates', 'tallyCratesBackup'));
+    const memory = new TemporalMemoryEngine(dir);
+    for (const file of ['inventory.ts', 'inventory.test.ts', 'other.test.ts', 'scratch.ts']) {
+      memory.remember('architecture', 'tallyCrates implementation evidence ' + file, [], { artifacts: [file] });
+    }
+    const refs = captureTaskSources(dir, ['inventory.ts', 'inventory.test.ts', 'other.test.ts', 'scratch.ts']);
+    const hybrid = new HybridSearchEngine(dir, memory);
+    const ask = () => searchGrounded(hybrid, dir, 'Where is tallyCrates implemented and which tests call it?', refs);
+    expect(ask().implementationEvidence).toMatchObject({
+      code: [{ symbol: 'tallyCrates', source: { path: 'inventory.ts', sha256: refs[0].sha256, startLine: 1, endLine: 3 },
+        facts: [{ kind: 'call_site', source: { startLine: 2, excerpt: 'countItems()' } }] }],
+      tests: [{ name: 'totals stock', execution: 'unverified', source: { path: 'inventory.test.ts', sha256: refs[1].sha256, startLine: 4 } }]
+    });
+    expect(searchGrounded(hybrid, dir, 'Is tallyCrates correct in every case?', refs).canAssert).toBe(false);
+    const forgotten = memory.getActive().find(item => item.artifacts?.includes('inventory.ts'))!;
+    memory.forget(forgotten.id);
+    expect(ask().implementationEvidence).toBeUndefined();
+    memory.remember('architecture', 'tallyCrates implementation in inventory', [], { artifacts: ['inventory.ts'] });
+    fs.writeFileSync(path.join(dir, 'inventory.test.ts'), test.replace('12', '17'));
+    expect(ask().implementationEvidence?.tests).toEqual([]);
+    fs.writeFileSync(path.join(dir, 'inventory.ts'), code.replace('countItems', 'countBoxes'));
+    expect(ask().implementationEvidence).toBeUndefined();
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 it('reports a line only for a unique verified excerpt', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-line-'));
   try {

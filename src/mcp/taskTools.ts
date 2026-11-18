@@ -236,7 +236,8 @@ function finishGroundedQuery(query: string, grounded: GroundedResult, hybrid: Hy
     }
     if (!requirement.verifiedFacts.length) requirement.unresolvedRelationships = 'No directly verifiable role fact was established.';
   }
-  return { ...grounded, requirements };
+  const { implementationEvidence: _implementation, ...taskGrounded } = grounded;
+  return { ...taskGrounded, requirements };
 }
 const progressProperties = {
   summary: text,
