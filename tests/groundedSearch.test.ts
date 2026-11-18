@@ -1,5 +1,7 @@
 import { it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
+import fsDefault from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
@@ -29,6 +31,28 @@ it('links a test assertion to the imported implementation and rechecks both sour
       tests: [{ name: 'totals stock', execution: 'unverified', source: { path: 'inventory.test.ts', sha256: refs[1].sha256, startLine: 4 } }]
     });
     expect(searchGrounded(hybrid, dir, 'Is tallyCrates correct in every case?', refs).canAssert).toBe(false);
+    const testPath = path.join(dir, 'inventory.test.ts');
+    const read = fsDefault.readFileSync;
+    let changedDuringRead = false;
+    const spy = vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: Parameters<typeof read>[0], options?: Parameters<typeof read>[1]) => {
+      const bytes = read(file, options);
+      if (file === testPath && !changedDuringRead) {
+        changedDuringRead = true;
+        fs.writeFileSync(testPath, test.replace('12', '17'));
+      }
+      return bytes;
+    }) as typeof read);
+    syncBuiltinESMExports();
+    try {
+      const changed = ask();
+      expect(changedDuringRead).toBe(true);
+      expect(changed.implementationEvidence?.tests).toEqual([]);
+      expect(changed.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'inventory.test.ts', status: 'modified' })]));
+    } finally {
+      spy.mockRestore();
+      syncBuiltinESMExports();
+      fs.writeFileSync(testPath, test);
+    }
     const forgotten = memory.getActive().find(item => item.artifacts?.includes('inventory.ts'))!;
     memory.forget(forgotten.id);
     expect(ask().implementationEvidence).toBeUndefined();

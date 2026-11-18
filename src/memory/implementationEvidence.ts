@@ -61,8 +61,30 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
   });
 
   const tests: Array<{ kind: 'test_defined'; symbol: string; name: string; source: ReturnType<typeof span>; imports: ReturnType<typeof span>; target: ReturnType<typeof span>; execution: 'unverified' }> = [];
+  const byStem = new Map<string, string[]>();
+  for (const file of files.keys()) {
+    const stem = file.replace(/\.[cm]?[jt]sx?$/, '');
+    byStem.set(stem, [...(byStem.get(stem) ?? []), file]);
+  }
   for (const { ast } of files.values()) {
     if (!/\b(?:tests?|evidence)\b/i.test(query) || !isTest(ast.fileName) || !locations.length || tests.length >= 4) continue;
+    const targetImports = new Map<ts.ImportSpecifier, string>();
+    for (const statement of ast.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith('.')) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      const stem = path.posix.normalize(path.posix.join(path.posix.dirname(ast.fileName), statement.moduleSpecifier.text)).replace(/\.[cm]?[jt]sx?$/, '');
+      const matches = byStem.get(stem);
+      if (matches?.length !== 1) continue;
+      for (const binding of bindings.elements) {
+        if (locations.some(location => location.node.getSourceFile().fileName === matches[0] &&
+            (location.owner ?? location.name) === (binding.propertyName ?? binding.name).text)) {
+          targetImports.set(binding, matches[0]);
+        }
+      }
+    }
+    // A file without a candidate named import cannot produce a supported link.
+    if (!targetImports.size) continue;
     // Bind names locally so a shadowed import or receiver cannot establish the link.
     const options = { noLib: true, noResolve: true, allowJs: true };
     const host = ts.createCompilerHost(options);
@@ -104,18 +126,13 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
                       : callee;
                     if (!local || !ts.isIdentifier(local)) continue;
                     const targetImport = imported(local);
-                    const specifier = targetImport && moduleOf(targetImport);
-                    if (!targetImport || !specifier || !ts.isStringLiteral(specifier) || !specifier.text.startsWith('.')) continue;
-                    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(ast.fileName), specifier.text));
                     const targetPath = location.node.getSourceFile().fileName;
+                    if (!targetImport || targetImports.get(targetImport) !== targetPath ||
+                        (targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name)) continue;
                     const exported = ts.isMethodDeclaration(location.node) ? location.node.parent : location.node;
                     if (ts.getModifiers(location.node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) continue;
                     if (!ts.canHaveModifiers(exported) || !ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
                         ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
-                    const stem = resolved.replace(/\.[cm]?[jt]sx?$/, '');
-                    const matchingPaths = [...files.keys()].filter(file => file.replace(/\.[cm]?[jt]sx?$/, '') === stem);
-                    if ((targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name) ||
-                        matchingPaths.length !== 1 || matchingPaths[0] !== targetPath) continue;
                     tests.push({ kind: 'test_defined', symbol: code[index].symbol, name: testName.slice(0, 160), source: span(child), imports: span(targetImport.parent.parent.parent), target: code[index].source, execution: 'unverified' });
                     break;
                   }

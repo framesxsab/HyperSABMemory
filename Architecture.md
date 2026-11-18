@@ -25,6 +25,7 @@ HyperSABMemory is a local-first TypeScript CLI and MCP server. The existing v1 c
 ## Data flow
 
 Implementation evidence parses bounded, ranked source snapshots with the existing TypeScript compiler. Grounded search rechecks the hashes of every returned code and test source before the MCP tool returns the packet.
+Test files enter the TypeScript binding step only when a relative named import can link to a selected implementation. Binding still verifies aliases and shadowing before an assertion link is returned.
 
 1. The watcher receives a filesystem event and updates transient modified-file state.
 2. Explicit memories and current store mutations are serialized through the local file lock. `remember()` writes its new record and any duplicate supersedes as one transaction; persistence errors reach the caller.

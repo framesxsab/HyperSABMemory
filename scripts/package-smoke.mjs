@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { verifyHandoff } from './sprint31-consumer.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const npmCli = process.env.npm_execpath;
@@ -333,6 +334,7 @@ try {
   assert.equal(afterRemove.mcpServers.hypersabmemory, undefined, 'remove removes the installed MCP entry');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim(), baselineHead, 'setup and removal do not create commits');
 
+  await verifyHandoff(path.join(tempRoot, 'parcel-project'), cli, npmCli);
   process.stdout.write(`Packed install smoke passed: ${manifest.name}@${version}\n`);
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
