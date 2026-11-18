@@ -13,6 +13,9 @@
 ## Sprint 3.0: Implementation Evidence
 - Code locations, observed statements, and structurally linked test assertions are available through grounded search and MCP. See `docs/SPRINT_3_0_IMPLEMENTATION_EVIDENCE.md` for verification and release status.
 
+## Sprint 3.1: Agent Reliability and Grounded Search Performance
+- The installed MCP handoff and controlled test-binding measurements are tracked in `docs/SPRINT_3_1_AGENT_RELIABILITY.md`.
+
 ## Sprint 2.7: Retrieval Usefulness
 Sprint 2.7 local implementation and validation: source-aware task retrieval, import ranking hints, and declaration excerpts are implemented. The 20% quality and latency targets remain unmet; release is NO-GO. Evidence: `docs/SPRINT_2_7_RESULTS.md`.
 
