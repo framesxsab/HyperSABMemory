@@ -20,7 +20,6 @@ import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { TaskLedger } from '../memory/taskLedger.js';
 import { captureTaskSources, inspectTaskSourceContents } from '../harness/taskSources.js';
 import { excerptFor, searchGrounded } from '../memory/groundedSearch.js';
-import { findDecisionClaims } from './evidenceClaims.js';
 import { TASK_TOOLS, TASK_LIST_RESOURCE, executeTaskTool, listActiveTasks } from './taskTools.js';
 import { MemoryRecord, StructuredMemory } from '../memory/sqliteStore.js';
 import { ContextHarness } from '../harness/contextHarness.js';
@@ -392,7 +391,7 @@ export class HyperSABMemoryMcpServer {
             if (references.size >= 64) break;
           }
           const grounded = searchGrounded(this.hybridSearch, this.workspaceDir, query, [...references.values()]);
-          const compound = findDecisionClaims(this.workspaceDir, [...references.values()], query);
+          const compound = grounded.compoundAnswer ? { ...grounded, text: grounded.compoundAnswer.text, limitation: grounded.compoundAnswer.limitation } : undefined;
           const evidence = grounded.evidence.slice(0, limit).map(item => ({
             excerpt: item.excerpt ?? '',
             source: { path: item.source.path, sha256: item.source.currentSha256, freshness: item.source.status, ...(item.line ? { line: item.line } : {}) },
@@ -432,9 +431,9 @@ export class HyperSABMemoryMcpServer {
             status: evidence.length || records.length ? 'evidence_found' : grounded.status === 'STALE_EVIDENCE' ? 'stale_only' : 'insufficient_evidence',
             records,
             evidence,
-            claims: compound?.claims ?? [],
+            claims: grounded.claims ?? [],
             assertions: grounded.assertions,
-            relationships: compound?.relationships ?? [],
+            relationships: grounded.relationships ?? [],
             ...(compound ? { compoundAnswer: { text: compound.text, status: 'source_verified', implementationCompliance: 'not_verified', limitation: compound.limitation } } : {}),
             staleSources: grounded.staleSources,
             limitations,

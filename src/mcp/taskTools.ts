@@ -7,7 +7,7 @@ import { HybridSearchEngine, recordSearchText, tokenizeSearchQuery, tokenizeSear
 import { excerptFor, isExplicitGroundedQuery, searchGrounded, sourceKey, type GroundedResult } from '../memory/groundedSearch.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import type { MemoryRecord } from '../memory/sqliteStore.js';
-import { findDecisionClaims } from './evidenceClaims.js';
+import { findDecisionClaims } from '../memory/claimVerification.js';
 
 const text = { type: 'string' };
 const nonemptyText = { type: 'string', minLength: 1 };
@@ -19,7 +19,7 @@ const CONSTRAINT_DOCUMENT = /^Decision-Source: ([^\r\n]{1,2048})\r?\nConstraint:
 function crossFileAnswer(workspaceDir: string, task: TaskRecord, sources: TaskSource[], query: string, conflicts: string[]) {
   const match = query.match(CROSS_FILE_QUERY);
   if (!match) return undefined;
-  const empty = (status: GroundedResult['status'], reason: string, extra: Record<string, unknown> = {}) => ({ status, reason, canAssert: false, candidates: [], evidence: [], assertions: [], staleSources: [], requirements: [], ...extra });
+  const empty = (status: GroundedResult['status'], reason: string, extra: Record<string, unknown> = {}) => ({ status, reason, canAssert: false, candidates: [], evidence: [], assertions: [], claims: [], relationships: [], staleSources: [], requirements: [], ...extra });
   if (conflicts.length) return empty('CONFLICTING_EVIDENCE', 'The caller reported conflicting sources.', { conflictOrigin: 'caller_declared', conflictPaths: conflicts });
   if ([...task.openIssues, ...task.blockers].some(issue => /\b(?:conflict\w*|contradict\w*|inconsistent|disagree\w*)\b/i.test(issue))) return empty('CONFLICTING_EVIDENCE', 'The task records an unresolved conflict.', { conflictDetails: 'task_reported' });
   const keys = [sourceKey(match[2]), sourceKey(match[1])];
@@ -45,13 +45,13 @@ function crossFileAnswer(workspaceDir: string, task: TaskRecord, sources: TaskSo
     const record: MemoryRecord = { id: `source_ref:${source.path}`, category: 'general', content: claim.source.excerpt, artifacts: [source.path], status: 'active', timestamp: new Date().toISOString() };
     return { record, source, lexicalSupport: 1, excerpt: claim.source.excerpt, line: claim.source.line };
   });
-  const decision = verified.claims.find(claim => claim.claim.startsWith('Recorded decision:'))!;
-  const constraint = verified.claims.find(claim => claim.claim.startsWith('Recorded constraint:'))!;
+  const decision = verified.claims.find(claim => claim.type === 'recorded_decision')!;
+  const constraint = verified.claims.find(claim => claim.type === 'recorded_constraint')!;
   const citations = [decision.source, verified.relationships[0].evidence, constraint.source].map(({ path, sha256, line, excerpt }) => ({ path, sha256, line, excerpt }));
   return { status: 'SUPPORTED', canAssert: true, candidates: [], evidence, assertions: [
     { claim: `The source records the decision: ${decision.value}`, sourcePath: decision.source.path, excerpt: decision.source.excerpt },
     { claim: `The source records the constraint and explicitly references ${decision.source.path}: ${constraint.value}`, sourcePath: constraint.source.path, excerpt: `${verified.relationships[0].evidence.excerpt}\n${constraint.source.excerpt}` }
-  ], staleSources: [], requirements: [], answer: { text: verified.text, relationship: 'explicit_source_reference', sources: citations, limitation: verified.limitation } };
+  ], claims: verified.claims, relationships: verified.relationships, staleSources: [], requirements: [], answer: { text: verified.text, relationship: 'explicit_source_reference', sources: citations, limitation: verified.limitation } };
 }
 
 function taskAnswerBundle(workspaceDir: string, task: TaskRecord) {
@@ -71,10 +71,12 @@ function taskAnswerBundle(workspaceDir: string, task: TaskRecord) {
   for (const { source, decisionPath, constraint } of discovered) {
     const query = `What constraint in \`${source.path}\` is recorded for the decision in \`${decisionPath}\`?`;
     const result = crossFileAnswer(workspaceDir, task, sources, query, []);
-    if (!result?.canAssert || !('answer' in result) || !result.answer) continue;
-    const decision = result.assertions[0]?.excerpt.replace(/^Decision: /, '');
+    if (!result?.canAssert || !('answer' in result)) continue;
+    const answer = result.answer as { text: string; sources: Array<{ path: string; sha256: string; line: number; excerpt: string }> } | undefined;
+    if (!answer) continue;
+    const decision = result.claims.find(claim => claim.type === 'recorded_decision')?.value;
     if (!decision || !task.decisions.includes(decision)) continue;
-    links.push({ decision, constraint, attribution: 'source_recorded', taskDecisionMatch: 'exact_text_unverified', answer: result.answer.text, sources: result.answer.sources });
+    links.push({ decision, constraint, attribution: 'source_recorded', taskDecisionMatch: 'exact_text_unverified', answer: answer.text, sources: answer.sources });
   }
   const references = new Map<string, TaskSource>();
   for (const item of discovered) references.set(`${sourceKey(item.source.path)}\0${item.source.sha256}`, item.source);
@@ -216,6 +218,11 @@ function finishGroundedQuery(query: string, grounded: GroundedResult, hybrid: Hy
   const staleKeys = new Set(grounded.staleSources.map(item => sourceKey(item.path)));
   grounded.staleSources.push(...stale.filter(item => !staleKeys.has(sourceKey(item.path))));
   grounded.evidence = grounded.evidence.filter(item => current.has(referenceKey(item.source)));
+  const sourceFactKeys = new Set([
+    ...(grounded.claims ?? []).filter(item => item.type.startsWith('recorded_')).map(item => `${sourceKey(item.source.path)}\0${item.source.excerpt}`),
+    ...(grounded.relationships ?? []).map(item => `${sourceKey(item.evidence.path)}\0${item.evidence.excerpt}`)
+  ]);
+  grounded.assertions = grounded.assertions.filter(item => !sourceFactKeys.has(`${sourceKey(item.sourcePath)}\0${item.excerpt}`));
   grounded.assertions = grounded.assertions.filter(item => grounded.evidence.some(evidence => sourceKey(evidence.source.path) === sourceKey(item.sourcePath)));
   grounded.canAssert = grounded.assertions.length > 0 && grounded.status !== 'CONFLICTING_EVIDENCE';
   if (grounded.status !== 'CONFLICTING_EVIDENCE') {

@@ -36,6 +36,7 @@ When interacting with or extending HyperSABMemory, AI coding agents must strictl
 ### R-6: Grounded Compound Answers
 - Every returned claim must cite an exact current source line and hash; keep cross-file relationships separate and require an explicit source reference or deterministic rule.
 - Abstain on missing, stale, ambiguous, or conflicting links. Do not infer implementation compliance from recorded decisions or constraints.
+- Task role matches remain unresolved unless their role-specific verifier supports the requested relation; a general source-recorded claim does not establish task completion.
 
 ---
 

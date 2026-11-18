@@ -134,7 +134,7 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
     } finally { await client.close(); }
   });
 
-  it('returns recorded decision and rationale excerpts with unverified implementation status', async () => {
+  it('returns source-backed decision claims without asserting implementation compliance', async () => {
     const dir = tmpDir();
     fs.writeFileSync(path.join(dir, 'arbitrary-notes.md'), 'Decision: Validate names locally.\nRationale: Avoid a hosted dependency.\n');
     const memory = new TemporalMemoryEngine(dir);
@@ -149,9 +149,18 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
       const response = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What was decided about name validation and why?' } });
       const packet = JSON.parse(response.content[0].text);
       expect(packet.records[0]).toMatchObject({ attribution: 'recorded_memory', statement: 'Validate names locally.' });
-      expect(packet.evidence.some((item: any) => item.source.path === 'arbitrary-notes.md' && item.source.freshness === 'current' && item.excerpt.includes('Decision: Validate names locally.'))).toBe(true);
-      expect(packet.answerVerified).toBe(false);
+      expect(packet.evidence.some((item: any) => item.source.path === 'arbitrary-notes.md' && item.source.freshness === 'current')).toBe(true);
+      expect(packet.answerVerified).toBe(true);
+      expect(packet.claims).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'recorded_decision', claim: 'The source records the decision: Validate names locally.' }),
+        expect.objectContaining({ type: 'recorded_rationale', claim: 'The source records the rationale: Avoid a hosted dependency.' })
+      ]));
       expect(packet.limitations.join(' ')).toContain('implementation compliance');
+      const compliance = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'Is name validation correctly implemented according to that decision?' } });
+      const unsupported = JSON.parse(compliance.content[0].text);
+      expect(unsupported.answerVerified).toBe(false);
+      expect(unsupported.assertions).toEqual([]);
+      expect(unsupported.claims).toEqual([]);
     } finally { await client.close(); }
   });
 

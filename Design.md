@@ -4,6 +4,8 @@
 
 Render each atomic claim with its exact source path, line, and current SHA-256. Render cross-file relationships separately with the source-reference line that establishes the link. Keep direct source recording distinct from semantic truth, and state that implementation compliance was not checked.
 
+The same claim and citation representation is returned by general grounded search and the evidence MCP tool. A recorded statement supports only that the source records it; a task role or runtime behavior needs its own verifier.
+
 ## Context header
 
 Keep the always-on header compact and scannable. Its current sections are workspace/branch/checkpoint, active focus, hashline, modified files, structural knowledge, temporal memory, and diff snapshot.

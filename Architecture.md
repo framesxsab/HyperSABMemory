@@ -19,7 +19,7 @@ HyperSABMemory is a local-first TypeScript CLI and MCP server. The existing v1 c
 | `FileWatcherHook` | Observes workspace changes, tracks modified paths, refreshes the local header, and records rate-limited file events. These generated observations must not be treated as user-confirmed architecture. |
 | `AutoCommitEngine` | Creates Git checkpoints over the workspace, with merge/rebase and subdirectory guards. A repository lock serializes separate MCP/CLI processes; requests on one engine share an in-flight attempt. |
 | `HyperSABMemoryMcpServer` | Exposes tools and resources over MCP stdio. Setup configures the local server for supported agent hosts. |
-| `findDecisionClaims` (`src/mcp/evidenceClaims.ts`) | Builds bounded atomic source claims and a separate cross-file relationship only from exact Markdown lines, current hashes, and an explicit `Decision-Source:` link. |
+| `claimVerification` (`src/memory/claimVerification.ts`) | Shares deterministic JSON scalar, exact quotation, recorded Markdown decision/rationale, and explicit source-link verification between general grounded search and task-grounded queries. |
 | CLI output | Uses `picocolors` for the terminal colors used by commands, including color opt-out and force settings. |
 
 ## Data flow
@@ -30,11 +30,11 @@ HyperSABMemory is a local-first TypeScript CLI and MCP server. The existing v1 c
 4. MCP memory queries rank active JSON records with BM25. Optional graph results come from the external graph input; context is not cached across workspace changes.
 5. `Memory.md` is a human-readable projection of memory records. The JSON store is authoritative for persisted records.
 
-Active-record reads refresh from the JSON store so another process's changes are visible. BM25 reuses bounded, workspace-keyed tokenization derived from exact record text; source evidence is independently re-read and hashed for every grounded query. Task-scoped grounded queries use captured source references and only assert narrowly verified declarations, exact quotations, or unambiguous top-level JSON scalar values, not lexical similarity.
+Active-record reads refresh from the JSON store so another process's changes are visible. BM25 reuses bounded, workspace-keyed tokenization derived from exact record text; source evidence is independently re-read and hashed for every grounded query. General grounded queries may assert narrowly verified declarations, exact quotations, unambiguous top-level JSON scalar values, and exact source-recorded decision/rationale lines; lexical similarity alone never verifies a claim.
 
-Captured task sources can supply response-only `source_ref:` candidates without a separate memory record. Natural questions search bounded, query-selected excerpts and return candidate evidence rather than semantic assertions. Duplicate normalized paths with different captured hashes block assertions; source containment and freshness are still checked before evidence is returned.
+Captured task sources can supply response-only `source_ref:` candidates without a separate memory record. Natural questions still return candidate evidence unless an exact deterministic claim class applies; lexical similarity alone does not establish entailment. Duplicate normalized paths with different captured hashes block assertions; source containment and freshness are still checked before evidence is returned.
 
-The general evidence query adds `claims`, `relationships`, and `compoundAnswer` fields without changing its input schema. Decision, adjacent rationale, constraint, and source-link evidence share `findDecisionClaims` with task-grounded queries. It rejects ambiguous links and rechecks supporting hashes before returning; source text still does not prove implementation compliance.
+The general evidence query adds `claims`, `relationships`, and `compoundAnswer` fields without changing its input schema. The general grounder and task-scoped cross-file query use the shared verifier in `src/memory/claimVerification.ts`. A compound answer requires a unique explicit `Decision-Source:` reference; its source lines are hashed and rechecked before return. Source text still does not prove implementation compliance.
 
 Task context also exposes a bounded evidence bundle: an agent-reported ledger snapshot and up to five explicitly source-linked constraints. Links reuse the cross-file verifier and require current captured hashes. The association between a ledger decision and source decision is an exact-text match, not a verified identity; these records do not establish implementation compliance. Missing links remain unverified and truncation is reported.
 

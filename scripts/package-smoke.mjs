@@ -201,9 +201,9 @@ try {
     assert.equal(compound.relationships[0].evidence.excerpt, 'Decision-Source: design/storage-choice.md');
     const decisionResult = await restarted.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query: 'What decision was recorded about task creation before routing?' } });
     const decisionPacket = JSON.parse(decisionResult.content[0].text);
-    assert.equal(decisionPacket.answerVerified, false);
+    assert.equal(decisionPacket.answerVerified, true);
     assert.ok(decisionPacket.records.some(item => item.statement === 'Task creation validates input before routing.'));
-    assert.ok(decisionPacket.evidence.some(item => item.source.path === 'Architecture.md' && item.excerpt.includes('Decision: Task creation validates input before routing.')));
+    assert.ok(decisionPacket.claims.some(item => item.type === 'recorded_decision' && item.value === 'Task creation validates input before routing.' && item.source.path === 'Architecture.md' && item.source.line === 2 && /^[a-f0-9]{64}$/.test(item.source.sha256)));
     const restored = await restarted.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
     assert.equal(restored.structuredContent.lease.status, 'active');
     assert.equal(restored.structuredContent.lease.recordedOwner, 'package-agent-b');

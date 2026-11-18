@@ -185,8 +185,64 @@ it('verifies explicitly captured sources without a separately remembered record'
       expect(result.evidence[0].record.content.length).toBeLessThan(320);
     }
     fs.writeFileSync(path.join(dir, 'config.json'), '{"port": 4322}');
-    expect(searchGrounded(hybrid, dir, 'What is the value of `port` in `config.json`?', refs)).toMatchObject({ status: 'STALE_EVIDENCE', canAssert: false });
+    expect(searchGrounded(hybrid, dir, 'What is the value of `port` in `config.json`?', refs)).toMatchObject({ status: 'STALE_EVIDENCE', canAssert: false, claims: [] });
     expect(searchGrounded(hybrid, dir, 'Where is `DefinitelyAbsent` defined?', refs).canAssert).toBe(false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('returns a source-qualified decision claim through the general grounder', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-recorded-claim-'));
+  try {
+    const sourcePath = 'decisions/task-storage.md';
+    fs.mkdirSync(path.dirname(path.join(dir, sourcePath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, sourcePath), 'Decision: Use SQLite for task coordination.\nRationale: Preserve atomic task transitions.\n');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'Task coordination decision: SQLite.', [], { artifacts: [sourcePath] });
+    const refs = captureTaskSources(dir, [sourcePath]);
+    const result = searchGrounded(new HybridSearchEngine(dir, memory), dir, 'What decision was recorded about task coordination?', refs);
+    expect(result).toMatchObject({ status: 'SUPPORTED', canAssert: true });
+    expect(result.claims).toEqual(expect.arrayContaining([expect.objectContaining({
+        type: 'recorded_decision',
+        claim: 'The source records the decision: Use SQLite for task coordination.',
+        source: expect.objectContaining({ path: sourcePath, sha256: refs[0].sha256, line: 1, freshness: 'current' }),
+        verification: 'exact_markdown_line'
+      })]));
+    fs.writeFileSync(path.join(dir, sourcePath), 'Decision: Use a queue for task coordination.\nRationale: Preserve atomic task transitions.\n');
+    expect(searchGrounded(new HybridSearchEngine(dir, memory), dir, 'What decision was recorded about task coordination?', refs)).toMatchObject({ status: 'STALE_EVIDENCE', canAssert: false, claims: [] });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('returns explicitly linked multi-source claims through the general grounder and abstains on compliance or conflicts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-linked-claims-'));
+  try {
+    const decisionPath = 'decisions/storage-choice.md';
+    const constraintPath = 'architecture/task-rules.md';
+    const conflictPath = 'architecture/alternate-rules.md';
+    fs.mkdirSync(path.dirname(path.join(dir, decisionPath)), { recursive: true });
+    fs.mkdirSync(path.dirname(path.join(dir, constraintPath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, decisionPath), 'Decision: Use SQLite for task coordination.\nRationale: Preserve atomic task transitions.\n');
+    fs.writeFileSync(path.join(dir, constraintPath), `Decision-Source: ${decisionPath}\nConstraint: Task updates must use a transactional coordinator.\n`);
+    fs.writeFileSync(path.join(dir, conflictPath), `Decision-Source: ${decisionPath}\nConstraint: Task updates may bypass transactions.\n`);
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'SQLite task coordination preserves atomic task transitions.', [], { artifacts: [decisionPath] });
+    memory.remember('architecture', 'Task update implementation constraint requires a transactional coordinator.', [], { artifacts: [constraintPath] });
+    const refs = captureTaskSources(dir, [decisionPath, constraintPath, conflictPath]);
+    const hybrid = new HybridSearchEngine(dir, memory);
+    const query = 'What storage decision was recorded, why, and what task update constraint explicitly follows?';
+    const result = searchGrounded(hybrid, dir, query, refs);
+    expect(result).toMatchObject({ status: 'SUPPORTED', canAssert: true, compoundAnswer: { text: expect.stringContaining('transactional coordinator') } });
+    expect(result.claims?.map(item => item.type)).toEqual(['recorded_decision', 'recorded_rationale', 'recorded_constraint']);
+    expect(result.claims?.every(item => item.source.freshness === 'current' && /^[a-f0-9]{64}$/.test(item.source.sha256))).toBe(true);
+    expect(result.relationships).toEqual([expect.objectContaining({ status: 'verified', evidence: expect.objectContaining({ path: constraintPath, line: 1, excerpt: `Decision-Source: ${decisionPath}` }) })]);
+
+    const compliance = searchGrounded(hybrid, dir, 'Is task coordination correctly implemented using SQLite?', refs);
+    expect(compliance.canAssert).toBe(false);
+    expect(compliance.assertions).toEqual([]);
+    expect(compliance.claims).toEqual([]);
+
+    memory.remember('architecture', 'Conflicting task update constraint permits uncoordinated writes.', [], { artifacts: [conflictPath] });
+    const conflict = searchGrounded(hybrid, dir, query, refs);
+    expect(conflict).toMatchObject({ status: 'CONFLICTING_EVIDENCE', canAssert: false, assertions: [], claims: [], relationships: [] });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -201,6 +257,7 @@ it('does not resurrect forgotten memory or trust an escaping source reference', 
     const hybrid = new HybridSearchEngine(dir, memory);
     const result = searchGrounded(hybrid, dir, 'What is the value of `port` in `config.json`?', refs);
     expect(result.canAssert).toBe(true);
+    expect(result.claims?.some(item => item.type === 'json_scalar')).toBe(true);
     expect(JSON.stringify(result)).not.toContain(forgotten.id);
     expect(JSON.stringify(result)).not.toContain('forgotten private note');
     const escaping = searchGrounded(hybrid, dir, 'What is the value of `port` in `../outside.json`?', [{ path: '../outside.json', sha256: 'arbitrary' }]);
@@ -218,7 +275,7 @@ it('refuses assertions when captured references disagree about the same source',
     fs.writeFileSync(file, '{"port": 4322}');
     const updated = captureTaskSources(dir, ['config.json']);
     const result = searchGrounded(new HybridSearchEngine(dir), dir, 'What is the value of `port` in `config.json`?', [...original, ...updated]);
-    expect(result).toMatchObject({ status: 'CONFLICTING_EVIDENCE', canAssert: false, assertions: [], conflictOrigin: 'source_hash_mismatch', conflictPaths: ['config.json'] });
+    expect(result).toMatchObject({ status: 'CONFLICTING_EVIDENCE', canAssert: false, assertions: [], claims: [], relationships: [], conflictOrigin: 'source_hash_mismatch', conflictPaths: ['config.json'] });
     const duplicate = searchGrounded(new HybridSearchEngine(dir), dir, 'What is the value of `port` in `config.json`?', [...updated, ...updated]);
     expect(duplicate).toMatchObject({ status: 'SUPPORTED', canAssert: true });
     const alias = searchGrounded(new HybridSearchEngine(dir), dir, 'What is the value of `port` in `config.json`?', [{ ...original[0], path: './config.json' }, ...updated]);
@@ -381,7 +438,9 @@ it('asserts an exact JSON configuration value only from current unambiguous byte
     memory.remember('architecture', 'config port 4321', [], { artifacts: ['config.json'] });
     const hybrid = new HybridSearchEngine(dir, memory);
     const query = 'What is the value of `port` in `config.json`?';
-    expect(searchGrounded(hybrid, dir, query, refs)).toMatchObject({ status: 'SUPPORTED', canAssert: true, assertions: [{ claim: 'Configuration port in config.json is 4321.', excerpt: '"port": 4321' }] });
+    const supported = searchGrounded(hybrid, dir, query, refs);
+    expect(supported).toMatchObject({ status: 'SUPPORTED', canAssert: true, assertions: [{ claim: 'Configuration port in config.json is 4321.', excerpt: '"port": 4321' }] });
+    expect(supported.claims).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'json_scalar', claim: 'The current configuration records port 4321.', source: expect.objectContaining({ path: 'config.json', sha256: refs[0].sha256, line: 1, freshness: 'current' }), verification: 'unique_json_scalar' })]));
     expect(searchGrounded(hybrid, dir, query, refs, ['config.json']).canAssert).toBe(false);
     fs.writeFileSync(file, '{"port": 4322}');
     expect(searchGrounded(hybrid, dir, query, refs).canAssert).toBe(false);

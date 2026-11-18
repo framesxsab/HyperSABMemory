@@ -4,10 +4,11 @@
 - [x] General evidence query, deterministic scalar assertions, current-source hashing, and installed-package restart path verified; details in `docs/SPRINT_2_8_CLOSEOUT.md`.
 - Release remains NO-GO under unchanged frozen answer-quality gates.
 
-## Sprint 2.9: Multi-Source Grounded Answers — Implemented, Agent Demo Unverified
-- [x] Reusable atomic claims and explicit source-link relationships added to the existing evidence query; input schema preserved.
-- [x] Focused conflict, abstention, fresh-package MCP, and regression coverage added; see `docs/SPRINT_2_9_RESULTS.md`.
-- [ ] Real coding-agent demonstration pending an authenticated local client.
+## Sprint 2.9: Unified Deterministic Grounding — Engineering Complete
+- [x] Shared JSON scalar, quotation, recorded decision/rationale, and explicit-link verification feeds both general grounded search and MCP claims; input schema preserved.
+- [x] Task role assertions remain role-specific and unresolved when their relationships are not verified.
+- [x] Full local regression, frozen evaluator, packed MCP consumer, and closeout documented in `docs/SPRINT_2_9_GROUNDING_CLOSEOUT.md`.
+- Release remains NO-GO under unchanged frozen broad-answer and retrieval gates.
 
 ## Sprint 2.7: Retrieval Usefulness
 Sprint 2.7 local implementation and validation: source-aware task retrieval, import ranking hints, and declaration excerpts are implemented. The 20% quality and latency targets remain unmet; release is NO-GO. Evidence: `docs/SPRINT_2_7_RESULTS.md`.

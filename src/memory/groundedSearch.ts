@@ -3,6 +3,7 @@ import type { MemoryRecord } from './sqliteStore.js';
 import { HybridSearchEngine, queryIdentifiers, tokenizeSearchQuery, tokenizeSearchText } from './hybridSearch.js';
 import { performance } from 'node:perf_hooks';
 import * as path from 'node:path';
+import { verifyJsonScalarClaim, verifyQuotedTextClaim, verifyRecordedClaims, type AtomicEvidenceClaim, type ClaimSourceSnapshot, type EvidenceRelationship } from './claimVerification.js';
 
 export interface GroundedTiming { candidateMs: number; rankingMs: number; indexingMs?: number; pathMs: number; readMs: number; hashMs: number; excerptMs: number; decisionMs: number }
 
@@ -45,6 +46,9 @@ export interface GroundedResult {
   candidates: Array<{ recordId: string; sourcePaths: string[]; score: number }>;
   evidence: GroundedEvidence[];
   assertions: Array<{ claim: string; sourcePath: string; excerpt: string }>;
+  claims?: AtomicEvidenceClaim[];
+  relationships?: EvidenceRelationship[];
+  compoundAnswer?: { text: string; limitation: string };
   staleSources: TaskSourceInspection[];
   conflictOrigin?: 'caller_declared' | 'source_hash_mismatch';
   conflictPaths?: string[];
@@ -166,11 +170,17 @@ export function searchGrounded(
   let lexicalEvidenceCount = 0;
   const staleSources: TaskSourceInspection[] = [];
   const assertions: GroundedResult['assertions'] = [];
+  const claims: AtomicEvidenceClaim[] = [];
+  const relationships: EvidenceRelationship[] = [];
+  const currentSources = new Map<string, ClaimSourceSnapshot>();
+  const sourceRecords = new Map<string, MemoryRecord>();
+  const sourceScores = new Map<string, number>();
   const assertedDeclarations = new Set<string>();
   const configValues = new Map<string, Set<string>>();
+  const configConflicts = new Set<string>();
   const declarationPattern = symbol ? new RegExp(`^\\s*(?:(?:export|declare|abstract|default)\\s+)*(?:class|function|interface|type|const|let|var|enum)\\s+${escapeIdentifier(symbol)}(?![\\w$])`) : undefined;
   const naturalQuery = !symbol && !config && !quotation;
-  for (const [candidateIndex, { record, queryTermEvidence }] of candidates.entries()) {
+  for (const [candidateIndex, { record, queryTermEvidence, score }] of candidates.entries()) {
     if (naturalQuery && candidateIndex >= 10 && lexicalEvidenceCount >= 5) break;
     for (const artifact of record.artifacts ?? []) {
       const reference = references.get(sourceKey(artifact));
@@ -187,11 +197,17 @@ export function searchGrounded(
       }
       const text = sourceBytes?.toString('utf8');
       if (!text) { staleSources.push({ ...source, status: 'unavailable', detail: 'source bytes were not available during grounding' }); continue; }
+      currentSources.set(sourceKey(filename), { ...source, content: text });
+      sourceRecords.set(sourceKey(filename), record);
+      sourceScores.set(sourceKey(filename), score);
       if (symbol && directSourceKeys.has(sourceKey(filename)) && !text.includes(symbol)) continue;
       if (quotation && sourceKey(filename) === sourceKey(quotation[1]) && quotation[2].length <= 320 && text.includes(quotation[2])) {
-        const claim = `Source ${filename} contains the quoted text.`;
+        const verified = verifyQuotedTextClaim(currentSources.get(sourceKey(filename))!, quotation[2]);
+        if (verified.status !== 'supported') continue;
+        const claim = verified.claim.claim;
         const key = `${filename}\0${claim}`;
         potentialEvidence.push({ record, source, lexicalSupport: 1, content: text });
+        claims.push(verified.claim);
         if (!assertedDeclarations.has(key)) {
           assertedDeclarations.add(key);
           assertions.push({ claim, sourcePath: filename, excerpt: quotation[2] });
@@ -199,31 +215,22 @@ export function searchGrounded(
         continue;
       }
       if (configKey && (!configPath || sourceKey(filename) === sourceKey(configPath)) && /\.json$/i.test(filename)) {
-        try {
-          const parsed: unknown = JSON.parse(text);
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, configKey)) {
-            const value = (parsed as Record<string, unknown>)[configKey];
-            if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
-              const key = JSON.stringify(configKey).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const valueText = JSON.stringify(value);
-              const occurrences = [...text.matchAll(new RegExp(`${key}\\s*:`, 'g'))];
-              const match = text.match(new RegExp(`${key}\\s*:\\s*${valueText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s*[,}])`));
-              if (occurrences.length === 1 && match && match[0].length <= 320) {
-                potentialEvidence.push({ record, source, lexicalSupport: 1, content: text });
-                const claim = `Configuration ${configKey} in ${filename} is ${valueText}.`;
-                const values = configValues.get(configKey) ?? new Set<string>();
-                values.add(valueText);
-                configValues.set(configKey, values);
-                const key = `${filename}\0${claim}`;
-                if (!assertedDeclarations.has(key)) {
-                  assertedDeclarations.add(key);
-                  assertions.push({ claim, sourcePath: filename, excerpt: match[0] });
-                }
-                continue;
-              }
-            }
+        const verified = verifyJsonScalarClaim(currentSources.get(sourceKey(filename))!, configKey);
+        if (verified.status === 'supported') {
+          potentialEvidence.push({ record, source, lexicalSupport: 1, content: text });
+          claims.push(verified.claim);
+          const values = configValues.get(configKey) ?? new Set<string>();
+          values.add(verified.claim.value);
+          configValues.set(configKey, values);
+          const legacyClaim = `Configuration ${configKey} in ${filename} is ${verified.claim.value}.`;
+          const key = `${filename}\0${legacyClaim}`;
+          if (!assertedDeclarations.has(key)) {
+            assertedDeclarations.add(key);
+            assertions.push({ claim: legacyClaim, sourcePath: filename, excerpt: verified.claim.source.excerpt });
           }
-        } catch {}
+          continue;
+        }
+        if (verified.status === 'conflicting') configConflicts.add(filename);
       }
       const termEvidence = record.id.startsWith('source_ref:') ? undefined : queryTermEvidence;
       const tokenKey = `${cacheWorkspace}\0${source.currentSha256}`;
@@ -260,6 +267,38 @@ export function searchGrounded(
       }
     }
   }
+  const allCurrentSources = [...currentSources.values()];
+  const decisionSources = allCurrentSources.filter(source => /^(?:\uFEFF)?Decision: /m.test(source.content ?? ''));
+  const rankedDecisions = decisionSources.map(source => ({ source, score: sourceScores.get(sourceKey(source.path)) ?? 0 }));
+  const bestDecisionScore = Math.max(0, ...rankedDecisions.map(item => item.score));
+  const selectedDecisions = rankedDecisions.filter(item => item.score === bestDecisionScore).map(item => item.source);
+  const selectedDecisionPaths = new Set(selectedDecisions.map(source => sourceKey(source.path)));
+  const asksRelationship = /\b(constraint|relationship|linked|follows?)\b/i.test(query);
+  const recordedInputs = allCurrentSources.filter(source => {
+    if (selectedDecisionPaths.has(sourceKey(source.path))) return true;
+    if (!asksRelationship) return false;
+    const lines = source.content?.split(/\r?\n/) ?? [];
+    if (lines[0]?.startsWith('\uFEFF')) lines[0] = lines[0].slice(1);
+    return selectedDecisions.some(decision => lines.some(line => line.startsWith('Decision-Source: ') && sourceKey(line.slice('Decision-Source: '.length)) === sourceKey(decision.path)));
+  });
+  const recorded = verifyRecordedClaims(query, recordedInputs);
+  if (recorded.status === 'supported') {
+    for (const item of recorded.claims) {
+      claims.push(item);
+      if (!assertions.some(assertion => assertion.sourcePath === item.source.path && assertion.excerpt === item.source.excerpt)) assertions.push({ claim: item.claim, sourcePath: item.source.path, excerpt: item.source.excerpt });
+    }
+    relationships.push(...recorded.relationships);
+    for (const relationship of recorded.relationships) {
+      if (!assertions.some(assertion => assertion.sourcePath === relationship.evidence.path && assertion.excerpt === relationship.evidence.excerpt)) assertions.push({ claim: `The source explicitly links ${relationship.from} to ${relationship.to}.`, sourcePath: relationship.evidence.path, excerpt: relationship.evidence.excerpt });
+    }
+    const structuredPaths = new Set([...recorded.claims.map(item => item.source.path), ...recorded.relationships.map(item => item.evidence.path)]);
+    for (const filename of structuredPaths) {
+      const key = sourceKey(filename);
+      const snapshot = currentSources.get(key);
+      const record = sourceRecords.get(key);
+      if (snapshot && record && !potentialEvidence.some(item => sourceKey(item.source.path) === key)) potentialEvidence.push({ record, source: snapshot, lexicalSupport: 0, content: snapshot.content });
+    }
+  }
   const excerptStart = timing ? performance.now() : 0;
   const assertionByPath = new Map(assertions.map(assertion => [assertion.sourcePath, assertion]));
   const selectedPaths = new Set<string>();
@@ -292,14 +331,28 @@ export function searchGrounded(
     const line = position >= 0 && text!.lastIndexOf(item.excerpt!) === position ? text!.slice(0, position).split('\n').length : undefined;
     return [{ ...item, source, ...(line !== undefined ? { line } : {}) }];
   });
+  const supportedAssertions = assertions.filter(assertion => topEvidence.some(item => item.source.path === assertion.sourcePath));
+  const supportedPaths = new Map(topEvidence.map(item => [sourceKey(item.source.path), item.source]));
+  const supportedClaims = claims.filter(item => supportedPaths.get(sourceKey(item.source.path))?.currentSha256 === item.source.sha256);
+  const supportedRelationships = relationships.filter(item => supportedPaths.get(sourceKey(item.evidence.path))?.currentSha256 === item.evidence.sha256 && supportedPaths.has(sourceKey(item.from)) && supportedPaths.has(sourceKey(item.to)));
+  const supportedAssertionSources = new Set(supportedAssertions.map(item => sourceKey(item.sourcePath)));
+  const returnedClaims = supportedClaims.filter(item => supportedAssertionSources.has(sourceKey(item.source.path)));
+  const returnedRelationships = supportedRelationships.filter(item => returnedClaims.some(claim => sourceKey(claim.source.path) === sourceKey(item.from)) && returnedClaims.some(claim => sourceKey(claim.source.path) === sourceKey(item.to)));
+  const compoundAnswer = returnedRelationships.length && recorded.status === 'supported' ? { text: recorded.text!, limitation: recorded.limitation } : undefined;
   if (timing && previous) {
     timing.decisionMs += performance.now() - started - (timing.candidateMs - previous.candidateMs) - (timing.rankingMs - previous.rankingMs) - (timing.pathMs - previous.pathMs) - (timing.readMs - previous.readMs) - (timing.hashMs - previous.hashMs) - (timing.excerptMs - previous.excerptMs);
   }
-  if (declaredConflicts.length || referenceConflicts.size) return { status: 'CONFLICTING_EVIDENCE', conflictOrigin: declaredConflicts.length ? 'caller_declared' : 'source_hash_mismatch', conflictPaths: [...new Set([...declaredConflicts, ...referenceConflicts])], candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
-  if ([...configValues.values()].some(values => values.size > 1)) return { status: 'CONFLICTING_EVIDENCE', conflictOrigin: 'source_hash_mismatch', candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
-  const supportedAssertions = assertions.filter(assertion => topEvidence.some(item => item.source.path === assertion.sourcePath));
-  if (supportedAssertions.length) return { status: 'SUPPORTED', candidates: queryCandidates, evidence: topEvidence, assertions: supportedAssertions, staleSources, canAssert: true };
-  if (topEvidence.length) return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: topEvidence, assertions: [], staleSources, canAssert: false };
-  if (staleSources.length) return { status: 'STALE_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], staleSources, canAssert: false };
-  return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], staleSources, canAssert: false };
+  if (declaredConflicts.length || referenceConflicts.size || recorded.status === 'conflicting') return {
+    status: 'CONFLICTING_EVIDENCE', conflictOrigin: declaredConflicts.length ? 'caller_declared' : 'source_hash_mismatch',
+    conflictPaths: [...new Set([...declaredConflicts, ...referenceConflicts, ...(recorded.conflictPaths ?? [])])],
+    candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], staleSources, canAssert: false
+  };
+  if (configConflicts.size || [...configValues.values()].some(values => values.size > 1)) return {
+    status: 'CONFLICTING_EVIDENCE', conflictOrigin: 'source_hash_mismatch', conflictPaths: [...configConflicts],
+    candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], staleSources, canAssert: false
+  };
+  if (supportedAssertions.length) return { status: 'SUPPORTED', candidates: queryCandidates, evidence: topEvidence, assertions: supportedAssertions, claims: returnedClaims, relationships: returnedRelationships, ...(compoundAnswer ? { compoundAnswer } : {}), staleSources, canAssert: true };
+  if (topEvidence.length) return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: topEvidence, assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
+  if (staleSources.length) return { status: 'STALE_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
+  return { status: 'INSUFFICIENT_EVIDENCE', candidates: queryCandidates, evidence: [], assertions: [], claims: [], relationships: [], staleSources, canAssert: false };
 }
