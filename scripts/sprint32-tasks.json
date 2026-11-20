@@ -1,0 +1,20 @@
+{
+  "snapshot": "d44ac8883ce4b43a240b2830420b5d07365b405e",
+  "model": "gpt-6.2-sol",
+  "reasoningEffort": "low",
+  "deadlineMs": 300000,
+  "tasks": {
+    "freshness": {
+      "prompt": "Fix a grounded-search correctness bug. If a decision source changes after initial inspection while a linked constraint document remains current, the final result can still assert that the relationship is verified. Suppress the invalid relationship across the returned packet, preserve independently supported evidence, and retain normal link verification when both sources are current. Add a focused regression in tests/groundedSearch.test.ts. Limit production changes to src/memory/groundedSearch.ts and run relevant tests."
+    },
+    "wire-regression": {
+      "prompt": "Add a public MCP regression test in tests/mcpQuery.test.ts for implementation evidence on hypersabmemory_query_evidence. Exercise the real MCP handler through the in-memory transport with source and test files. Assert both the code citation and a genuinely linked test citation, and verify that observing a test definition leaves execution unverified and does not set answerVerified. Keep this change test-only and run the relevant tests."
+    }
+  },
+  "order": [
+    ["freshness", "baseline"],
+    ["freshness", "memory"],
+    ["wire-regression", "memory"],
+    ["wire-regression", "baseline"]
+  ]
+}
