@@ -213,17 +213,23 @@ describe('fail-closed release preflight guard', () => {
     expect(manifest.scripts.prepublishOnly).not.toContain('option-b');
   });
 
-  it('wires fail-closed release preflight across Linux, Windows, and macOS in GitHub Actions workflows', () => {
+  it('separates development CI checks from mandatory cross-platform release gates in GitHub Actions', () => {
     const releaseWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+    expect(releaseWorkflow).toContain('workflow_dispatch:');
     expect(releaseWorkflow).toContain('npm run release:preflight');
     expect(releaseWorkflow).toContain('ubuntu-latest');
     expect(releaseWorkflow).toContain('windows-latest');
     expect(releaseWorkflow).toContain('macos-latest');
+    expect(releaseWorkflow).toContain('needs: gates');
+    expect(releaseWorkflow).toContain("if: github.event_name == 'push' && github.ref_type == 'tag'");
     expect(releaseWorkflow).not.toContain('continue-on-error: true');
 
     const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
-    expect(ciWorkflow).toContain('release-readiness:');
-    expect(ciWorkflow).toContain('npm run release:preflight');
+    expect(ciWorkflow).toContain('pull_request:');
+    expect(ciWorkflow).toContain('npm test');
+    expect(ciWorkflow).toContain('npm run package:smoke');
+    expect(ciWorkflow).not.toContain('release-readiness:');
+    expect(ciWorkflow).not.toContain('run: npm run release:preflight');
     expect(ciWorkflow).not.toContain('continue-on-error: true');
   });
 });
