@@ -18,7 +18,8 @@
     "eval": "vitest run tests/memorybench.test.ts",
     "eval:baseline": "node scripts/retrieval-baseline.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
-    "prepublishOnly": "npm test && npm run eval && npm run eval:baseline && npm run package:smoke"
+    "release:preflight": "node scripts/release-preflight.mjs",
+    "prepublishOnly": "npm test && npm run eval && npm run eval:baseline && npm run package:smoke && npm run release:preflight"
   },
   "keywords": [
     "hypersabmemory",
