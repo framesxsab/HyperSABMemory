@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TaskLedger } from '../src/memory/taskLedger.js';
 import { executeTaskTool } from '../src/mcp/taskTools.js';
+import { SqliteStore } from '../src/memory/sqliteStore.js';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 
 it('restores recorded task facts and explicit linked evidence without a filename-specific question', () => {
@@ -167,5 +168,104 @@ it('restores the sole active task without taskId, resolves an unambiguous prefix
         }
       }
     });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('delivers task-linked active memories and a compact one-call handoff projection while preserving freshness and forgetting guarantees', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-answer-compact-'));
+  try {
+    const choiceText = 'Decision: Keep invoices local.\nRationale: Avoid hosted processing.\n';
+    const ruleText = 'Decision-Source: choice.md\nConstraint: Invoice data stays on device.\n';
+    fs.writeFileSync(path.join(dir, 'choice.md'), choiceText);
+    fs.writeFileSync(path.join(dir, 'rule.md'), ruleText);
+    const ledger = new TaskLedger(dir);
+    const task = ledger.create({
+      goal: 'Review invoice storage',
+      acceptanceCriteria: ['Preserve local storage'],
+      constraints: ['Avoid hosted services'],
+      sourceRefs: ['choice.md', 'rule.md'],
+      decisions: ['Keep invoices local.'],
+      nextAction: 'Update invoice persistence guard'
+    });
+    const memory = new TemporalMemoryEngine(dir);
+    const decisionMem = memory.remember('decision', 'Reuse StructuredMemory.artifacts rather than adding new fields.', [], { artifacts: ['choice.md'] });
+    const forgottenMem = memory.remember('bug', 'forgotten cometmarker bug note', [], { artifacts: ['rule.md'] });
+    memory.forget(forgottenMem.id);
+    new SqliteStore(path.join(dir, '.hypersabmemory')).set({
+      id: 'auto_watcher_choice',
+      category: 'architecture',
+      content: 'Automatic watcher observation on choice.md',
+      artifacts: ['choice.md'],
+      source: 'auto'
+    });
+    memory.remember('architecture', 'File change: choice.md', [], { artifacts: ['choice.md'] });
+    memory.remember('decision', 'Unrelated decision on other.md', [], { artifacts: ['other.md'] });
+
+    const defaultCall = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', {})!;
+    const compactCall = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: true })!;
+    const defaultPayload = defaultCall.structuredContent as Record<string, unknown> & {
+      answerBundle: { relatedMemories: Array<{ id: string; statement: string; attribution: string }> };
+    };
+    const compactPayload = compactCall.structuredContent as Record<string, unknown> & {
+      relatedMemories: Array<{ id: string; statement: string; attribution: string }>;
+      sources: Array<Record<string, unknown>>;
+    };
+
+    expect(defaultPayload.answerBundle.relatedMemories).toEqual([
+      expect.objectContaining({
+        id: decisionMem.id,
+        category: 'decision',
+        statement: 'Reuse StructuredMemory.artifacts rather than adding new fields.',
+        matchedSources: ['choice.md'],
+        attribution: 'recorded_memory'
+      })
+    ]);
+    expect(compactPayload).toMatchObject({
+      compact: true,
+      taskId: task.id,
+      nextAction: 'Update invoice persistence guard',
+      decisions: ['Keep invoices local.'],
+      decisionsStatus: 'reported_unverified',
+      decisionEvidence: [{ decision: 'Keep invoices local.', sourcePath: 'choice.md', sha256: task.sourceRefs[0].sha256, rationale: { text: 'Avoid hosted processing.', line: 2 } }],
+      linkedConstraints: [{ decision: 'Keep invoices local.', constraint: 'Invoice data stays on device.' }],
+      relatedMemories: defaultPayload.answerBundle.relatedMemories,
+      attribution: {
+        task: 'agent_reported',
+        decisionEvidence: 'source_recorded',
+        linkedConstraints: 'source_recorded',
+        relatedMemories: 'recorded_memory'
+      }
+    });
+    expect(compactPayload).not.toHaveProperty('capsule');
+    expect(compactPayload.sources.every((item) => typeof item.sha256 === 'string' && (item.sha256 as string).length === 64 && !('currentSha256' in item))).toBe(true);
+    const defaultJson = JSON.stringify(defaultPayload);
+    const compactJson = JSON.stringify(compactPayload);
+    expect(defaultJson).not.toContain('cometmarker');
+    expect(compactJson).not.toContain('cometmarker');
+    expect(compactJson.length).toBeLessThan(defaultJson.length);
+
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: 'yes' })).toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: 'INVALID_ARGUMENT' } }
+    });
+
+    // Same-size rewrite on choice.md drops stale decisionEvidence, linkedConstraints, and relatedMemories for that source.
+    fs.writeFileSync(path.join(dir, 'choice.md'), choiceText.replace('local.', 'l0cal.'));
+    const staleDefault = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', {})!.structuredContent as Record<string, unknown>;
+    const staleCompact = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: true })!.structuredContent as Record<string, unknown>;
+    for (const payload of [staleDefault, staleCompact]) {
+      expect(payload).toMatchObject({
+        decisionsStatus: 'historical_unverified',
+        decisionEvidence: [],
+        sources: expect.arrayContaining([
+          expect.objectContaining({ path: 'choice.md', status: 'modified', currentSha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
+        ])
+      });
+      expect((payload.warnings as string[]).some((warning) => warning.includes('choice.md: modified'))).toBe(true);
+    }
+    expect((staleDefault.answerBundle as { linkedConstraints: unknown[]; relatedMemories: unknown[] }).linkedConstraints).toEqual([]);
+    expect((staleDefault.answerBundle as { linkedConstraints: unknown[]; relatedMemories: unknown[] }).relatedMemories).toEqual([]);
+    expect(staleCompact.linkedConstraints).toEqual([]);
+    expect(staleCompact.relatedMemories).toEqual([]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

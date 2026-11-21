@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { TaskError, TaskLedger, type TaskRecord } from '../memory/taskLedger.js';
 import { restoreTaskContext, TASK_CAPSULE_TOKEN_BUDGET, markdownProseLineIndices } from '../harness/taskContext.js';
@@ -5,6 +7,7 @@ import { TokenCompressor } from '../harness/tokenCompressor.js';
 import { createTaskSourceContentInspector, discoverProjectSources, inspectTaskSourceContents, type TaskSource, type TaskSourceInspection } from '../harness/taskSources.js';
 import { HybridSearchEngine, recordSearchText, tokenizeSearchQuery, tokenizeSearchText } from '../memory/hybridSearch.js';
 import { excerptFor, isExplicitGroundedQuery, searchGrounded, sourceKey, type GroundedResult } from '../memory/groundedSearch.js';
+import { FILE_EVENT_FACT_PATTERN } from '../memory/contextBlock.js';
 import { TemporalMemoryEngine } from '../memory/temporalMemory.js';
 import type { MemoryRecord } from '../memory/sqliteStore.js';
 import { findDecisionClaims } from '../memory/claimVerification.js';
@@ -54,7 +57,56 @@ function crossFileAnswer(workspaceDir: string, task: TaskRecord, sources: TaskSo
   ], claims: verified.claims, relationships: verified.relationships, staleSources: [], requirements: [], answer: { text: verified.text, relationship: 'explicit_source_reference', sources: citations, limitation: verified.limitation } };
 }
 
-function taskAnswerBundle(workspaceDir: string, task: TaskRecord) {
+const HANDOFF_CATEGORY_RANK: Record<MemoryRecord['category'], number> = {
+  decision: 0,
+  bug: 1,
+  architecture: 2,
+  symbol: 3,
+  general: 4
+};
+
+function collectTaskMemories(
+  workspaceDir: string,
+  currentSources: TaskSource[]
+): Array<{
+  id: string;
+  category: MemoryRecord['category'];
+  statement: string;
+  matchedSources: string[];
+  attribution: 'recorded_memory';
+}> {
+  const storeDir = path.join(workspaceDir, '.hypersabmemory');
+  if (!fs.existsSync(path.join(storeDir, 'memory_store.json')) && !fs.existsSync(path.join(storeDir, 'memory_store.json.bak'))) {
+    return [];
+  }
+  const currentMap = new Map(currentSources.map(source => [sourceKey(source.path), source.path]));
+  if (!currentMap.size) return [];
+  const active = new TemporalMemoryEngine(workspaceDir).getActive();
+  const candidates = active.flatMap(record => {
+    if (record.source === 'auto' || FILE_EVENT_FACT_PATTERN.test(record.content)) return [];
+    const matchedSources = [...new Set(
+      (record.artifacts ?? [])
+        .map(item => currentMap.get(sourceKey(item)))
+        .filter((item): item is string => Boolean(item))
+    )];
+    if (!matchedSources.length) return [];
+    return [{ record, matchedSources }];
+  });
+  candidates.sort((a, b) =>
+    HANDOFF_CATEGORY_RANK[a.record.category] - HANDOFF_CATEGORY_RANK[b.record.category] ||
+    b.record.timestamp.localeCompare(a.record.timestamp) ||
+    a.record.id.localeCompare(b.record.id)
+  );
+  return candidates.map(({ record, matchedSources }) => ({
+    id: record.id,
+    category: record.category,
+    statement: record.content,
+    matchedSources,
+    attribution: 'recorded_memory' as const
+  }));
+}
+
+function taskAnswerBundle(workspaceDir: string, task: TaskRecord, compact = false) {
   const sources = [...task.sourceRefs, ...task.evidenceRefs];
   const inspect = createTaskSourceContentInspector(workspaceDir);
   const seen = new Set<string>();
@@ -103,10 +155,68 @@ function taskAnswerBundle(workspaceDir: string, task: TaskRecord) {
     const warning = 'Recorded decisions have no guarantee of current source support; treat them as historical/unverified until sources are re-read.';
     if (!context.unsupportedAssumptions.includes(warning)) context.unsupportedAssumptions.push(warning);
   }
+  const currentTaskSources = [...context.sources, ...context.evidence]
+    .filter(item => item.status === 'current')
+    .map(item => ({ path: item.path, sha256: item.sha256 }));
+  const validMemories = collectTaskMemories(workspaceDir, currentTaskSources);
+  const selectedMemories: typeof validMemories = [];
+  for (const item of validMemories) {
+    if (
+      selectedMemories.length < 5 &&
+      TokenCompressor.estimateTokens(JSON.stringify({ linkedConstraints: selectedLinks, relatedMemories: [...selectedMemories, item] })) <= TASK_CAPSULE_TOKEN_BUDGET
+    ) {
+      selectedMemories.push(item);
+    }
+  }
+  const truncated = selectedLinks.length < validLinks.length || selectedMemories.length < validMemories.length;
+  if (compact) {
+    const compactSources = context.sources.map(source => source.status === 'current'
+      ? { path: source.path, sha256: source.sha256, status: source.status }
+      : { path: source.path, sha256: source.sha256, status: source.status, ...(source.currentSha256 ? { currentSha256: source.currentSha256 } : {}), ...(source.detail ? { detail: source.detail } : {}) });
+    const compactEvidence = context.evidence.map(source => source.status === 'current'
+      ? { path: source.path, sha256: source.sha256, status: source.status }
+      : { path: source.path, sha256: source.sha256, status: source.status, ...(source.currentSha256 ? { currentSha256: source.currentSha256 } : {}), ...(source.detail ? { detail: source.detail } : {}) });
+    const changedReread = [...context.sources, ...context.evidence].filter(item => item.status !== 'current').map(item => item.path);
+    const implementationReread = context.sources.filter(item => !/\.md$/i.test(item.path)).map(item => item.path);
+    const compactReread = [...new Set(changedReread.length ? [...changedReread, ...implementationReread] : (implementationReread.length ? implementationReread : context.sources.map(item => item.path)))];
+    return {
+      compact: true as const,
+      taskId: task.id,
+      revision: task.revision,
+      state: task.state,
+      lease: context.lease,
+      goal: task.goal,
+      nextAction: task.nextAction || null,
+      summary: task.summary || null,
+      constraints: task.constraints,
+      acceptanceCriteria: task.acceptanceCriteria,
+      decisions: task.decisions,
+      decisionsStatus: context.decisionsStatus,
+      decisionEvidence: context.decisionEvidence,
+      linkedConstraints: selectedLinks,
+      relatedMemories: selectedMemories,
+      sources: compactSources,
+      ...(compactEvidence.length ? { evidence: compactEvidence } : {}),
+      reread: compactReread,
+      warnings: context.warnings,
+      conflicts: context.conflicts,
+      unsupportedAssumptions: context.unsupportedAssumptions,
+      attribution: {
+        task: 'agent_reported' as const,
+        decisionEvidence: 'source_recorded' as const,
+        linkedConstraints: 'source_recorded' as const,
+        relatedMemories: 'recorded_memory' as const
+      },
+      truncated,
+      limitation: 'Task fields and related memories are recorded statements, not independently verified implementation facts. Source-recorded decisions and linked constraints verify source text and hashes only, not semantic correctness or compliance.',
+      estimatedTokens: context.estimatedTokens
+    };
+  }
   return { ...context, answerBundle: {
     recordedTask: { attribution: 'agent_reported', provenance: { path: '.hypersabmemory/tasks.json', taskId: task.id, revision: task.revision, updatedAt: task.updatedAt }, state: task.state, goal: task.goal, acceptanceCriteria: task.acceptanceCriteria, constraints: task.constraints, decisions: task.decisions, summary: task.summary || null, completedWork: task.completedWork, openIssues: task.openIssues, blockers: task.blockers, checks: task.checks, nextAction: task.nextAction || null },
     linkedConstraints: selectedLinks,
-    truncated: selectedLinks.length < validLinks.length,
+    relatedMemories: selectedMemories,
+    truncated,
     limitation: 'Task decisions match source text without a stable identity. Recorded statements and explicit references do not prove compliance; absent links are unverified.'
   } };
 }
@@ -318,10 +428,10 @@ export const TASK_TOOLS: Tool[] = [
   },
   {
     name: 'hypersabmemory_task_context',
-    description: 'Restore a task capsule within 600 estimated tokens, compare source/evidence hashes, flag stale or unsupported claims, and return reread paths and the next action. Omit taskId to restore the sole active task, or pass a full taskId or unambiguous taskId prefix (>= 8 characters). Includes an agent-reported task snapshot and bounded source-recorded constraints with explicit links; task-to-source decision matches are exact text, not verified identity.',
+    description: 'One-call cross-session task restoration within 600 estimated tokens. Omit taskId to restore the sole active task automatically without reading .hypersabmemory/tasks.json, or pass a full taskId or unambiguous taskId prefix (>= 8 characters). Set compact: true for a non-duplicative handoff projection. Returns the task snapshot, next action, source-verified decision/rationale evidence, cross-file linked constraints, task-linked active memories, source SHA-256 freshness, warnings, and verification limitations.',
     inputSchema: {
       type: 'object',
-      properties: { taskId: nonemptyText },
+      properties: { taskId: nonemptyText, compact: { type: 'boolean' } },
       required: [],
       additionalProperties: false
     }
@@ -458,7 +568,11 @@ export function executeTaskTool(
     }
     if (name === 'hypersabmemory_task_context') {
       const requestedTaskId = stringArg(args, 'taskId', false);
-      return result(taskAnswerBundle(workspaceDir, resolveContextTask(ledger, requestedTaskId)));
+      const compact = args.compact;
+      if (compact !== undefined && typeof compact !== 'boolean') {
+        throw new TaskError('INVALID_ARGUMENT', 'compact must be a boolean');
+      }
+      return result(taskAnswerBundle(workspaceDir, resolveContextTask(ledger, requestedTaskId), Boolean(compact)));
     }
     const taskId = stringArg(args, 'taskId', true)!;
     if (name === 'hypersabmemory_task_grounded_query') {
