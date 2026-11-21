@@ -36,6 +36,26 @@ jobs:
       - run: npm run eval:baseline
       - run: npm run package:smoke
 
+  # Separate job keeps ordinary development test results visually distinct from
+  # release eligibility without treating a failing release gate as optional.
+  release-readiness:
+    name: release-readiness (${{ matrix.os }}, node 24)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Enforce frozen release preflight
+        run: npm run release:preflight
+
 # The recall/leak benchmark (tests/memorybench.test.ts, thresholds recall >= 0.80,
 # zero forgotten-fact leaks) runs inside the blocking matrix job via `npm test`,
 # so no separate advisory eval job is needed.

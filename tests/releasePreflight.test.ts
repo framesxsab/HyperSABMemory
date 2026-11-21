@@ -212,4 +212,18 @@ describe('fail-closed release preflight guard', () => {
     expect(manifest.scripts.prepublishOnly).toContain('npm run release:preflight');
     expect(manifest.scripts.prepublishOnly).not.toContain('option-b');
   });
+
+  it('wires fail-closed release preflight across Linux, Windows, and macOS in GitHub Actions workflows', () => {
+    const releaseWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+    expect(releaseWorkflow).toContain('npm run release:preflight');
+    expect(releaseWorkflow).toContain('ubuntu-latest');
+    expect(releaseWorkflow).toContain('windows-latest');
+    expect(releaseWorkflow).toContain('macos-latest');
+    expect(releaseWorkflow).not.toContain('continue-on-error: true');
+
+    const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
+    expect(ciWorkflow).toContain('release-readiness:');
+    expect(ciWorkflow).toContain('npm run release:preflight');
+    expect(ciWorkflow).not.toContain('continue-on-error: true');
+  });
 });
