@@ -318,11 +318,11 @@ export const TASK_TOOLS: Tool[] = [
   },
   {
     name: 'hypersabmemory_task_context',
-    description: 'Restore a task capsule within 600 estimated tokens, compare source/evidence hashes, flag stale or unsupported claims, and return reread paths and the next action. Includes an agent-reported task snapshot and bounded source-recorded constraints with explicit links; task-to-source decision matches are exact text, not verified identity.',
+    description: 'Restore a task capsule within 600 estimated tokens, compare source/evidence hashes, flag stale or unsupported claims, and return reread paths and the next action. Omit taskId to restore the sole active task, or pass a full taskId or unambiguous taskId prefix (>= 8 characters). Includes an agent-reported task snapshot and bounded source-recorded constraints with explicit links; task-to-source decision matches are exact text, not verified identity.',
     inputSchema: {
       type: 'object',
       properties: { taskId: nonemptyText },
-      required: ['taskId'],
+      required: [],
       additionalProperties: false
     }
   }
@@ -408,6 +408,33 @@ export function listActiveTasks(ledger: TaskLedger): Record<string, unknown> {
   };
 }
 
+function resolveContextTask(ledger: TaskLedger, requestedTaskId?: string): TaskRecord {
+  const tasks = ledger.list();
+  if (!requestedTaskId) {
+    const active = tasks.filter((task) => task.state !== 'reported_complete');
+    if (active.length === 1) return active[0];
+    if (active.length === 0) {
+      throw new TaskError('TASK_NOT_FOUND', 'No active task was found.', { activeTasks: 0 });
+    }
+    throw new TaskError('TASK_ID_REQUIRED', 'Multiple active tasks exist; specify taskId.', {
+      activeTaskIds: active.map((task) => task.id)
+    });
+  }
+  const exact = tasks.find((task) => task.id === requestedTaskId);
+  if (exact) return exact;
+  if (requestedTaskId.length >= 8) {
+    const matches = tasks.filter((task) => task.id.startsWith(requestedTaskId));
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      throw new TaskError('TASK_ID_AMBIGUOUS', `Task prefix ${requestedTaskId} matched multiple tasks.`, {
+        taskId: requestedTaskId,
+        matchingTaskIds: matches.map((task) => task.id)
+      });
+    }
+  }
+  return ledger.get(requestedTaskId);
+}
+
 export function executeTaskTool(
   workspaceDir: string,
   ledger: TaskLedger,
@@ -428,6 +455,10 @@ export function executeTaskTool(
         sourceRefs: listArg(args, 'sourceRefs'),
         nextAction: stringArg(args, 'nextAction')
       })));
+    }
+    if (name === 'hypersabmemory_task_context') {
+      const requestedTaskId = stringArg(args, 'taskId', false);
+      return result(taskAnswerBundle(workspaceDir, resolveContextTask(ledger, requestedTaskId)));
     }
     const taskId = stringArg(args, 'taskId', true)!;
     if (name === 'hypersabmemory_task_grounded_query') {
@@ -474,9 +505,6 @@ export function executeTaskTool(
       grounded.staleSources.push(...stale.filter(source => !reported.has(sourceKey(source.path))));
       if (grounded.status === 'INSUFFICIENT_EVIDENCE' && !grounded.evidence.length && grounded.staleSources.length) grounded.status = 'STALE_EVIDENCE';
       return result(finishGroundedQuery(query, grounded, hybrid, workspaceDir, sources));
-    }
-    if (name === 'hypersabmemory_task_context') {
-      return result(taskAnswerBundle(workspaceDir, ledger.get(taskId)));
     }
     const agentId = stringArg(args, 'agentId', true)!;
     if (name === 'hypersabmemory_task_claim') {

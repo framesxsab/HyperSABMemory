@@ -106,3 +106,66 @@ it('restores linked evidence while avoiding a redundant read of unrelated captur
     expect(reads).toBe(2);
   } finally { vi.restoreAllMocks(); syncBuiltinESMExports(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+it('restores the sole active task without taskId, resolves an unambiguous prefix, and fails closed when ambiguous', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-answer-resolve-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'choice.md'), 'Decision: Keep invoices local.\n');
+    fs.writeFileSync(path.join(dir, 'proof.txt'), 'verified\n');
+    const ledger = new TaskLedger(dir);
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', {})).toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: 'TASK_NOT_FOUND' } }
+    });
+    const done = ledger.create({ goal: 'Finished work', acceptanceCriteria: ['Done'] });
+    const doneClaim = ledger.claim({ taskId: done.id, agentId: 'a' });
+    ledger.checkpoint({ taskId: done.id, agentId: 'a', expectedRevision: doneClaim.revision, leaseGeneration: doneClaim.leaseGeneration, state: 'reported_complete', evidencePaths: ['proof.txt'], checks: ['passed'] });
+
+    const task = ledger.create({ goal: 'Active work', acceptanceCriteria: ['Verify'], sourceRefs: ['choice.md'], nextAction: 'Inspect choice.md' });
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', {})!.structuredContent).toMatchObject({
+      taskId: task.id,
+      answerBundle: { recordedTask: { nextAction: 'Inspect choice.md' } }
+    });
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { taskId: task.id.slice(0, 13) })!.structuredContent).toMatchObject({
+      taskId: task.id
+    });
+    const second = ledger.create({ goal: 'Second active work', acceptanceCriteria: ['Compare'] });
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', {})).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          code: 'TASK_ID_REQUIRED',
+          details: { activeTaskIds: [task.id, second.id] }
+        }
+      }
+    });
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { taskId: 'task_' })).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          code: 'TASK_NOT_FOUND',
+          details: { taskId: 'task_' }
+        }
+      }
+    });
+    const tasksFile = path.join(dir, '.hypersabmemory', 'tasks.json');
+    fs.writeFileSync(
+      tasksFile,
+      fs.readFileSync(tasksFile, 'utf8')
+        .replace(task.id, `task_aaaaaaaa${task.id.slice(13)}`)
+        .replace(second.id, `task_aaaaaaaa${second.id.slice(13)}`)
+    );
+    expect(executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { taskId: 'task_aaaaaaaa' })).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          code: 'TASK_ID_AMBIGUOUS',
+          details: {
+            taskId: 'task_aaaaaaaa',
+            matchingTaskIds: [`task_aaaaaaaa${task.id.slice(13)}`, `task_aaaaaaaa${second.id.slice(13)}`]
+          }
+        }
+      }
+    });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
