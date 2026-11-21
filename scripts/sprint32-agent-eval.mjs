@@ -10,11 +10,12 @@ import { performance } from 'node:perf_hooks';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(here);
 const args = process.argv.slice(2);
-const crossSession = args[0] === '--cross-session';
+const handoffEfficiency = args[0] === '--handoff-efficiency';
+const crossSession = args[0] === '--cross-session' || handoffEfficiency;
 const contextAction = args[0] === '--context-action';
 const activation = args[0] === '--activation' || contextAction || crossSession;
 if (activation) args.shift();
-const planFile = path.join(here, crossSession ? 'sprint35-tasks.json' : contextAction ? 'sprint34-tasks.json' : activation ? 'sprint33-tasks.json' : 'sprint32-tasks.json');
+const planFile = path.join(here, handoffEfficiency ? 'sprint36-tasks.json' : crossSession ? 'sprint35-tasks.json' : contextAction ? 'sprint34-tasks.json' : activation ? 'sprint33-tasks.json' : 'sprint32-tasks.json');
 const probe = path.join(here, 'sprint32-freshness.probe.mjs');
 const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -32,8 +33,11 @@ function checked(command, argv, cwd) {
 function vitest(cwd, ...files) {
   const argv = ['node_modules/vitest/vitest.mjs', 'run', '--maxWorkers=1'];
   const result = run(node, [...argv, '--pool=threads', ...files], cwd);
-  if (process.platform !== 'win32' || result.status !== 0xc0000005) return result;
-  // Retry the scorer after a native process crash, preserving the original outcome.
+  const needsForks =
+    (process.platform === 'win32' && result.status === 0xc0000005) ||
+    /process\.chdir\(\) is not supported in workers/.test((result.stdout ?? '') + (result.stderr ?? ''));
+  if (!needsForks) return result;
+  // Retry the scorer under forks after a worker-pool incompatibility, preserving the initial output.
   const retry = run(node, [...argv, '--pool=forks', ...files], cwd);
   return { ...retry, initialCrash: result };
 }
@@ -265,6 +269,29 @@ if (activation) {
     [task.probe, hash(fs.readFileSync(path.join(here, task.probe)))])), null, 2));
 }
 function crossSessionFacts(task) {
+  if (task === 'handoff-curation') {
+    return {
+      goal: 'Continue V2 forward handoff brief curation and active task-ledger next-step integration',
+      constraints: ['Preserve the 600-token budget, existing markdown section headings, and deterministic story mode; degrade gracefully when no task ledger exists.'],
+      acceptanceCriteria: ['Durable active memories rank ahead of automatic file-event observations in top active facts, and active TaskLedger next actions appear in open next steps.'],
+      decisions: ['Classify automatic file-event observations via source === "auto" or FILE_EVENT_FACT_PATTERN and rank all durable active memories ahead of automatic observations while keeping CATEGORY_RANK and newest-first timestamp ordering within each group.'],
+      summary: 'V2 context-separation audit (docs/V2_RESEARCH_AND_SPRINT.md, 2026-10-21) found that FileWatcherHook records file edits as architecture facts, so handoffCommand topFacts() ranks automatic file events ahead of durable decisions and bugs, and openNextSteps() ignores active TaskLedger tasks.',
+      nextAction: 'In src/cli/handoffCommand.ts, rank non-auto/non-FILE_EVENT_FACT_PATTERN memories ahead of automatic file-event observations in topFacts() and include non-empty nextAction entries from active (non-reported_complete) TaskLedger tasks in openNextSteps(), with regressions in tests/handoffCommand.test.ts.',
+      sourceRefs: ['Rules.md', 'PRD.md', 'src/cli/handoffCommand.ts', 'src/memory/contextBlock.ts', 'src/memory/taskLedger.ts', 'tests/handoffCommand.test.ts'],
+      memories: [
+        {
+          category: 'decision',
+          content: '[2026-10-21 V2_RESEARCH_AND_SPRINT.md] Separate ephemeral file-event observations from durable knowledge in handoff briefs: treat records with source === "auto" or matching FILE_EVENT_FACT_PATTERN (/^File (change|add|unlink): /) as automatic observations and rank durable active memories ahead of them in topFacts().',
+          artifacts: ['Rules.md', 'PRD.md', 'src/cli/handoffCommand.ts', 'src/memory/contextBlock.ts']
+        },
+        {
+          category: 'architecture',
+          content: '[2026-10-26 V2_RESEARCH_AND_SPRINT.md] Forward handoff openNextSteps() should combine active TaskLedger nextAction strings (where state !== "reported_complete") with active memory nextSteps, deduplicated within NEXT_STEP_LIMIT (6), and ignore missing or unreadable task ledgers.',
+          artifacts: ['src/cli/handoffCommand.ts', 'src/memory/taskLedger.ts', 'tests/handoffCommand.test.ts']
+        }
+      ]
+    };
+  }
   if (task === 'watcher-provenance') {
     return {
       goal: 'Continue V2 file-watcher provenance and user-memory protection',
@@ -446,7 +473,7 @@ if (activation) {
   const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
   const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
   const cwd = snapshot('visibility', deps);
-  const taskId = seed(cwd, crossSession ? 'watcher-provenance' : contextAction ? 'decision-prose' : 'resume');
+  const taskId = seed(cwd, handoffEfficiency ? 'handoff-curation' : crossSession ? 'watcher-provenance' : contextAction ? 'decision-prose' : 'resume');
   const client = new Client({ name: 'sprint33-visibility', version: '1' });
   await client.connect(new StdioClientTransport({ command: node, args: [cli, 'mcp'], cwd, stderr: 'pipe' }));
   try {
@@ -458,18 +485,29 @@ if (activation) {
     const context = await client.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
     assert.ok(!context.isError && context.structuredContent.answerBundle.recordedTask.nextAction);
     assert.ok(context.structuredContent.sources.every(source => source.status === 'current' && /^[a-f0-9]{64}$/.test(source.sha256)));
+    if (handoffEfficiency) {
+      const soleContext = await client.callTool({ name: 'hypersabmemory_task_context', arguments: {} });
+      assert.ok(!soleContext.isError && soleContext.structuredContent.taskId === taskId);
+      const compactContext = await client.callTool({ name: 'hypersabmemory_task_context', arguments: { compact: true } });
+      assert.ok(!compactContext.isError && compactContext.structuredContent.compact === true &&
+        compactContext.structuredContent.relatedMemories.length === 2);
+    }
     write('protocol-visibility.json', JSON.stringify({ tools: names, resource: 'hypersabmemory://tasks', sources: context.structuredContent.sources }, null, 2));
   } finally { await client.close(); }
-  const visibility = await executeAgent('visibility', [...agentArgs(cwd), '--skip-git-repo-check', ...mcpArgs(cwd),
-    'This is a read-only MCP setup diagnostic. Use the connected project tools to restore task ' + taskId +
-    ', then query evidence about source freshness. Report the next action and a sourced observation. Do not edit files.'], cwd);
+  const visibilityPrompt = handoffEfficiency
+    ? 'This is a read-only MCP setup diagnostic. Use a single hypersabmemory_task_context call with {"compact": true} (without passing taskId) to restore the active task. Report the taskId, next action, and a related memory. Do not edit files.'
+    : 'This is a read-only MCP setup diagnostic. Use the connected project tools to restore task ' + taskId +
+      ', then query evidence about source freshness. Report the next action and a sourced observation. Do not edit files.';
+  const visibility = await executeAgent('visibility', [...agentArgs(cwd), '--skip-git-repo-check', ...mcpArgs(cwd), visibilityPrompt], cwd);
   const calls = completedItems(visibility).filter(item => item.type === 'mcp_tool_call').map(item => ({ tool: item.tool, ok: verifiedCall(item) }));
-  results.visibility = { exit: visibility.status, calls, passed: calls.some(item => item.ok && item.tool === 'hypersabmemory_task_context') &&
-    calls.some(item => item.ok && item.tool === 'hypersabmemory_query_evidence') };
+  results.visibility = { exit: visibility.status, calls, passed: handoffEfficiency
+    ? calls.some(item => item.ok && item.tool === 'hypersabmemory_task_context')
+    : calls.some(item => item.ok && item.tool === 'hypersabmemory_task_context') &&
+      calls.some(item => item.ok && item.tool === 'hypersabmemory_query_evidence') };
   log('visibility-agent', visibility);
   save();
   console.log('Client visibility:', results.visibility);
-  assert.ok(results.visibility.passed, 'Authenticated client must complete both MCP reads before the comparison');
+  assert.ok(results.visibility.passed, 'Authenticated client must complete required MCP read(s) before the comparison');
 }
 
 for (const [task, arm] of selected) {
@@ -498,6 +536,7 @@ for (const [task, arm] of selected) {
   const prompt = plan.tasks[task].prompt +
     (arm === 'prompted' ? ' Consult available project-handoff evidence before implementation.' :
       arm === 'prompted-baseline' ? ' Consult available repository project history before implementation.' : '') +
+    (handoffEfficiency ? ' On Windows, run Vitest with `node --experimental-strip-types node_modules/vitest/vitest.mjs run --configLoader=native --pool=threads --maxWorkers=1 <test-file>`.' : '') +
     ' Work only in this checkout. Use the tools available to you. Use Vitest threads with one worker on Windows. Do not commit or edit scoring infrastructure. Report your changes, evidence paths, and tests run.';
   console.log('Starting', label);
   const execution = await executeAgent(label, [...agentArgs(cwd), ...mcp, prompt], cwd);
@@ -536,6 +575,10 @@ for (const [task, arm] of selected) {
     label, task, arm, accepted, regression, scope, files, elapsedSeconds: execution.elapsedSeconds, exit: execution.status,
     infrastructureError: execution.error?.message ?? events.findLast(event => event.type === 'turn.failed')?.error?.message,
     shell: shell.length, inspection: shell.filter(item => /\b(rg|Get-Content|Get-ChildItem|git show|git grep|cat|Select-String)\b/i.test(item.command)).length,
+    ...(crossSession ? {
+      ledgerReads: shell.filter(item => /tasks\.json|memory_store\.json/i.test(item.command)).length,
+      mcpResponseBytes: calls.reduce((sum, item) => sum + (item.result?.content?.[0]?.text?.length ?? 0), 0)
+    } : {}),
     edits: items.filter(item => item.type === 'file_change').length,
     mcp: calls.length, successfulMcp: calls.filter(verifiedCall).length,
     ...(activation ? { mcpTools: calls.map(item => ({ server: item.server, tool: item.tool, ok: verifiedCall(item) })) } : {}),

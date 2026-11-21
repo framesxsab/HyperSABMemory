@@ -1,0 +1,33 @@
+{
+  "snapshot": "8ef93f200c4a44066f78a641945c8fe405bcfab2",
+  "model": "gpt-6.2-sol",
+  "reasoningEffort": "low",
+  "deadlineMs": 420000,
+  "exclude": ["docs/SPRINT_3_*.md"],
+  "tasks": {
+    "handoff-curation": {
+      "prompt": "Continue the project's V2 handoff curation for the CLI forward handoff brief. Automatic file-watcher observations can currently crowd out durable decisions and bugs in top active facts, and active task-ledger next actions are omitted from open next steps. Update the forward handoff brief to prioritize durable memories ahead of automatic file-event observations and include active task-ledger next actions while preserving the 600-token budget and story mode, and add regression coverage.",
+      "permitted": [
+        "src/cli/handoffCommand.ts",
+        "tests/handoffCommand.test.ts"
+      ],
+      "required": [
+        "src/cli/handoffCommand.ts",
+        "tests/handoffCommand.test.ts"
+      ],
+      "regressions": [
+        "tests/handoffCommand.test.ts",
+        "tests/contextBlock.test.ts",
+        "tests/taskLedger.test.ts",
+        "tests/taskAnswerBundle.test.ts",
+        "tests/cli.test.ts"
+      ],
+      "probe": "sprint36-handoff.probe.mjs",
+      "failure": "durable decisions and bugs must rank ahead of automatic file-event observations in buildHandoffBrief"
+    }
+  },
+  "order": [
+    ["handoff-curation", "handoff"],
+    ["handoff-curation", "memory"]
+  ]
+}
