@@ -353,23 +353,29 @@ try {
     return JSON.parse(out);
   };
 
-  // Correctness comparison across all 30 HELD_OUT queries
+  // Correctness comparison across all 30 HELD_OUT queries:
+  // Safety, claim, assertion, relationship, stale, conflict, and candidate parity MUST remain 0 diffs vs 7ddba87;
+  // evidence top-5 ranking differences (introduced intentionally in Sprint 3.9) are reported separately.
   const beforeCorrectness = runWorker(baselineDist, 'correctness');
   const afterCorrectness = runWorker(candidateDist, 'correctness');
   assert.equal(beforeCorrectness.perQuery.length, 30);
   assert.equal(afterCorrectness.perQuery.length, 30);
-  const queryDiffs = [];
+  const contractFields = ['status', 'canAssert', 'conflictOrigin', 'conflictPaths', 'candidates', 'assertions', 'claims', 'relationships', 'compoundAnswer', 'implementationEvidence', 'staleSources'];
+  const contractDiffs = [];
+  let evidenceRankingDiffs = 0;
   for (let i = 0; i < 30; i++) {
     const b = beforeCorrectness.perQuery[i];
     const a = afterCorrectness.perQuery[i];
-    const fields = ['status', 'canAssert', 'conflictOrigin', 'conflictPaths', 'candidates', 'evidence', 'assertions', 'claims', 'relationships', 'compoundAnswer', 'implementationEvidence', 'staleSources'];
-    for (const field of fields) {
+    for (const field of contractFields) {
       if (JSON.stringify(b[field]) !== JSON.stringify(a[field])) {
-        queryDiffs.push({ qi: i, field, before: b[field], after: a[field] });
+        contractDiffs.push({ qi: i, field, before: b[field], after: a[field] });
       }
     }
+    if (JSON.stringify(b.evidence) !== JSON.stringify(a.evidence)) {
+      evidenceRankingDiffs++;
+    }
   }
-  assert.equal(queryDiffs.length, 0, `Per-query output mismatch detected: ${JSON.stringify(queryDiffs.slice(0, 2))}`);
+  assert.equal(contractDiffs.length, 0, `Safety/contract output mismatch detected: ${JSON.stringify(contractDiffs.slice(0, 2))}`);
 
   // Alternating Before/After runs on frozen workspace (3 repetitions each)
   const beforeRuns = [];
@@ -430,7 +436,7 @@ try {
         mean: +(((afterSummary.pooled.mean - beforeSummary.pooled.mean) / beforeSummary.pooled.mean) * 100).toFixed(1)
       }
     },
-    perQueryCorrectness: { queriesCompared: 30, identicalQueries: 30, diffs: 0 },
+    perQueryCorrectness: { queriesCompared: 30, contractParityQueries: 30, contractDiffs: 0, evidenceRankingDiffs },
     repositoryTaskEvalComparison: {
       before: {
         passed: beforeRepoEval.passed,

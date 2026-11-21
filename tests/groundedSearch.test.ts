@@ -687,3 +687,46 @@ it('detects same-size content and mid-run symlink escapes when ancestor resoluti
     fs.rmSync(outside, { recursive: true, force: true });
   }
 });
+
+it('preserves high-ranked primary source evidence over lower-ranked verbose neighbors across paths and queries', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-rank-preserve-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'src', 'storage'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
+    const files: Array<[string, string]> = [
+      ['src/storage/ledger.ts', 'export function commitLedgerRevision(storage: string, revision: number) { return `${storage}:${revision + 1}`; }\n'],
+      ['src/storage/lock.ts', 'export function acquireLedgerLock(owner: string, fencing: number) { return `${owner}:${fencing}`; }\n'],
+      ['src/storage/helper1.ts', 'ledger revision checkpoint storage helper\n'],
+      ['src/storage/helper2.ts', 'ledger lock fencing helper\n'],
+      ['src/storage/helper3.ts', 'ledger revision storage helper\n'],
+      ['docs/overview1.md', 'ledger revision lock fencing handle storage recovery overview notes\n'],
+      ['docs/overview2.md', 'ledger revision lock fencing handle storage recovery architecture notes\n'],
+      ['docs/overview3.md', 'ledger revision lock fencing handle storage recovery summary notes\n'],
+      ['docs/overview4.md', 'ledger revision lock fencing handle storage recovery checklist notes\n']
+    ];
+    for (const [rel, body] of files) fs.writeFileSync(path.join(dir, rel), body);
+    const refs = captureTaskSources(dir, files.map(([rel]) => rel));
+    const hybrid = new HybridSearchEngine(dir);
+    vi.spyOn(hybrid, 'searchRecordsWithScores').mockReturnValue(files.map(([rel, body], index) => ({
+      record: { id: rel, category: 'architecture', content: body, artifacts: [rel], status: 'active', timestamp: '2026-01-01T00:00:00.000Z' },
+      bm25Score: 15 - index,
+      queryTermEvidence: [],
+      exactPathMatch: index === 0,
+      identifierDefinitions: [],
+      exactPhraseBoost: 0,
+      score: 15 - index
+    })));
+
+    const multiModule = searchGrounded(hybrid, dir, 'How does ledger revision lock fencing handle storage recovery?', refs);
+    expect(multiModule.canAssert).toBe(false);
+    expect(multiModule.evidence.slice(0, 2).map(item => item.source.path)).toEqual([
+      'src/storage/ledger.ts',
+      'src/storage/lock.ts'
+    ]);
+
+    const exactPath = searchGrounded(hybrid, dir, 'Inspect src/storage/ledger.ts for ledger revision lock fencing storage recovery', refs);
+    expect(exactPath.evidence[0]?.source.path).toBe('src/storage/ledger.ts');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

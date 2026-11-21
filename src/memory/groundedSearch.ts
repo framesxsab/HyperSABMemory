@@ -303,7 +303,7 @@ export function searchGrounded(
       potentialEvidence.push({ record, source, lexicalSupport: support, content: text, rank: candidateIndex + 1 });
       lexicalEvidenceCount++;
       if (naturalQuery) {
-        potentialEvidence.sort((first, second) => (1 / (10 + second.rank!) + second.lexicalSupport / 10) - (1 / (10 + first.rank!) + first.lexicalSupport / 10) || first.rank! - second.rank!);
+        potentialEvidence.sort((first, second) => (1 / (2 + second.rank!) + 0.12 * second.lexicalSupport) - (1 / (2 + first.rank!) + 0.12 * first.lexicalSupport) || first.rank! - second.rank!);
         if (potentialEvidence.length > 5) potentialEvidence.pop();
       }
     }

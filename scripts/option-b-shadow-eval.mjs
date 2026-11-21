@@ -181,7 +181,7 @@ const assessment = {
         groundedUnsupportedCandidateRate: +report.grounded.unsupportedCandidateRate.toFixed(4)
       },
       thresholdApproval:
-        'UNAPPROVED — grounded recall@5 (0.6417) omits ~36% of relevant files in top-5 and surfaces candidate evidence on 40% (4/10) of unanswerable queries; lowering thresholds without product-owner approval or retrieval improvement is rejected'
+        `UNAPPROVED — grounded recall@5 (${report.grounded.recallAt5.toFixed(4)}) still omits ~${Math.round((1 - report.grounded.recallAt5) * 100)}% of relevant files in top-5 and surfaces candidate evidence on ${Math.round(report.grounded.noAnswerCandidateRate * 100)}% (${report.grounded.noAnswerCandidateEvidence}/${report.retrieval.noAnswerQueries}) of unanswerable queries; lowering thresholds without product-owner approval or further retrieval improvement is rejected`
     },
     {
       dimension: 'end_to_end_agent_use',
