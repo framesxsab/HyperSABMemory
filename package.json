@@ -53,6 +53,10 @@
   },
   "files": [
     "dist",
+    "!dist/eval/repositoryBaseline.*",
+    "!dist/eval/repositoryTaskEvaluation.*",
+    "!dist/eval/repositoryTaskFixture.*",
+    "!dist/eval/sprint25DevelopmentFixture.*",
     "README.md",
     "LICENSE",
     "CONTRIBUTING.md",
