@@ -32,7 +32,8 @@ export class SqliteStore {
   private storagePath: string;
   private memoryMap: Map<string, MemoryRecord> = new Map();
   private loadedFile?: string;
-  private loadedContents?: string;
+  private loadedBuffer?: Buffer;
+  private cachedActive?: MemoryRecord[];
   private failedTemporaryContents?: string;
   private initialized = false;
 
@@ -76,7 +77,8 @@ export class SqliteStore {
 
     this.memoryMap.clear();
     this.loadedFile = undefined;
-    this.loadedContents = undefined;
+    this.loadedBuffer = undefined;
+    this.cachedActive = [];
     if (warnWhenMissing) {
       console.warn('[HyperSABMemory :: SqliteStore] No readable memory store found — starting clean.');
     }
@@ -84,16 +86,21 @@ export class SqliteStore {
 
   private tryLoadFrom(file: string): boolean {
     try {
-      if (!fs.existsSync(file)) return false;
-      const raw = fs.readFileSync(file, 'utf-8');
-      if (file === `${this.storagePath}.tmp` && raw === this.failedTemporaryContents) return false;
-      if (file === this.loadedFile && raw === this.loadedContents) return true;
+      const rawBuf = fs.readFileSync(file);
+      if (file === `${this.storagePath}.tmp` && rawBuf.toString('utf-8') === this.failedTemporaryContents) return false;
+      if (file === this.loadedFile && this.loadedBuffer && rawBuf.equals(this.loadedBuffer)) return true;
+      const raw = rawBuf.toString('utf-8');
       const data: MemoryRecord[] = JSON.parse(raw);
       if (!Array.isArray(data)) return false;
       this.memoryMap.clear();
-      data.forEach(record => this.memoryMap.set(record.id, record));
+      const active: MemoryRecord[] = [];
+      for (const record of data) {
+        this.memoryMap.set(record.id, record);
+        if ((record.status ?? 'active') === 'active') active.push(record);
+      }
       this.loadedFile = file;
-      this.loadedContents = raw;
+      this.loadedBuffer = rawBuf;
+      this.cachedActive = active;
       return true;
     } catch {
       return false;
@@ -108,7 +115,8 @@ export class SqliteStore {
       writeAtomicText(this.storagePath, payload);
       this.failedTemporaryContents = undefined;
       this.loadedFile = undefined;
-      this.loadedContents = undefined;
+      this.loadedBuffer = undefined;
+      this.cachedActive = undefined;
 
       try {
         fs.copyFileSync(this.storagePath, `${this.storagePath}.bak`);
@@ -206,7 +214,11 @@ export class SqliteStore {
   }
 
   public getActive(): MemoryRecord[] {
-    return this.getAll().filter((record) => (record.status ?? 'active') === 'active');
+    this.loadStore(false);
+    if (!this.cachedActive) {
+      this.cachedActive = Array.from(this.memoryMap.values()).filter((record) => (record.status ?? 'active') === 'active');
+    }
+    return this.cachedActive.slice();
   }
 
   public forget(id: string): MemoryRecord | undefined {

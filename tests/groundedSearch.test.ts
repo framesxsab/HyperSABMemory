@@ -642,3 +642,48 @@ it('asserts only an exact source declaration and returns its excerpt', () => {
     expect(result.assertions[0].excerpt).toContain('class McpAccessEngine');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+it('detects same-size content and mid-run symlink escapes when ancestor resolution is reused in search', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-recheck-opt-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-outside-opt-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'docs'));
+    fs.writeFileSync(path.join(dir, 'docs', 'policy.md'), 'lease validation policy line');
+    fs.writeFileSync(path.join(dir, 'docs', 'other.md'), 'secondary policy reference');
+    fs.writeFileSync(path.join(outside, 'secret.md'), 'escape secret policy line');
+    const escapedLink = path.join(dir, 'docs', 'escape.md');
+    fs.writeFileSync(escapedLink, 'escape placeholder content');
+    const refs = captureTaskSources(dir, ['docs/policy.md', 'docs/other.md', 'docs/escape.md']);
+    let linkCreated = false;
+    try {
+      fs.unlinkSync(escapedLink);
+      fs.symlinkSync(path.join(outside, 'secret.md'), escapedLink, 'file');
+      linkCreated = true;
+    } catch {
+      fs.writeFileSync(escapedLink, 'escape placeholder content');
+    }
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', 'lease validation policy in docs/policy.md', [], { artifacts: ['docs/policy.md'] });
+    if (linkCreated) {
+      memory.remember('general', 'escape secret policy in docs/escape.md', [], { artifacts: ['docs/escape.md'] });
+    }
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const first = searchGrounded(hybrid, dir, 'lease validation policy', refs);
+    expect(first.evidence[0]?.excerpt).toContain('lease validation policy line');
+
+    fs.writeFileSync(path.join(dir, 'docs', 'policy.md'), 'lease validation policx line');
+    const rewritten = searchGrounded(hybrid, dir, 'lease validation policy', refs);
+    expect(rewritten.status).toBe('STALE_EVIDENCE');
+    expect(rewritten.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'docs/policy.md', status: 'modified' })]));
+
+    if (linkCreated) {
+      const escaped = searchGrounded(hybrid, dir, 'escape secret policy', refs);
+      expect(escaped.evidence).toEqual([]);
+      expect(escaped.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'docs/escape.md', status: 'unavailable' })]));
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});

@@ -40,4 +40,26 @@ describe('runtime bindings for implementation evidence', () => {
     expect(links(helpers + '\n' + target,
       "check('shadow', () => { const tally = () => 6; verify(tally()).toBe(6); });")).toEqual([]);
   });
+
+  it('isolates valid and shadowed imports across batched test files and invalidates same-size changes', () => {
+    const validSpec = source('spec/valid.test.ts', `${helpers}\n${target}\ncheck('valid counts', () => verify(tally()).toBe(6));`);
+    const shadowedSpec = source('spec/shadow.test.ts', `${helpers}\n${target}\ncheck('shadow counts', () => { const tally = () => 6; verify(tally()).toBe(6); });`);
+    const erasedSpec = source('spec/erased.test.ts', `${helpers}\nimport type { totalPallets as tally } from '../src/shipment.js';\ncheck('erased counts', () => verify(tally()).toBe(6));`);
+    const query = 'Where is totalPallets implemented and which tests exercise it?';
+
+    const first = collectImplementationEvidence(query, [implementation, shadowedSpec, erasedSpec, validSpec]);
+    expect(first.tests.map(item => ({ name: item.name, path: item.source.path }))).toEqual([
+      { name: 'valid counts', path: 'spec/valid.test.ts' }
+    ]);
+
+    const sameSizeEditedSpec = source(
+      'spec/valid.test.ts',
+      `${helpers}\n${target}\ncheck('still counts', () => verify(tally()).toBe(6));`
+    );
+    expect(sameSizeEditedSpec.content.length).toBe(validSpec.content.length);
+    const second = collectImplementationEvidence(query, [implementation, shadowedSpec, erasedSpec, sameSizeEditedSpec]);
+    expect(second.tests.map(item => ({ name: item.name, path: item.source.path }))).toEqual([
+      { name: 'still counts', path: 'spec/valid.test.ts' }
+    ]);
+  });
 });

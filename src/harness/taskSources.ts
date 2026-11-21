@@ -33,21 +33,51 @@ function isContained(root: string, target: string): boolean {
 }
 
 /** Validate both lexical paths and the real existing ancestor, including symlinks. */
-function resolveSource(workspaceDir: string, sourcePath: string, resolvedRoot?: string): { absolute: string; relative: string } {
+function resolveSource(
+  workspaceDir: string,
+  sourcePath: string,
+  resolvedRoot?: string,
+  parentRealCache?: Map<string, string>
+): { absolute: string; relative: string; directStat?: fs.Stats } {
   if (typeof sourcePath !== 'string' || !sourcePath.trim() || sourcePath.length > 2048 || sourcePath.includes('\0') || path.isAbsolute(sourcePath)) {
     throw new TaskSourceError('source references must be non-empty workspace-relative file paths');
   }
-  const root = resolvedRoot ?? fs.realpathSync(workspaceDir);
+  const root = resolvedRoot ?? fs.realpathSync.native(workspaceDir);
   const absolute = path.resolve(root, sourcePath);
   if (!isContained(root, absolute) || absolute === root) throw new TaskSourceError(`source path escapes the workspace: ${sourcePath}`);
 
-  let ancestor = absolute;
+  try {
+    const directStat = fs.lstatSync(absolute);
+    if (directStat.isSymbolicLink()) {
+      let real: string;
+      try {
+        real = fs.realpathSync.native(absolute);
+      } catch {
+        throw new TaskSourceError(`unresolvable symbolic link in source path: ${sourcePath}`);
+      }
+      if (!isContained(root, real)) throw new TaskSourceError(`source path escapes the workspace through a symbolic link: ${sourcePath}`);
+      return { absolute, relative: path.relative(root, absolute).split(path.sep).join('/') };
+    }
+    const parent = path.dirname(absolute);
+    let realParent = parentRealCache?.get(parent);
+    if (realParent === undefined) {
+      realParent = fs.realpathSync.native(parent);
+      if (!isContained(root, realParent)) throw new TaskSourceError(`source path escapes the workspace through a symbolic link: ${sourcePath}`);
+      parentRealCache?.set(parent, realParent);
+    }
+    return { absolute, relative: path.relative(root, absolute).split(path.sep).join('/'), directStat };
+  } catch (error) {
+    if (error instanceof TaskSourceError) throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+
+  let ancestor = path.dirname(absolute);
   while (true) {
     try {
       const stat = fs.lstatSync(ancestor);
       let real: string;
       try {
-        real = fs.realpathSync(ancestor);
+        real = fs.realpathSync.native(ancestor);
       } catch (error) {
         if (stat.isSymbolicLink()) throw new TaskSourceError(`unresolvable symbolic link in source path: ${sourcePath}`);
         throw error;
@@ -65,8 +95,8 @@ function resolveSource(workspaceDir: string, sourcePath: string, resolvedRoot?: 
   return { absolute, relative: path.relative(root, absolute).split(path.sep).join('/') };
 }
 
-function readContent(absolute: string): Buffer {
-  const stat = fs.statSync(absolute);
+function readContent(absolute: string, knownStat?: fs.Stats): Buffer {
+  const stat = knownStat ?? fs.statSync(absolute);
   if (!stat.isFile()) throw new Error('source is not a regular file');
   if (stat.size > MAX_SOURCE_BYTES) throw new Error('source exceeds the 16 MiB inspection limit');
   return fs.readFileSync(absolute);
@@ -111,23 +141,35 @@ export function inspectTaskSourceContents(workspaceDir: string, sources: TaskSou
   return createTaskSourceContentInspector(workspaceDir, timing)(sources);
 }
 
-export function createTaskSourceContentInspector(workspaceDir: string, timing?: { pathMs: number; readMs: number; hashMs: number }): (sources: TaskSource[]) => TaskSourceContentInspection[] {
+export function createTaskSourceContentInspector(
+  workspaceDir: string,
+  timing?: { pathMs: number; readMs: number; hashMs: number },
+  parentRealCache?: Map<string, string>
+): (sources: TaskSource[]) => TaskSourceContentInspection[] {
   let root: string | undefined;
   try {
     const started = timing ? performance.now() : 0;
-    root = fs.realpathSync(workspaceDir);
+    root = fs.realpathSync.native(workspaceDir);
     if (timing) timing.pathMs += performance.now() - started;
   } catch {}
-  return sources => inspectSourceContents(workspaceDir, sources, timing, root);
+  return sources => inspectSourceContents(workspaceDir, sources, timing, root, parentRealCache);
 }
 
-function inspectSourceContents(workspaceDir: string, sources: TaskSource[], timing?: { pathMs: number; readMs: number; hashMs: number }, root?: string): TaskSourceContentInspection[] {
+function inspectSourceContents(
+  workspaceDir: string,
+  sources: TaskSource[],
+  timing?: { pathMs: number; readMs: number; hashMs: number },
+  root?: string,
+  sharedParentRealCache?: Map<string, string>
+): TaskSourceContentInspection[] {
+  const parentRealCache = sharedParentRealCache ?? new Map<string, string>();
+  if (root && !parentRealCache.has(root)) parentRealCache.set(root, root);
   return sources.map((source) => {
     try {
       let started = timing ? performance.now() : 0;
-      const resolved = resolveSource(workspaceDir, source.path, root);
+      const resolved = resolveSource(workspaceDir, source.path, root, parentRealCache);
       if (timing) { timing.pathMs += performance.now() - started; started = performance.now(); }
-      const content = readContent(resolved.absolute);
+      const content = readContent(resolved.absolute, resolved.directStat);
       if (timing) { timing.readMs += performance.now() - started; started = performance.now(); }
       const currentSha256 = createHash('sha256').update(content).digest('hex');
       if (timing) timing.hashMs += performance.now() - started;

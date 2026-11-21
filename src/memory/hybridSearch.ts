@@ -41,8 +41,25 @@ const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 const RRF_K = 60;
 const SUBSTRING_BOOST = 0.5;
-const tokenCache = new Map<string, string[]>();
-let tokenCacheSize = 0;
+interface CachedDocumentEntry {
+  content: string;
+  category: MemoryRecord['category'];
+  tagsKey: string;
+  intent: string;
+  artifactsKey: string;
+  errorsAndFixes: string;
+  nextSteps: string;
+  tokensLength: number;
+  termFrequency: Map<string, number>;
+  lowerContent: string;
+  paths: string[];
+  lowerPaths: string[];
+  normalizedPaths: string[];
+  pathTerms: Set<string>;
+  staticImports?: string[];
+}
+const documentCache = new Map<string, { size: number; entry: CachedDocumentEntry }>();
+let documentCacheSize = 0;
 const importCache = new Map<string, string[]>();
 let importCacheSize = 0;
 const TOKEN_CACHE_LIMIT = 8 * 1024 * 1024;
@@ -190,34 +207,84 @@ export class HybridSearchEngine {
     const identifiers = queryIdentifiers(trimmed);
     const docFreq = new Map<string, number>();
     let totalLen = 0;
+    const normalizePath = (filename: string) => {
+      const normalized = path.posix.normalize(filename.replace(/\\/g, '/'));
+      return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    };
     const indexStarted = timing ? performance.now() : 0;
     const documents = records.map(record => {
-      const text = recordSearchText(record);
-      const cacheKey = this.cachePrefix + text;
-      let tokens = tokenCache.get(cacheKey);
-      if (!tokens) {
-        tokens = tokenizeSearchText(text);
-        if (cacheKey.length <= TOKEN_CACHE_LIMIT) {
-          while (tokenCacheSize + cacheKey.length > TOKEN_CACHE_LIMIT) {
-            const oldest = tokenCache.keys().next().value!;
-            tokenCache.delete(oldest);
-            tokenCacheSize -= oldest.length;
+      const tagsKey = record.tags?.length ? record.tags.join('\0') : '';
+      const artifacts = record.artifacts ?? [];
+      const artifactsKey = artifacts.length ? artifacts.join('\0') : '';
+      const intent = record.intent ?? '';
+      const errorsAndFixes = record.errorsAndFixes ?? '';
+      const nextSteps = record.nextSteps ?? '';
+      const cacheKey = `${this.cachePrefix}${record.id}\0${record.timestamp}\0${record.category}\0${record.content.length}\0${artifactsKey}`;
+      const hit = documentCache.get(cacheKey);
+      let cached = hit?.entry;
+      if (
+        !cached ||
+        cached.content !== record.content ||
+        cached.category !== record.category ||
+        cached.tagsKey !== tagsKey ||
+        cached.intent !== intent ||
+        cached.artifactsKey !== artifactsKey ||
+        cached.errorsAndFixes !== errorsAndFixes ||
+        cached.nextSteps !== nextSteps
+      ) {
+        const text = recordSearchText(record);
+        const tokens = tokenizeSearchText(text);
+        const termFrequency = new Map<string, number>();
+        for (const token of tokens) {
+          termFrequency.set(token, (termFrequency.get(token) ?? 0) + 1);
+        }
+        const paths = artifacts.map(artifact => artifact.replace(/\\/g, '/'));
+        const lowerPaths = paths.map(artifact => artifact.toLowerCase());
+        const normalizedPaths = artifacts.map(normalizePath);
+        const pathTerms = new Set(paths.flatMap(artifact => tokenizeSearchText(artifact)));
+        cached = {
+          content: record.content,
+          category: record.category,
+          tagsKey,
+          intent,
+          artifactsKey,
+          errorsAndFixes,
+          nextSteps,
+          tokensLength: tokens.length,
+          termFrequency,
+          lowerContent: record.content.toLowerCase(),
+          paths,
+          lowerPaths,
+          normalizedPaths,
+          pathTerms
+        };
+        const entrySize = text.length + cacheKey.length + 512;
+        if (entrySize <= TOKEN_CACHE_LIMIT) {
+          if (hit) {
+            documentCache.delete(cacheKey);
+            documentCacheSize -= hit.size;
           }
-          tokenCache.set(cacheKey, tokens);
-          tokenCacheSize += cacheKey.length;
+          while (documentCacheSize + entrySize > TOKEN_CACHE_LIMIT) {
+            const oldestKey = documentCache.keys().next().value!;
+            const oldest = documentCache.get(oldestKey)!;
+            documentCache.delete(oldestKey);
+            documentCacheSize -= oldest.size;
+          }
+          documentCache.set(cacheKey, { size: entrySize, entry: cached });
+          documentCacheSize += entrySize;
         }
       }
-      let termFrequency: Map<string, number> | undefined;
-      totalLen += tokens.length;
-      for (const token of tokens) {
-        if (!queryTerms.has(token)) continue;
-        termFrequency ??= new Map<string, number>();
-        termFrequency.set(token, (termFrequency.get(token) ?? 0) + 1);
-        if (termFrequency.get(token) === 1) docFreq.set(token, (docFreq.get(token) ?? 0) + 1);
+      totalLen += cached.tokensLength;
+      let hasTermMatch = false;
+      for (const term of queryTerms) {
+        if (cached.termFrequency.has(term)) {
+          hasTermMatch = true;
+          docFreq.set(term, (docFreq.get(term) ?? 0) + 1);
+        }
       }
-      const exactPhraseBoost = record.content.toLowerCase().includes(qLower) ? SUBSTRING_BOOST : 0;
-      if (!termFrequency && !exactPhraseBoost) return null;
-      return { record, termFrequency: termFrequency ?? new Map<string, number>(), documentLength: tokens.length, exactPhraseBoost };
+      const exactPhraseBoost = cached.lowerContent.includes(qLower) ? SUBSTRING_BOOST : 0;
+      if (!hasTermMatch && !exactPhraseBoost) return null;
+      return { record, cached, exactPhraseBoost };
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     if (timing && timing.indexingMs !== undefined) timing.indexingMs += performance.now() - indexStarted;
     const stats: CorpusStats = { docFreq, avgLen: records.length ? totalLen / records.length : 0, n: records.length };
@@ -225,10 +292,11 @@ export class HybridSearchEngine {
 
     const pathQuery = qLower.replace(/\\/g, '/');
     const scored = documents
-      .map(({ record, termFrequency, documentLength, exactPhraseBoost }) => {
+      .map(({ record, cached, exactPhraseBoost }) => {
         let bm25Score = 0;
+        const documentLength = cached.tokensLength;
         for (const token of queryTokens) {
-          const frequency = termFrequency.get(token) ?? 0;
+          const frequency = cached.termFrequency.get(token) ?? 0;
           if (!frequency) continue;
           const documentFrequency = stats.docFreq.get(token) ?? 0;
           const idf = Math.log(1 + (stats.n - documentFrequency + 0.5) / (documentFrequency + 0.5));
@@ -236,46 +304,46 @@ export class HybridSearchEngine {
           bm25Score += idf * ((frequency * (BM25_K1 + 1)) / denominator);
         }
         if (bm25Score + exactPhraseBoost <= 0) return null;
-        const paths = (record.artifacts ?? []).map(artifact => artifact.replace(/\\/g, '/'));
-        const lowerPaths = paths.map(artifact => artifact.toLowerCase());
-        const exactPathMatch = lowerPaths.some(artifact => containsPath(pathQuery, artifact, !artifact.includes('/')) || containsPath(pathQuery, artifact.split('/').at(-1)!, true));
-        const pathTerms = new Set(paths.flatMap(artifact => tokenizeSearchText(artifact)));
-        const pathCoverage = [...queryTerms].filter(term => pathTerms.has(term)).length / Math.max(1, queryTerms.size);
+        const exactPathMatch = cached.lowerPaths.some(artifact => containsPath(pathQuery, artifact, !artifact.includes('/')) || containsPath(pathQuery, artifact.split('/').at(-1)!, true));
+        let pathMatches = 0;
+        for (const term of queryTerms) {
+          if (cached.pathTerms.has(term)) pathMatches++;
+        }
+        const pathCoverage = pathMatches / Math.max(1, queryTerms.size);
         const identifierDefinitions = identifiers.filter(identifier => declaresIdentifier(record.content, identifier));
-        return { record, termFrequency, bm25Score, exactPathMatch, identifierDefinitions, exactPhraseBoost, pathCoverage, score: bm25Score + exactPhraseBoost };
+        return { record, cached, bm25Score, exactPathMatch, identifierDefinitions, exactPhraseBoost, pathCoverage, score: bm25Score + exactPhraseBoost };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const maximumScore = scored.reduce((maximum, entry) => Math.max(maximum, entry.score), 1);
     const ranked = scored
       .map(entry => ({ ...entry, rankingScore: entry.score / maximumScore + entry.pathCoverage }))
       .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore);
-    const normalizePath = (filename: string) => {
-      const normalized = path.posix.normalize(filename.replace(/\\/g, '/'));
-      return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-    };
     const paths = new Set<string>();
-    for (const entry of ranked) for (const artifact of entry.record.artifacts ?? []) paths.add(normalizePath(artifact));
+    for (const entry of ranked) for (const artifact of entry.cached.normalizedPaths) paths.add(artifact);
     const links = new Map<string, Set<string>>();
     for (const entry of ranked) {
-      const artifacts = entry.record.artifacts;
-      if (!artifacts?.some(artifact => /\.[cm]?[jt]sx?$/i.test(artifact))) continue;
-      const cacheKey = this.cachePrefix + entry.record.content;
-      let imports = importCache.get(cacheKey);
-      if (!imports) {
-        imports = staticImports(entry.record.content);
-        if (cacheKey.length <= TOKEN_CACHE_LIMIT) {
-          while (importCacheSize + cacheKey.length > TOKEN_CACHE_LIMIT) {
-            const oldest = importCache.keys().next().value!;
-            importCache.delete(oldest);
-            importCacheSize -= oldest.length;
+      const normalizedArtifacts = entry.cached.normalizedPaths;
+      if (!normalizedArtifacts.some(artifact => /\.[cm]?[jt]sx?$/i.test(artifact))) continue;
+      if (!entry.cached.staticImports) {
+        const cacheKey = this.cachePrefix + entry.record.content;
+        let imports = importCache.get(cacheKey);
+        if (!imports) {
+          imports = staticImports(entry.record.content);
+          if (cacheKey.length <= TOKEN_CACHE_LIMIT) {
+            while (importCacheSize + cacheKey.length > TOKEN_CACHE_LIMIT) {
+              const oldest = importCache.keys().next().value!;
+              importCache.delete(oldest);
+              importCacheSize -= oldest.length;
+            }
+            importCache.set(cacheKey, imports);
+            importCacheSize += cacheKey.length;
           }
-          importCache.set(cacheKey, imports);
-          importCacheSize += cacheKey.length;
         }
+        entry.cached.staticImports = imports;
       }
+      const imports = entry.cached.staticImports;
       if (!imports.length) continue;
-      for (const artifact of artifacts) {
-        const filename = normalizePath(artifact);
+      for (const filename of normalizedArtifacts) {
         if (!/\.[cm]?[jt]sx?$/i.test(filename)) continue;
         for (const specifier of imports) {
           const resolved = normalizePath(path.posix.join(path.posix.dirname(filename), specifier));
@@ -290,22 +358,21 @@ export class HybridSearchEngine {
         }
       }
     }
-    const anchors = ranked.slice(0, 3).map(entry => new Set((entry.record.artifacts ?? []).flatMap(artifact => [...(links.get(normalizePath(artifact)) ?? [])])));
+    const anchors = ranked.slice(0, 3).map(entry => new Set(entry.cached.normalizedPaths.flatMap(artifact => [...(links.get(artifact) ?? [])])));
     const reranked = anchors.some(anchor => anchor.size) ? ranked
       .map(entry => {
-        const artifacts = entry.record.artifacts;
-        if (!artifacts?.length) return entry;
-        const normalized = artifacts.map(normalizePath);
+        const normalized = entry.cached.normalizedPaths;
+        if (!normalized.length) return entry;
         const relationship = anchors.reduce((sum, anchor, index) => sum + (normalized.some(artifact => anchor.has(artifact)) ? 1 / (index + 1) : 0), 0);
         return relationship ? { ...entry, rankingScore: entry.rankingScore + 0.5 * relationship } : entry;
       })
       .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore) : ranked;
     const results = reranked
       .slice(0, clampLimit(limit))
-      .map(({ termFrequency, ...entry }) => {
+      .map(({ cached, ...entry }) => {
         const queryTermEvidence = [...queryTerms].map(term => {
           const frequency = stats.docFreq.get(term) ?? 0;
-          return { term, idf: Math.log(1 + (stats.n - frequency + 0.5) / (frequency + 0.5)), matched: termFrequency.has(term) };
+          return { term, idf: Math.log(1 + (stats.n - frequency + 0.5) / (frequency + 0.5)), matched: cached.termFrequency.has(term) };
         });
         return { ...entry, queryTermEvidence };
       });

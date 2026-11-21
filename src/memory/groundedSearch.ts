@@ -1,4 +1,4 @@
-import { createTaskSourceContentInspector, inspectTaskSourceContents, type TaskSource, type TaskSourceInspection } from '../harness/taskSources.js';
+import { createTaskSourceContentInspector, type TaskSource, type TaskSourceInspection } from '../harness/taskSources.js';
 import type { MemoryRecord } from './sqliteStore.js';
 import { HybridSearchEngine, queryIdentifiers, tokenizeSearchQuery, tokenizeSearchText } from './hybridSearch.js';
 import { performance } from 'node:perf_hooks';
@@ -15,6 +15,13 @@ const QUOTATION_QUERY = /^\s*does\s+`([^`]+)`\s+contain\s+`([^`\r\n]+)`\s*\??\s*
 const sourceTokenCache = new Map<string, Set<string>>();
 let sourceTokenCacheBytes = 0;
 const SOURCE_TOKEN_CACHE_LIMIT = 8 * 1024 * 1024;
+interface ExcerptDocumentCache {
+  lines: string[];
+  lineTokens: Array<Set<string> | undefined>;
+  strippedLines?: string[];
+}
+const excerptDocCache = new Map<string, { size: number; doc: ExcerptDocumentCache }>();
+let excerptDocCacheBytes = 0;
 
 /** Lexical coverage is a heuristic, not a probability or proof of a claim. */
 export function lexicalSupport(
@@ -105,17 +112,48 @@ function stripStringsAndComments(source: string): string {
   return chars.join('');
 }
 
-export function excerptFor(query: string, content: string, filename?: string): string | undefined {
+export function excerptFor(query: string, content: string, filename?: string, contentSha256?: string): string | undefined {
   const terms = tokenizeSearchQuery(query);
-  const lines = content.split(/\r?\n/);
+  const cacheKey = contentSha256 ? `${filename ?? ''}\0${contentSha256}` : undefined;
+  let docCache = cacheKey ? excerptDocCache.get(cacheKey)?.doc : undefined;
+  if (!docCache) {
+    const lines = content.split(/\r?\n/);
+    docCache = { lines, lineTokens: new Array<Set<string> | undefined>(lines.length) };
+    if (cacheKey) {
+      const size = content.length + cacheKey.length + 512;
+      if (size <= SOURCE_TOKEN_CACHE_LIMIT) {
+        if (excerptDocCacheBytes + size > SOURCE_TOKEN_CACHE_LIMIT) {
+          excerptDocCache.clear();
+          excerptDocCacheBytes = 0;
+        }
+        excerptDocCache.set(cacheKey, { size, doc: docCache });
+        excerptDocCacheBytes += size;
+      }
+    }
+  }
+  const lines = docCache.lines;
   const identifiers = filename && /\.[cm]?[jt]sx?$/i.test(filename) ? queryIdentifiers(query).filter(identifier => content.includes(identifier)) : [];
   const declarations = identifiers.map(identifier => new RegExp(`^\\s*(?:(?:export|declare|abstract|default)\\s+)*(?:class|function|interface|type|const|let|var|enum)\\s+${escapeIdentifier(identifier)}(?![\\w$])`));
-  const codeLines = declarations.length ? stripStringsAndComments(content).split(/\r?\n/) : [];
+  let codeLines: string[] = [];
+  if (declarations.length) {
+    docCache.strippedLines ??= stripStringsAndComments(content).split(/\r?\n/);
+    codeLines = docCache.strippedLines;
+  }
   const ranked: Array<{ line: string; matches: number; declaration: boolean }> = [];
-  for (const [index, line] of lines.entries()) {
-    const lineTokens = new Set(tokenizeSearchText(line));
-    const item = { line, matches: terms.filter(term => lineTokens.has(term)).length, declaration: declarations.some(pattern => pattern.test(codeLines[index] ?? '')) };
-    if (!line.trim() || !item.matches) continue;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (!line.trim()) continue;
+    let lineTokens = docCache.lineTokens[index];
+    if (!lineTokens) {
+      lineTokens = new Set(tokenizeSearchText(line));
+      docCache.lineTokens[index] = lineTokens;
+    }
+    let matches = 0;
+    for (const term of terms) {
+      if (lineTokens.has(term)) matches++;
+    }
+    if (!matches) continue;
+    const item = { line, matches, declaration: declarations.some(pattern => pattern.test(codeLines[index] ?? '')) };
     const position = ranked.findIndex(existing => Number(item.declaration) > Number(existing.declaration) || (item.declaration === existing.declaration && item.matches > existing.matches));
     ranked.splice(position < 0 ? ranked.length : position, 0, item);
     if (ranked.length > 3) ranked.pop();
@@ -167,7 +205,8 @@ export function searchGrounded(
     }
   }
   const inspected = new Set<string>();
-  const inspectSource = createTaskSourceContentInspector(workspaceDir, timing);
+  const initialParentCache = new Map<string, string>();
+  const inspectSource = createTaskSourceContentInspector(workspaceDir, timing, initialParentCache);
   const potentialEvidence: Array<{ record: MemoryRecord; source: TaskSourceInspection; lexicalSupport: number; content?: string; rank?: number }> = [];
   let lexicalEvidenceCount = 0;
   const staleSources: TaskSourceInspection[] = [];
@@ -314,7 +353,7 @@ export function searchGrounded(
     record: item.record,
     source: item.source,
     lexicalSupport: item.lexicalSupport,
-    ...(item.content ? { excerpt: assertionByPath.get(item.source.path)?.excerpt ?? (symbol ? item.content.slice(0, 320) : excerptFor(query, item.content, item.source.path)) } : {})
+    ...(item.content ? { excerpt: assertionByPath.get(item.source.path)?.excerpt ?? (symbol ? item.content.slice(0, 320) : excerptFor(query, item.content, item.source.path, item.source.currentSha256)) } : {})
   }));
   if (timing && previous) {
     timing.excerptMs += performance.now() - excerptStart;
@@ -328,7 +367,8 @@ export function searchGrounded(
     const source = references.get(sourceKey(item.source.path));
     if (source) finalSources.set(source.path, source);
   }
-  const checked = inspectTaskSourceContents(workspaceDir, [...finalSources.values()], timing);
+  initialParentCache.clear();
+  const checked = inspectSource([...finalSources.values()]);
   const rechecked = evidence.map(item => checked.find(source => source.path === item.source.path)!);
   const evidencePaths = new Set(evidence.map(item => item.source.path));
   for (const { content: _content, ...source } of checked) {
