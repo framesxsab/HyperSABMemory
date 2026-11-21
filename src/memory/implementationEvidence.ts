@@ -69,14 +69,25 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
   for (const { ast } of files.values()) {
     if (!/\b(?:tests?|evidence)\b/i.test(query) || !isTest(ast.fileName) || !locations.length || tests.length >= 4) continue;
     const targetImports = new Map<ts.ImportSpecifier, string>();
+    const importedNames = new Map<string, number>();
+    const countImport = (name: ts.Identifier) => {
+      importedNames.set(name.text, (importedNames.get(name.text) ?? 0) + 1);
+    };
     for (const statement of ast.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith('.')) continue;
-      const bindings = statement.importClause?.namedBindings;
+      if (ts.isImportEqualsDeclaration(statement)) countImport(statement.name);
+      if (!ts.isImportDeclaration(statement)) continue;
+      const clause = statement.importClause;
+      const bindings = clause?.namedBindings;
+      if (clause?.name) countImport(clause.name);
+      if (bindings && ts.isNamespaceImport(bindings)) countImport(bindings.name);
       if (!bindings || !ts.isNamedImports(bindings)) continue;
+      for (const binding of bindings.elements) countImport(binding.name);
+      if (!ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith('.')) continue;
       const stem = path.posix.normalize(path.posix.join(path.posix.dirname(ast.fileName), statement.moduleSpecifier.text)).replace(/\.[cm]?[jt]sx?$/, '');
       const matches = byStem.get(stem);
       if (matches?.length !== 1) continue;
       for (const binding of bindings.elements) {
+        if (ts.isTypeOnlyImportDeclaration(binding)) continue;
         if (locations.some(location => location.node.getSourceFile().fileName === matches[0] &&
             (location.owner ?? location.name) === (binding.propertyName ?? binding.name).text)) {
           targetImports.set(binding, matches[0]);
@@ -90,7 +101,14 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
     const host = ts.createCompilerHost(options);
     host.getSourceFile = file => file === ast.fileName ? ast : undefined;
     const checker = ts.createProgram([ast.fileName], options, host).getTypeChecker();
-    const imported = (name: ts.Identifier) => checker.getSymbolAtLocation(name)?.declarations?.find(ts.isImportSpecifier);
+    const imported = (name: ts.Identifier) => {
+      // The checker can recover a symbol for source with duplicate imports.
+      if (importedNames.get(name.text) !== 1) return;
+      const declarations = checker.getSymbolAtLocation(name)?.declarations;
+      const binding = declarations?.[0];
+      return declarations?.length === 1 && binding && ts.isImportSpecifier(binding) &&
+        !ts.isTypeOnlyImportDeclaration(binding) ? binding : undefined;
+    };
     const moduleOf = (binding: ts.ImportSpecifier) => binding.parent.parent.parent.moduleSpecifier;
     function visit(node: ts.Node) {
       if (tests.length >= 4) return;
