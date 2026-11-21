@@ -1,0 +1,74 @@
+{
+  "snapshot": "2845e9894083db9a4a64f3fd2f1b30c93699432a",
+  "model": "gpt-6.2-sol",
+  "reasoningEffort": "low",
+  "deadlineMs": 300000,
+  "exclude": ["docs/SPRINT_3_*.md"],
+  "tasks": {
+    "watcher-provenance": {
+      "prompt": "Continue the project's V2 event-provenance design for automatic file-change observations. Generated file-watcher memories are currently stored without distinguishing provenance or source path scoping and can silently supersede user-confirmed memories. Implement the missing provenance and non-supersession protections while preserving existing memory record compatibility and add regression coverage.",
+      "permitted": [
+        "src/hooks/fileWatcher.ts",
+        "src/memory/temporalMemory.ts",
+        "src/memory/sqliteStore.ts",
+        "tests/fileWatcher.test.ts",
+        "tests/temporalMemory.test.ts",
+        "tests/sqliteStore.test.ts",
+        "tests/contextBlock.test.ts",
+        "tests/watcherProvenance.test.ts"
+      ],
+      "required": [
+        "src/hooks/fileWatcher.ts",
+        "src/memory/temporalMemory.ts"
+      ],
+      "regressions": [
+        "tests/fileWatcher.test.ts",
+        "tests/temporalMemory.test.ts",
+        "tests/sqliteStore.test.ts",
+        "tests/contextBlock.test.ts",
+        "tests/concurrency.test.ts",
+        "tests/mcpQuery.test.ts"
+      ],
+      "probe": "sprint35-watcher.probe.mjs",
+      "failure": "auto file-event observations must not supersede user-confirmed memories"
+    },
+    "linked-constraints": {
+      "prompt": "Resume the unfinished Sprint 2.9 grounding unification for Markdown decision and linked-constraint documents. Task restoration currently drops valid explicitly linked constraint documents that include standard Markdown formatting, and recorded-claim conflict checks can falsely trigger on fenced or commented examples. Fix both behaviors while preserving strict abstention on genuine prose conflicts and add focused regressions.",
+      "permitted": [
+        "src/mcp/taskTools.ts",
+        "src/harness/taskContext.ts",
+        "src/memory/claimVerification.ts",
+        "src/memory/groundedSearch.ts",
+        "tests/taskAnswerBundle.test.ts",
+        "tests/crossFileGrounded.test.ts",
+        "tests/groundedSearch.test.ts",
+        "tests/mcpQuery.test.ts",
+        "tests/decisionMarkdownSafety.test.ts",
+        "tests/efficientDecisionEvidence.test.ts"
+      ],
+      "required": [
+        "src/mcp/taskTools.ts",
+        "src/memory/claimVerification.ts"
+      ],
+      "regressions": [
+        "tests/taskAnswerBundle.test.ts",
+        "tests/crossFileGrounded.test.ts",
+        "tests/groundedSearch.test.ts",
+        "tests/mcpQuery.test.ts",
+        "tests/taskLedger.test.ts",
+        "tests/decisionMarkdownSafety.test.ts",
+        "tests/sprint28FactReconciliation.test.ts"
+      ],
+      "probe": "sprint35-links.probe.mjs",
+      "failure": "task_context must discover prose linked constraints"
+    }
+  },
+  "order": [
+    ["watcher-provenance", "baseline"],
+    ["watcher-provenance", "handoff"],
+    ["watcher-provenance", "memory"],
+    ["linked-constraints", "memory"],
+    ["linked-constraints", "handoff"],
+    ["linked-constraints", "baseline"]
+  ]
+}
