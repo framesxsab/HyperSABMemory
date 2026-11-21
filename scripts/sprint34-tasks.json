@@ -1,0 +1,31 @@
+{
+  "snapshot": "cdc56d8ff812e2e675aed7b12c3d79d04285a7bb",
+  "model": "gpt-6.2-sol",
+  "reasoningEffort": "low",
+  "deadlineMs": 300000,
+  "exclude": ["docs/SPRINT_3_*.md"],
+  "tasks": {
+    "decision-prose": {
+      "prompt": "Resume the outstanding decision-recovery investigation. Restoring a project task can lose a valid recorded decision after a commented example. Fix the behavior, preserve the established evidence contract, and add a focused regression.",
+      "permitted": ["src/harness/taskContext.ts", "tests/taskLedger.test.ts", "tests/taskAnswerBundle.test.ts", "tests/taskContext.test.ts", "tests/decisionMarkdownSafety.test.ts"],
+      "required": ["src/harness/taskContext.ts"],
+      "probe": "sprint34-prose.probe.mjs",
+      "failure": "a commented fence must not suppress the recorded decision"
+    },
+    "module-link": {
+      "prompt": "Fix a wrong implementation-to-test attribution involving an emitted JavaScript module extension. Preserve legitimate code and test evidence and add regression coverage. Inspect the project's conventions for how these relationships are verified.",
+      "permitted": ["src/memory/implementationEvidence.ts", "tests/groundedSearch.test.ts", "tests/implementationEvidence.test.ts"],
+      "required": ["src/memory/implementationEvidence.ts"],
+      "probe": "sprint34-module.probe.mjs",
+      "failure": "incompatible emitted extensions must not establish a test link"
+    }
+  },
+  "order": [
+    ["decision-prose", "baseline"],
+    ["decision-prose", "memory"],
+    ["module-link", "memory"],
+    ["module-link", "baseline"],
+    ["decision-prose", "prompted"],
+    ["decision-prose", "prompted-baseline"]
+  ]
+}

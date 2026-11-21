@@ -10,9 +10,10 @@ import { performance } from 'node:perf_hooks';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(here);
 const args = process.argv.slice(2);
-const activation = args[0] === '--activation';
+const contextAction = args[0] === '--context-action';
+const activation = args[0] === '--activation' || contextAction;
 if (activation) args.shift();
-const planFile = path.join(here, activation ? 'sprint33-tasks.json' : 'sprint32-tasks.json');
+const planFile = path.join(here, contextAction ? 'sprint34-tasks.json' : activation ? 'sprint33-tasks.json' : 'sprint32-tasks.json');
 const probe = path.join(here, 'sprint32-freshness.probe.mjs');
 const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -22,8 +23,9 @@ if (args[0] === '--summary') {
 }
 const selectors = args[0]?.split(',') ?? [];
 const selected = args.length === 1 ? plan.order.filter(([task, arm]) => selectors.includes(task) || selectors.includes(arm)) : args.length ? [args] : plan.order;
-assert.ok(args.length <= 2 && selected.length && selected.every(([task, arm]) => Object.hasOwn(plan.tasks, task) && (activation ? ['baseline', 'memory', 'prompted'] : ['baseline', 'memory']).includes(arm)),
-  'Use [--activation] [task [baseline|memory|prompted]] or --summary <results-dir>');
+const arms = contextAction ? ['baseline', 'memory', 'prompted', 'prompted-baseline'] : activation ? ['baseline', 'memory', 'prompted'] : ['baseline', 'memory'];
+assert.ok(args.length <= 2 && selected.length && selected.every(([task, arm]) => Object.hasOwn(plan.tasks, task) && arms.includes(arm)),
+  'Use [--activation|--context-action] [task [arm]] or --summary <results-dir>');
 const codex = process.env.HM32_CODEX ?? 'codex';
 const npm = process.env.HM32_NPM_CLI ?? process.env.npm_execpath;
 assert.ok(npm, 'Set HM32_NPM_CLI to the npm CLI JavaScript entry or start from an npm script');
@@ -68,13 +70,19 @@ async function executeAgent(label, argv, cwd) {
 const git = (cwd, ...argv) => checked('git', argv, cwd).trim();
 const node = process.execPath;
 const archive = path.join(root, 'snapshot.tar');
-git(repo, '-c', 'core.autocrlf=false', 'archive', '--format=tar', '-o', archive, plan.snapshot);
+const entries = git(repo, 'ls-tree', '-r', plan.snapshot).split(/\r?\n/);
+const entryPath = entry => entry.slice(entry.indexOf('\t') + 1);
+const excluded = entries.map(entryPath).filter(file => plan.exclude?.some(pattern => path.posix.matchesGlob(file, pattern)));
+const expectedEntries = entries.filter(entry => !excluded.includes(entryPath(entry))).join('\n');
+git(repo, '-c', 'core.autocrlf=false', 'archive', '--format=tar', '-o', archive, plan.snapshot,
+  ...(excluded.length ? ['.', ...excluded.map(file => ':(exclude,literal)' + file)] : []));
 const checkEnv = {
   snapshot: plan.snapshot, tree: git(repo, 'show', '-s', '--format=%T', plan.snapshot),
   snapshotSha256: hash(fs.readFileSync(archive)), node: process.version, platform: process.platform, arch: process.arch,
   codex: checked(codex, ['--version'], repo).trim(), model: plan.model, reasoningEffort: plan.reasoningEffort,
   deadlineMs: plan.deadlineMs, planSha256: hash(fs.readFileSync(planFile)), probeSha256: hash(fs.readFileSync(probe)),
-  runnerSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url)))
+  runnerSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))),
+  excluded
 };
 const results = { environment: checkEnv, runs: [] };
 const save = () => write('results.json', JSON.stringify(results, null, 2) + '\n');
@@ -179,6 +187,32 @@ function seed(cwd, task) {
   const memory = new TemporalMemoryEngine(cwd);
   for (const note of notes) memory.remember('architecture', note.content, [], { artifacts: note.artifacts });
   if (!activation) return;
+  if (contextAction) {
+    if (task === 'module-link') {
+      const convention = architecture.find(line => line.startsWith('Static relative imports'));
+      assert.ok(convention);
+      memory.remember('architecture', convention, [], { artifacts: ['Architecture.md', 'src/memory/hybridSearch.ts', 'src/memory/implementationEvidence.ts'] });
+      return;
+    }
+    const rationale = architecture.find(line => line.startsWith('Task context also exposes'));
+    assert.ok(rationale);
+    memory.remember('architecture', rationale, [], { artifacts: ['Architecture.md', 'src/harness/taskContext.ts', 'tests/taskLedger.test.ts'] });
+    const ledger = new TaskLedger(cwd);
+    const opened = ledger.create({
+      goal: 'Resume recorded decision recovery after commented examples',
+      constraints: ['Preserve exact source attribution and current captured hashes. Code examples are not recorded decisions.'],
+      acceptanceCriteria: ['Restore the real recorded decision without treating examples as evidence.'],
+      sourceRefs: ['Architecture.md', 'Rules.md', 'src/harness/taskContext.ts', 'tests/taskLedger.test.ts', 'tests/decisionMarkdownSafety.test.ts']
+    });
+    const owner = ledger.claim({ taskId: opened.id, agentId: 'handoff-seed' });
+    const saved = ledger.checkpoint({
+      taskId: opened.id, agentId: 'handoff-seed', expectedRevision: owner.revision, leaseGeneration: owner.leaseGeneration,
+      summary: 'Confirmed during Sprint 3.4 preflight that a commented example can hide a later real decision.',
+      nextAction: 'Trace the decision recovery path and add a focused regression for preserving real prose after a commented example.'
+    });
+    ledger.claim({ taskId: opened.id, agentId: 'handoff-seed', action: 'release', leaseGeneration: saved.leaseGeneration });
+    return opened.id;
+  }
   const report = 'docs/SPRINT_3_2_AGENT_VALUE.md';
   const history = fs.readFileSync(path.join(cwd, report), 'utf8').split(/\r?\n/);
   if (task === 'resume') {
@@ -229,7 +263,7 @@ if (activation) {
   const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
   const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
   const cwd = snapshot('visibility', deps);
-  const taskId = seed(cwd, 'resume');
+  const taskId = seed(cwd, contextAction ? 'decision-prose' : 'resume');
   const client = new Client({ name: 'sprint33-visibility', version: '1' });
   await client.connect(new StdioClientTransport({ command: node, args: [cli, 'mcp'], cwd, stderr: 'pipe' }));
   try {
@@ -239,7 +273,7 @@ if (activation) {
     const resource = await client.readResource({ uri: 'hypersabmemory://tasks' });
     assert.ok(resource.contents.some(item => item.text.includes(taskId)));
     const context = await client.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
-    assert.ok(!context.isError && JSON.stringify(context).includes('Resume the stale-link correctness fix'));
+    assert.ok(!context.isError && context.structuredContent.answerBundle.recordedTask.nextAction);
     assert.ok(context.structuredContent.sources.every(source => source.status === 'current' && /^[a-f0-9]{64}$/.test(source.sha256)));
     write('protocol-visibility.json', JSON.stringify({ tools: names, resource: 'hypersabmemory://tasks', sources: context.structuredContent.sources }, null, 2));
   } finally { await client.close(); }
@@ -265,8 +299,8 @@ for (const [task, arm] of selected) {
   git(cwd, 'add', '-A');
   git(cwd, 'commit', '-qm', 'Pinned evaluation snapshot');
   const initial = git(cwd, 'rev-parse', 'HEAD');
-  assert.equal(git(cwd, 'show', '-s', '--format=%T', initial), checkEnv.tree, 'agent receives the committed snapshot bytes');
-  const treatment = arm !== 'baseline';
+  assert.equal(git(cwd, 'ls-tree', '-r', initial).replace(/\r\n/g, '\n'), expectedEntries, 'agent receives the pinned snapshot minus explicit exclusions');
+  const treatment = arm !== 'baseline' && arm !== 'prompted-baseline';
   // Apply the same explicit opt-in policy to every activation arm.
   if (activation) {
     fs.writeFileSync(path.join(cwd, 'AGENTS.md'), guide, { flag: 'wx' });
@@ -274,7 +308,8 @@ for (const [task, arm] of selected) {
   if (treatment) seed(cwd, task);
   const mcp = treatment ? mcpArgs(cwd) : [];
   const prompt = plan.tasks[task].prompt +
-    (arm === 'prompted' ? ' Consult available project-handoff evidence before implementation.' : '') +
+    (arm === 'prompted' ? ' Consult available project-handoff evidence before implementation.' :
+      arm === 'prompted-baseline' ? ' Consult available repository project history before implementation.' : '') +
     ' Work only in this checkout. Use the tools available to you. Use Vitest threads with one worker on Windows. Do not commit or edit scoring infrastructure. Report your changes, evidence paths, and tests run.';
   console.log('Starting', label);
   const execution = await executeAgent(label, [...agentArgs(cwd), ...mcp, prompt], cwd);
@@ -314,7 +349,7 @@ for (const [task, arm] of selected) {
     shell: shell.length, inspection: shell.filter(item => /\b(rg|Get-Content|Get-ChildItem|git show|git grep|cat|Select-String)\b/i.test(item.command)).length,
     edits: items.filter(item => item.type === 'file_change').length,
     mcp: calls.length, successfulMcp: calls.filter(verifiedCall).length,
-    ...(activation ? { mcpTools: calls.map(item => ({ tool: item.tool, ok: verifiedCall(item) })) } : {}),
+    ...(activation ? { mcpTools: calls.map(item => ({ server: item.server, tool: item.tool, ok: verifiedCall(item) })) } : {}),
     testCommands: shell.filter(item => /\b(vitest|npm(?:\.cmd)? test|npm(?:\.cmd)? run test)\b/i.test(item.command)).length,
     usage: events.filter(event => event.type === 'turn.completed').at(-1)?.usage,
     checkExits: checks.map(result => result.status), patchSha256: hash(fs.readFileSync(delta))
