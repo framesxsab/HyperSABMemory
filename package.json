@@ -55,7 +55,8 @@
     "LICENSE",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    "docs/AGENT_HANDOFF.md"
   ],
   "dependencies": {
     "stemmer": "2.0.1",

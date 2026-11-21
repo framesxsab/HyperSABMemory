@@ -74,6 +74,8 @@ npx hypersabmemory status
 
 Resource-aware clients can also pull the context block and memory log passively via MCP resources (`resources/list` + `resources/read`).
 
+For projects that want agents to check prior decisions and unfinished tasks when resuming work, see the [opt-in agent handoff guide](docs/AGENT_HANDOFF.md).
+
 The grounded task query takes a `taskId` and `query`, with optional `conflictingPaths`. It can retrieve bounded excerpts for natural questions and verify explicit symbol definitions, exact quoted source text, and uniquely stated top-level JSON scalar values directly from captured task sources, even without a separate memory record. Response-only `source_ref:` identifiers represent those references, not persisted memories. Natural-question results are candidate evidence, not proven claims. Sources are checked against captured hashes; conflicting hashes block assertions, and changed sources must be re-read and explicitly checkpointed.
 
 Retrieval can use static relative imports in indexed JavaScript or TypeScript record text as ranking hints between existing lexical candidates. Those links reflect the recorded text, not a verified current dependency graph; grounded evidence still requires source-hash checks.

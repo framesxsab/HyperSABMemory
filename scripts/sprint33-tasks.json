@@ -1,0 +1,28 @@
+{
+  "snapshot": "49ddd3ebd804fbc2c17f65081ca4f3313d9c1dd7",
+  "model": "gpt-6.2-sol",
+  "reasoningEffort": "low",
+  "deadlineMs": 300000,
+  "tasks": {
+    "resume": {
+      "prompt": "Resume the unfinished source-freshness work from the previous maintenance pilot. Deliver the outstanding correctness fix and a regression test. Inspect the project context as you normally would.",
+      "permitted": ["src/memory/groundedSearch.ts", "tests/groundedSearch.test.ts"],
+      "probe": "sprint32-freshness.probe.mjs",
+      "failure": "explicit link must not survive"
+    },
+    "attribution": {
+      "prompt": "Correct test attribution for declarations that are erased before JavaScript executes. Preserve the project's evidence guarantees and existing legitimate test links. Deliver a focused patch and regression coverage.",
+      "permitted": ["src/memory/implementationEvidence.ts", "tests/groundedSearch.test.ts", "tests/implementationEvidence.test.ts"],
+      "required": ["src/memory/implementationEvidence.ts"],
+      "probe": "sprint33-attribution.probe.mjs",
+      "failure": "type-only imports must not establish a test link"
+    }
+  },
+  "order": [
+    ["resume", "baseline"],
+    ["resume", "memory"],
+    ["attribution", "memory"],
+    ["attribution", "baseline"],
+    ["resume", "prompted"]
+  ]
+}

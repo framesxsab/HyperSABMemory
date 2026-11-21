@@ -32,6 +32,9 @@ try {
   const cli = path.join(installDir, 'node_modules', manifest.name, 'dist', 'cli', 'index.js');
   const version = execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim();
   assert.equal(version, manifest.version, 'installed tarball CLI version matches package.json');
+  const guide = readFileSync(path.join(installDir, 'node_modules', manifest.name, 'docs/AGENT_HANDOFF.md'), 'utf8');
+  const handoff = guide.match(/<!-- handoff-start -->([\s\S]+?)<!-- handoff-end -->/)?.[1].trim();
+  assert.ok(handoff && handoff.length < 1200 && handoff.includes('hypersabmemory://tasks'), 'tarball ships a bounded opt-in handoff block');
 
   const workspace = path.join(tempRoot, 'consumer');
   mkdirSync(workspace);
@@ -56,6 +59,7 @@ try {
   execFileSync('git', ['commit', '-m', 'consumer baseline'], { cwd: workspace, stdio: 'ignore' });
   const baselineHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim();
   execFileSync(process.execPath, [cli, 'setup'], { cwd: workspace, stdio: 'pipe' });
+  assert.ok(!readFileSync(path.join(workspace, 'AGENTS.md'), 'utf8').includes(handoff), 'setup leaves the optional handoff policy out of project instructions');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim(), baselineHead, 'setup does not commit by default');
   const configured = JSON.parse(readFileSync(path.join(workspace, '.mcp.json'), 'utf8'));
   assert.ok(configured.mcpServers.hypersabmemory, 'setup connects the local MCP server');
