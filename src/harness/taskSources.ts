@@ -25,7 +25,37 @@ export class TaskSourceError extends Error {
 const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
 const MAX_DISCOVERED_SOURCES = 64;
 const MAX_DISCOVERY_ENTRIES = 512;
-const ROOT_DOCUMENTS = ['AGENTS.md', 'Rules.md', 'PRD.md', 'Architecture.md', 'README.md', 'Phases.md', 'Memory.md', 'Design.md', 'CONTRIBUTING.md'];
+const ROOT_DOCUMENT_GROUPS: ReadonlyArray<readonly string[]> = [
+  ['AGENTS.md'],
+  ['Rules.md'],
+  ['PRD.md'],
+  ['Architecture.md'],
+  ['README.md', 'Readme.md', 'readme.md'],
+  ['Phases.md'],
+  ['Memory.md'],
+  ['Design.md'],
+  ['CONTRIBUTING.md', 'Contributing.md', 'contributing.md']
+];
+const ROOT_DOCUMENT_RANK = new Map<string, number>();
+ROOT_DOCUMENT_GROUPS.forEach((group, groupIndex) => {
+  group.forEach((variant, variantIndex) => {
+    ROOT_DOCUMENT_RANK.set(variant, groupIndex * 10 + variantIndex);
+  });
+});
+
+export interface DirectoryEntryLike {
+  name: string;
+  isFile(): boolean;
+  isSymbolicLink(): boolean;
+}
+
+/** Select allowlisted root documentation files preserving exact on-disk filenames across case-sensitive filesystems. */
+export function selectRootDocumentationNames(entries: ReadonlyArray<DirectoryEntryLike>): string[] {
+  return entries
+    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && ROOT_DOCUMENT_RANK.has(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => (ROOT_DOCUMENT_RANK.get(a)! - ROOT_DOCUMENT_RANK.get(b)!) || a.localeCompare(b));
+}
 
 function isContained(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -182,12 +212,15 @@ function inspectSourceContents(
   });
 }
 
-/** Discover existing scope documents only, with bounded traversal and no symlink following. */
+/** Discover existing scope documents only, with bounded traversal and safe containment. */
 export function discoverProjectSources(workspaceDir: string): TaskSourceInspection[] {
-  const candidates: string[] = [];
-  for (const name of ROOT_DOCUMENTS) {
-    if (fs.existsSync(path.join(workspaceDir, name))) candidates.push(name);
+  let rootEntries: fs.Dirent[];
+  try {
+    rootEntries = fs.readdirSync(workspaceDir, { withFileTypes: true });
+  } catch {
+    return [];
   }
+  const candidates: string[] = selectRootDocumentationNames(rootEntries);
   let visited = 0;
   const walk = (relative: string, depth: number): void => {
     if (depth > 3 || candidates.length >= MAX_DISCOVERED_SOURCES || visited >= MAX_DISCOVERY_ENTRIES) return;
@@ -210,11 +243,15 @@ export function discoverProjectSources(workspaceDir: string): TaskSourceInspecti
   };
   walk('docs', 0);
   const sources = candidates.slice(0, MAX_DISCOVERED_SOURCES).sort((a, b) => {
-    const ar = ROOT_DOCUMENTS.indexOf(a);
-    const br = ROOT_DOCUMENTS.indexOf(b);
-    return (ar < 0 ? ROOT_DOCUMENTS.length : ar) - (br < 0 ? ROOT_DOCUMENTS.length : br) || a.localeCompare(b);
+    const ar = ROOT_DOCUMENT_RANK.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const br = ROOT_DOCUMENT_RANK.get(b) ?? Number.MAX_SAFE_INTEGER;
+    return (ar - br) || a.localeCompare(b);
   }).flatMap((candidate) => {
-    try { return captureTaskSources(workspaceDir, [candidate]); } catch { return []; }
+    try {
+      return captureTaskSources(workspaceDir, [candidate]).filter((item) => item.sha256.length > 0);
+    } catch {
+      return [];
+    }
   });
   return inspectTaskSources(workspaceDir, sources);
 }
