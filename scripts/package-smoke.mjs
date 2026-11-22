@@ -83,20 +83,33 @@ try {
   const generatedConfig = JSON.parse(readFileSync(mcpConfigPath, 'utf8'));
   const generatedEntry = generatedConfig.mcpServers.hypersabmemory;
   assert.ok(generatedEntry, 'setup writes the supported MCP server entry');
-  generatedConfig.mcpServers.hypersabmemory = { command: process.execPath, args: [cli, 'mcp'] };
-  writeFileSync(mcpConfigPath, JSON.stringify(generatedConfig, null, 2));
+  assert.equal(generatedEntry.command, process.execPath, 'setup uses the direct installed Node executable without npx');
+  assert.equal(path.resolve(generatedEntry.args[0]), path.resolve(cli), 'setup points directly to the installed dist/cli/index.js entry');
+  assert.equal(generatedEntry.args[1], 'mcp', 'setup passes the mcp subcommand');
   const cursorConfigPath = path.join(workspace, '.cursor', 'mcp.json');
   const cursorConfig = JSON.parse(readFileSync(cursorConfigPath, 'utf8'));
-  assert.ok(cursorConfig.mcpServers.hypersabmemory, 'setup writes the Cursor MCP entry');
-  cursorConfig.mcpServers.hypersabmemory = { command: process.execPath, args: [cli, 'mcp'] };
-  writeFileSync(cursorConfigPath, JSON.stringify(cursorConfig, null, 2));
+  assert.deepEqual(cursorConfig.mcpServers.hypersabmemory, generatedEntry, 'setup writes the direct Cursor MCP entry');
   const handshake = await verifyMcpLaunch(workspace, 10_000);
   assert.ok(handshake.ok, handshake.detail);
 
+  const offlineCacheDir = path.join(tempRoot, 'offline-cache');
+  mkdirSync(offlineCacheDir, { recursive: true });
+  const offlineEnv = {
+    ...process.env,
+    npm_config_offline: 'true',
+    npm_config_registry: 'http://127.0.0.1:1',
+    npm_config_cache: offlineCacheDir
+  };
   const clients = [];
   const connect = async (name) => {
     const client = new Client({ name, version: '1' });
-    await client.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp'], cwd: workspace, stderr: 'pipe' }));
+    await client.connect(new StdioClientTransport({
+      command: generatedEntry.command,
+      args: generatedEntry.args,
+      cwd: workspace,
+      env: offlineEnv,
+      stderr: 'pipe'
+    }));
     clients.push(client);
     return client;
   };

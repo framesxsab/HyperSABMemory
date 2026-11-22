@@ -152,7 +152,11 @@ describe('HyperSABMemory — Context Harness Tests', () => {
     const cursor = JSON.parse(fs.readFileSync(path.join(dir, '.cursor', 'mcp.json'), 'utf-8'));
     expect(cursor.mcpServers.other.command).toBe('echo');
     expect(cursor.mcpServers.hypersabmemory.args).toContain('mcp');
-    expect(cursor.mcpServers.hypersabmemory.args.some((a: string) => a.includes('dist/cli/index.js') || a === 'hypersabmemory')).toBe(true);
+    expect(
+      cursor.mcpServers.hypersabmemory.args.some(
+        (a: string) => a.replace(/\\/g, '/').includes('dist/cli/index.js') || a === 'hypersabmemory'
+      )
+    ).toBe(true);
 
     const claude = JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf-8'));
     expect(claude.mcpServers.hypersabmemory.command).toBeTruthy();
@@ -171,20 +175,22 @@ describe('HyperSABMemory — Context Harness Tests', () => {
     expect(await engine.rollback('../.git')).toBe(false);
   });
 
-  it('should wrap npx in cmd /c on win32 so shell-less hosts can spawn it', () => {
+  it('should wrap explicit online npx fallback in cmd /c on win32 so shell-less hosts can spawn it', () => {
     withPlatform('win32', () => {
-      const launch = resolveMcpLaunch(os.tmpdir());
+      const launch = resolveMcpLaunch(os.tmpdir(), { packageRoot: null, allowOnlineFallback: true });
       expect(launch.command).toBe('cmd');
       expect(launch.args).toEqual(['/c', 'npx', '-y', 'hypersabmemory', 'mcp']);
+      expect(launch.mode).toBe('online_npx');
     });
   });
 
-  it('should keep the bare npx launch shape on darwin and linux', () => {
+  it('should keep the bare explicit online npx launch shape on darwin and linux', () => {
     for (const platform of ['darwin', 'linux'] as const) {
       withPlatform(platform, () => {
-        const launch = resolveMcpLaunch(os.tmpdir());
+        const launch = resolveMcpLaunch(os.tmpdir(), { packageRoot: null, allowOnlineFallback: true });
         expect(launch.command).toBe('npx');
         expect(launch.args).toEqual(['-y', 'hypersabmemory', 'mcp']);
+        expect(launch.mode).toBe('online_npx');
       });
     }
   });
