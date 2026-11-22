@@ -27,6 +27,12 @@ type ImplementationEvidenceResult = {
   limitations: string[];
 };
 
+export interface ImplementationEvidenceDiagnostics {
+  astParsed: number;
+  tsProgramsCreated: number;
+  cacheHit: boolean;
+}
+
 const MAX_AST_CACHE = 256;
 const MAX_EVIDENCE_CACHE = 128;
 const NODE_ASSERT_MODULES = new Set(['node:assert', 'node:assert/strict', 'assert', 'assert/strict']);
@@ -65,10 +71,11 @@ function unwrapAssertedCall(expr: ts.Expression | undefined, unwrapCallback: boo
 const unboundAstCache = new Map<string, ts.SourceFile>();
 const evidenceResultCache = new Map<string, ImplementationEvidenceResult>();
 
-function getUnboundAst(sourcePath: string, content: string, sha256: string): ts.SourceFile {
+function getUnboundAst(sourcePath: string, content: string, sha256: string, diagnostics?: ImplementationEvidenceDiagnostics): ts.SourceFile {
   const key = `${sourcePath}\0${sha256}`;
   const cached = unboundAstCache.get(key);
   if (cached) return cached;
+  if (diagnostics) diagnostics.astParsed += 1;
   const ast = ts.createSourceFile(sourcePath, content, ts.ScriptTarget.Latest, true);
   if (unboundAstCache.size >= MAX_AST_CACHE) {
     const oldest = unboundAstCache.keys().next().value;
@@ -95,7 +102,16 @@ function cloneEvidence(result: ImplementationEvidenceResult): ImplementationEvid
   };
 }
 
-export function collectImplementationEvidence(query: string, sources: Iterable<ClaimSourceSnapshot>): ImplementationEvidenceResult {
+export function collectImplementationEvidence(
+  query: string,
+  sources: Iterable<ClaimSourceSnapshot>,
+  diagnostics?: ImplementationEvidenceDiagnostics
+): ImplementationEvidenceResult {
+  if (diagnostics) {
+    diagnostics.astParsed = 0;
+    diagnostics.tsProgramsCreated = 0;
+    diagnostics.cacheHit = false;
+  }
   const terms = new Set(tokenizeSearchQuery(query));
   const identifiers = new Set(queryIdentifiers(query));
   const eligible: ClaimSourceSnapshot[] = [];
@@ -107,13 +123,14 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
   const cacheKey = `${query.trim()}\0${eligible.map(source => `${source.path}:${source.currentSha256}`).join('\0')}`;
   const cached = evidenceResultCache.get(cacheKey);
   if (cached) {
+    if (diagnostics) diagnostics.cacheHit = true;
     evidenceResultCache.delete(cacheKey);
     evidenceResultCache.set(cacheKey, cached);
     return cloneEvidence(cached);
   }
   const files = new Map<string, { source: ClaimSourceSnapshot; ast: ts.SourceFile }>();
   for (const source of eligible) {
-    files.set(source.path, { source, ast: getUnboundAst(source.path, source.content!, source.currentSha256!) });
+    files.set(source.path, { source, ast: getUnboundAst(source.path, source.content!, source.currentSha256!, diagnostics) });
   }
   function span(node: ts.Node, sourceOverride?: ClaimSourceSnapshot) {
     const ast = node.getSourceFile();
@@ -195,6 +212,7 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
         if (hasMatchingImport) break;
       }
       if (!hasMatchingImport) continue;
+      if (diagnostics) diagnostics.astParsed += 1;
       const programAst = ts.createSourceFile(ast.fileName, source.content!, ts.ScriptTarget.Latest, true);
       const targetImports = new Map<ts.ImportSpecifier, string>();
       const importedNames = new Map<string, number>();
@@ -233,6 +251,7 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
       const host = ts.createCompilerHost(options);
       const astByFile = new Map(candidateTests.map(item => [item.fileName, item.programAst]));
       host.getSourceFile = file => astByFile.get(file);
+      if (diagnostics) diagnostics.tsProgramsCreated += 1;
       const checker = ts.createProgram(candidateTests.map(item => item.fileName), options, host).getTypeChecker();
 
       for (const { source, programAst, targetImports, importedNames } of candidateTests) {
@@ -317,48 +336,85 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
           }
           return undefined;
         };
+        const resolveTestCall = (
+          node: ts.CallExpression
+        ): { testName: string; callback: ts.ArrowFunction | ts.FunctionExpression } | undefined => {
+          const nameArg = node.arguments[0];
+          const callback = node.arguments[1];
+          if (!nameArg || !callback) return undefined;
+          if (!ts.isStringLiteral(nameArg) && !ts.isNoSubstitutionTemplateLiteral(nameArg)) return undefined;
+          if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return undefined;
+
+          const expr = node.expression;
+          if (ts.isIdentifier(expr)) {
+            const binding = imported(expr);
+            const mod = binding && moduleOf(binding);
+            if (
+              mod && ts.isStringLiteral(mod) &&
+              ['vitest', 'node:test'].includes(mod.text) &&
+              ['it', 'test'].includes((binding!.propertyName ?? binding!.name).text)
+            ) {
+              return { testName: nameArg.text, callback };
+            }
+            return undefined;
+          }
+
+          let helperAccess: ts.PropertyAccessExpression | undefined;
+          if (ts.isCallExpression(expr) && expr.arguments.length >= 1 && ts.isPropertyAccessExpression(expr.expression)) {
+            helperAccess = expr.expression;
+          } else if (ts.isTaggedTemplateExpression(expr) && ts.isPropertyAccessExpression(expr.tag)) {
+            helperAccess = expr.tag;
+          }
+          if (!helperAccess || helperAccess.name.text !== 'each' || !ts.isIdentifier(helperAccess.expression)) {
+            return undefined;
+          }
+          const binding = imported(helperAccess.expression);
+          const mod = binding && moduleOf(binding);
+          if (
+            mod && ts.isStringLiteral(mod) &&
+            mod.text === 'vitest' &&
+            ['it', 'test'].includes((binding!.propertyName ?? binding!.name).text)
+          ) {
+            return { testName: nameArg.text, callback };
+          }
+          return undefined;
+        };
         function visit(node: ts.Node) {
           if (tests.length >= 4) return;
-          if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
-            const binding = imported(node.expression);
-            const module = binding && moduleOf(binding);
-            const testName = node.arguments[0].text;
-            const callback = node.arguments[1];
-            if (module && ts.isStringLiteral(module) && ['vitest', 'node:test'].includes(module.text) &&
-                ['it', 'test'].includes((binding!.propertyName ?? binding!.name).text) &&
-                callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
-              function assertion(child: ts.Node) {
-                if (tests.length >= 4) return;
-                const target = ts.isCallExpression(child) ? extractAssertedCall(child) : undefined;
-                if (target) {
-                  const callee = target.expression;
-                  for (const [index, location] of locations.entries()) {
-                    const declaration = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
-                      ? checker.getSymbolAtLocation(callee.expression)?.valueDeclaration : undefined;
-                    const constructor = declaration && ts.isVariableDeclaration(declaration) &&
-                      (declaration.parent.flags & ts.NodeFlags.Const) && declaration.initializer && ts.isNewExpression(declaration.initializer)
-                      ? declaration.initializer.expression : undefined;
-                    const local = location.owner
-                      ? ts.isPropertyAccessExpression(callee) && callee.name.text === location.name && constructor
-                      : callee;
-                    if (!local || !ts.isIdentifier(local)) continue;
-                    const targetImport = imported(local);
-                    const targetPath = location.node.getSourceFile().fileName;
-                    if (!targetImport || targetImports.get(targetImport) !== targetPath ||
-                        (targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name)) continue;
-                    const exported = ts.isMethodDeclaration(location.node) ? location.node.parent : location.node;
-                    if (ts.getModifiers(location.node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) continue;
-                    if (!ts.canHaveModifiers(exported) || !ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
-                        ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
-                    tests.push({ kind: 'test_defined', symbol: code[index].symbol, name: testName.slice(0, 160), source: span(child, source), imports: span(targetImport.parent.parent.parent, source), target: code[index].source, execution: 'unverified' });
-                    break;
-                  }
+          const testCall = ts.isCallExpression(node) ? resolveTestCall(node) : undefined;
+          if (testCall) {
+            const { testName, callback } = testCall;
+            function assertion(child: ts.Node) {
+              if (tests.length >= 4) return;
+              const target = ts.isCallExpression(child) ? extractAssertedCall(child) : undefined;
+              if (target) {
+                const callee = target.expression;
+                for (const [index, location] of locations.entries()) {
+                  const declaration = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
+                    ? checker.getSymbolAtLocation(callee.expression)?.valueDeclaration : undefined;
+                  const constructor = declaration && ts.isVariableDeclaration(declaration) &&
+                    (declaration.parent.flags & ts.NodeFlags.Const) && declaration.initializer && ts.isNewExpression(declaration.initializer)
+                    ? declaration.initializer.expression : undefined;
+                  const local = location.owner
+                    ? ts.isPropertyAccessExpression(callee) && callee.name.text === location.name && constructor
+                    : callee;
+                  if (!local || !ts.isIdentifier(local)) continue;
+                  const targetImport = imported(local);
+                  const targetPath = location.node.getSourceFile().fileName;
+                  if (!targetImport || targetImports.get(targetImport) !== targetPath ||
+                      (targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name)) continue;
+                  const exported = ts.isMethodDeclaration(location.node) ? location.node.parent : location.node;
+                  if (ts.getModifiers(location.node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) continue;
+                  if (!ts.canHaveModifiers(exported) || !ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
+                      ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
+                  tests.push({ kind: 'test_defined', symbol: code[index].symbol, name: testName.slice(0, 160), source: span(child, source), imports: span(targetImport.parent.parent.parent, source), target: code[index].source, execution: 'unverified' });
+                  break;
                 }
-                ts.forEachChild(child, assertion);
               }
-              assertion(callback.body);
-              return;
+              ts.forEachChild(child, assertion);
             }
+            assertion(callback.body);
+            return;
           }
           ts.forEachChild(node, visit);
         }

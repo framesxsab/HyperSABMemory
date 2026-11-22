@@ -957,3 +957,54 @@ it('verifies explicitly scoped nested and root JSON scalar paths while abstainin
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('links parameterized it.each tests in searchGrounded and drops them cleanly on same-size stale edits', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-param-grounded-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'src', 'catalog'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'test', 'programmatic'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'src', 'catalog', 'spec.ts'),
+      'export function isVerbatimSpec(spec: string): boolean {\n  return spec.includes(":");\n}\n'
+    );
+    const initialSpec = [
+      "import { describe, expect, it } from 'vitest';",
+      "import { isVerbatimSpec } from '../../src/catalog/spec';",
+      "describe('isVerbatimSpec', () => {",
+      "  it.each(['latest'])('resolves %s', (spec) => {",
+      '    expect(isVerbatimSpec(spec)).toBe(false);',
+      '  });',
+      '});',
+      ''
+    ].join('\n');
+    const specFile = path.join(dir, 'test', 'programmatic', 'catalog-spec.spec.ts');
+    fs.writeFileSync(specFile, initialSpec);
+
+    const refs = captureTaskSources(dir, ['src/catalog/spec.ts', 'test/programmatic/catalog-spec.spec.ts']);
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', 'isVerbatimSpec checks catalog specifiers.', [], { artifacts: ['src/catalog/spec.ts'] });
+    memory.remember('general', 'Vitest parameterized test for isVerbatimSpec.', [], { artifacts: ['test/programmatic/catalog-spec.spec.ts'] });
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const grounded = searchGrounded(hybrid, dir, 'Where is isVerbatimSpec implemented and which tests call it?', refs);
+    expect(grounded.implementationEvidence?.tests).toEqual([
+      expect.objectContaining({
+        kind: 'test_defined',
+        symbol: 'isVerbatimSpec',
+        name: 'resolves %s',
+        execution: 'unverified',
+        source: expect.objectContaining({ path: 'test/programmatic/catalog-spec.spec.ts', sha256: refs[1].sha256, freshness: 'current' }),
+        target: expect.objectContaining({ path: 'src/catalog/spec.ts', sha256: refs[0].sha256, freshness: 'current' })
+      })
+    ]);
+
+    const rewrittenSpec = initialSpec.replace('latest', 'newest');
+    expect(Buffer.byteLength(rewrittenSpec)).toBe(Buffer.byteLength(initialSpec));
+    fs.writeFileSync(specFile, rewrittenSpec);
+    const stale = searchGrounded(hybrid, dir, 'Where is isVerbatimSpec implemented and which tests call it?', refs);
+    expect(stale.implementationEvidence?.tests ?? []).toEqual([]);
+    expect(stale.staleSources.some(item => item.path === 'test/programmatic/catalog-spec.spec.ts' && item.status === 'modified')).toBe(true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
