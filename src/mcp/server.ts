@@ -32,6 +32,38 @@ import * as path from 'path';
 
 export type QuerySource = 'memory' | 'graph' | 'all';
 
+export type EvidenceClassification =
+  | 'verified_answer'
+  | 'unverified_source_evidence'
+  | 'weak_lexical_candidates'
+  | 'memory_only_no_source_evidence'
+  | 'stale_evidence'
+  | 'conflicting_evidence'
+  | 'insufficient_evidence';
+
+export interface ClassifyQueryEvidenceInput {
+  groundedStatus: string;
+  canAssert: boolean;
+  assertionsCount: number;
+  recordsCount: number;
+  groundedSourceExcerpts: number;
+  weakCandidateExcerpts: number;
+  staleSourcesCount: number;
+  implementationCodeCount: number;
+}
+
+/** Classifies bounded MCP query responses cleanly without breaking legacy status fields. */
+export function classifyQueryEvidence(input: ClassifyQueryEvidenceInput): EvidenceClassification {
+  if (input.groundedStatus === 'CONFLICTING_EVIDENCE') return 'conflicting_evidence';
+  if (input.canAssert || input.assertionsCount > 0) return 'verified_answer';
+  if (input.groundedStatus === 'STALE_EVIDENCE' && input.groundedSourceExcerpts === 0) return 'stale_evidence';
+  if (input.groundedSourceExcerpts > 0 || input.implementationCodeCount > 0) return 'unverified_source_evidence';
+  if (input.weakCandidateExcerpts > 0) return 'weak_lexical_candidates';
+  if (input.recordsCount > 0) return 'memory_only_no_source_evidence';
+  if (input.staleSourcesCount > 0) return 'stale_evidence';
+  return 'insufficient_evidence';
+}
+
 /**
  * Maps structural knowledge graph hits onto synthetic MemoryRecord shape so the MCP
  * query response stays MemoryRecord-compatible. Response-only: never persisted.
@@ -448,15 +480,45 @@ export class HyperSABMemoryMcpServer {
           ];
           if (!grounded.assertions.length) limitations.push('No supported assertion was established by the deterministic verifier.');
           if (compound) limitations.push(compound.limitation);
+          const groundedSourceExcerpts = evidence.filter(item => item.supportType === 'retrieved_source_excerpt').length;
+          const weakCandidateExcerpts = evidence.filter(item => item.supportType === 'candidate_excerpt').length;
+          const evidenceClassification = classifyQueryEvidence({
+            groundedStatus: grounded.status,
+            canAssert: grounded.canAssert,
+            assertionsCount: grounded.assertions.length,
+            recordsCount: records.length,
+            groundedSourceExcerpts,
+            weakCandidateExcerpts,
+            staleSourcesCount: grounded.staleSources.length,
+            implementationCodeCount: grounded.implementationEvidence?.code.length ?? 0
+          });
+          if (evidenceClassification === 'weak_lexical_candidates') {
+            limitations.push('Returned excerpts are weak lexical backfill candidates that failed grounded support thresholds and do not answer the query.');
+          } else if (evidenceClassification === 'memory_only_no_source_evidence') {
+            limitations.push('Matched agent-authored memory records lack verified supporting excerpts from workspace source files.');
+          } else if (evidenceClassification === 'conflicting_evidence') {
+            limitations.push('Conflicting evidence or source hash mismatches were detected; no factual assertion can be made.');
+          } else if (evidenceClassification === 'stale_evidence') {
+            limitations.push('Supporting sources changed or disappeared after capture; re-read sources before relying on them.');
+          }
           return { content: [{ type: 'text', text: JSON.stringify({
             question: query,
             status: evidence.length || records.length ? 'evidence_found' : grounded.status === 'STALE_EVIDENCE' ? 'stale_only' : 'insufficient_evidence',
+            evidenceClassification,
+            evidenceSummary: {
+              groundedStatus: grounded.status,
+              verifiedAssertions: grounded.assertions.length,
+              groundedSourceExcerpts,
+              weakCandidateExcerpts,
+              staleSources: grounded.staleSources.length
+            },
             records,
             evidence,
             claims: grounded.claims ?? [],
             ...(grounded.implementationEvidence ? { implementationEvidence: grounded.implementationEvidence } : {}),
             assertions: grounded.assertions,
             relationships: grounded.relationships ?? [],
+            ...(grounded.conflictPaths?.length ? { conflictPaths: grounded.conflictPaths } : {}),
             ...(compound ? { compoundAnswer: { text: compound.text, status: 'source_verified', implementationCompliance: 'not_verified', limitation: compound.limitation } } : {}),
             staleSources: grounded.staleSources,
             limitations,

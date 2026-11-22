@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
+  classifyQueryEvidence,
   HyperSABMemoryMcpServer,
   mapGraphHitsToRecords,
   parseRememberArgs,
@@ -267,5 +268,83 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
     expect(record?.artifacts).toEqual(['src/hooks/fileWatcher.ts']);
     expect(record?.errorsAndFixes).toBe('Raised debounce to 30s');
     expect(record?.nextSteps).toBe('Tune per-OS debounce');
+  });
+
+  it('classifies verified, unverified source, weak candidate backfill, memory-only, conflicting, stale, and insufficient evidence distinctly', async () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'prefs.json'), '{\n  "port": 4317\n}\n');
+    fs.writeFileSync(
+      path.join(dir, 'catalog.ts'),
+      'export function resolveCatalog(spec: string) {\n  // catalog version handler\n  return spec;\n}\n'
+    );
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('decision', 'The project stores port configuration locally.', [], { artifacts: ['prefs.json'] });
+    memory.remember('architecture', 'Handles pnpm catalog version protocol resolution.', [], { artifacts: ['catalog.ts'] });
+    memory.remember('general', 'Recorded discussion on stripe billing gateway without source file.');
+
+    const server = new HyperSABMemoryMcpServer(dir);
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+    const client = new Client({ name: 'classification-test', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const ask = async (query: string) => {
+      const res = await client.callTool({ name: 'hypersabmemory_query_evidence', arguments: { query, limit: 5 } });
+      return JSON.parse(res.content[0].text);
+    };
+
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+      const verified = await ask('What port is configured for the local service?');
+      expect(verified.answerVerified).toBe(true);
+      expect(verified.evidenceClassification).toBe('verified_answer');
+      expect(verified.evidenceSummary).toMatchObject({ verifiedAssertions: 1, groundedSourceExcerpts: 1, weakCandidateExcerpts: 0 });
+
+      const unverifiedSource = await ask('How does resolveCatalog handle catalog version resolution?');
+      expect(unverifiedSource.status).toBe('evidence_found');
+      expect(unverifiedSource.answerVerified).toBe(false);
+      expect(unverifiedSource.evidenceClassification).toBe('unverified_source_evidence');
+      expect(unverifiedSource.evidenceSummary.groundedSourceExcerpts).toBeGreaterThanOrEqual(1);
+
+      const weakCandidate = await ask('Which PostgreSQL schema migration runner does it use for version tracking?');
+      expect(weakCandidate.status).toBe('evidence_found');
+      expect(weakCandidate.answerVerified).toBe(false);
+      expect(weakCandidate.evidenceClassification).toBe('weak_lexical_candidates');
+      expect(weakCandidate.evidenceSummary).toMatchObject({ groundedSourceExcerpts: 0, verifiedAssertions: 0 });
+      expect(weakCandidate.evidenceSummary.weakCandidateExcerpts).toBeGreaterThanOrEqual(1);
+      expect(weakCandidate.limitations.join(' ')).toContain('weak lexical backfill candidates');
+
+      const memoryOnly = await ask('What stripe billing gateway note was recorded?');
+      expect(memoryOnly.status).toBe('evidence_found');
+      expect(memoryOnly.answerVerified).toBe(false);
+      expect(memoryOnly.evidenceClassification).toBe('memory_only_no_source_evidence');
+      expect(memoryOnly.limitations.join(' ')).toContain('agent-authored memory records');
+
+      const missing = await ask('Where are Kubernetes Helm charts deployed?');
+      expect(missing.status).toBe('insufficient_evidence');
+      expect(missing.answerVerified).toBe(false);
+      expect(missing.evidenceClassification).toBe('insufficient_evidence');
+
+      fs.writeFileSync(path.join(dir, 'secondary.json'), '{\n  "port": 4318\n}\n');
+      memory.remember('decision', 'The project port is 4318.', [], { artifacts: ['secondary.json'] });
+      const conflict = await ask('What port is configured for the local service?');
+      expect(conflict.status).toBe('evidence_found');
+      expect(conflict.answerVerified).toBe(false);
+      expect(conflict.evidenceClassification).toBe('conflicting_evidence');
+      expect(conflict.limitations.join(' ')).toContain('Conflicting evidence');
+    } finally {
+      await client.close();
+    }
+
+    expect(classifyQueryEvidence({
+      groundedStatus: 'STALE_EVIDENCE',
+      canAssert: false,
+      assertionsCount: 0,
+      recordsCount: 1,
+      groundedSourceExcerpts: 0,
+      weakCandidateExcerpts: 0,
+      staleSourcesCount: 1,
+      implementationCodeCount: 0
+    })).toBe('stale_evidence');
   });
 });
