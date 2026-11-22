@@ -8,6 +8,7 @@ import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
 import { captureTaskSources, createTaskSourceContentInspector, inspectTaskSourceContents, inspectTaskSources } from '../src/harness/taskSources.js';
 import { excerptFor, searchGrounded } from '../src/memory/groundedSearch.js';
+import { matchesTargetFile } from './testUtils.js';
 
 it('links a test assertion to the imported implementation and rechecks both sources', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-implementation-'));
@@ -36,7 +37,7 @@ it('links a test assertion to the imported implementation and rechecks both sour
     let changedDuringRead = false;
     const spy = vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: Parameters<typeof read>[0], options?: Parameters<typeof read>[1]) => {
       const bytes = read(file, options);
-      if (file === testPath && !changedDuringRead) {
+      if (matchesTargetFile(file, testPath) && !changedDuringRead) {
         changedDuringRead = true;
         fs.writeFileSync(testPath, test.replace('12', '17'));
       }

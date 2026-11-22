@@ -8,6 +8,7 @@ import { TaskLedger } from '../src/memory/taskLedger.js';
 import { executeTaskTool } from '../src/mcp/taskTools.js';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
+import { matchesTargetFile } from './testUtils.js';
 
 it('restores recorded task facts and explicit linked evidence without a filename-specific question', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-answer-bundle-'));
@@ -75,7 +76,7 @@ it('removes a relationship if its supporting source changes during restoration',
     let reads = 0;
     vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((name: fs.PathOrFileDescriptor, options?: unknown) => {
       const value = read(name, options as never);
-      if (String(name) === file && ++reads === 3) fs.writeFileSync(file, original.replace('local', 'other'));
+      if (matchesTargetFile(name, file) && ++reads === 3) fs.writeFileSync(file, original.replace('local', 'other'));
       return value;
     }) as typeof fs.readFileSync);
     syncBuiltinESMExports();
@@ -98,7 +99,7 @@ it('restores linked evidence while avoiding a redundant read of unrelated captur
     const read = fs.readFileSync;
     let reads = 0;
     vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((name: fs.PathOrFileDescriptor, options?: unknown) => {
-      if (String(name) === other) reads++;
+      if (matchesTargetFile(name, other)) reads++;
       return read(name, options as never);
     }) as typeof fs.readFileSync);
     syncBuiltinESMExports();

@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { TaskLedger } from '../src/memory/taskLedger.js';
 import { executeTaskTool } from '../src/mcp/taskTools.js';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
+import { matchesTargetFile } from './testUtils.js';
 
 it('answers an explicitly referenced decision and constraint from two current task sources', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-cross-file-'));
@@ -72,7 +73,7 @@ it('rechecks both supporting sources before returning the cross-file assertion',
     let reads = 0;
     vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, options?: unknown) => {
       const value = read(file, options as never);
-      if (String(file) === constraint && ++reads === 1) fs.writeFileSync(constraint, original.replace('Survive', 'Changed'));
+      if (matchesTargetFile(file, constraint) && ++reads === 1) fs.writeFileSync(constraint, original.replace('Survive', 'Changed'));
       return value;
     }) as typeof fs.readFileSync);
     syncBuiltinESMExports();

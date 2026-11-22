@@ -9,6 +9,7 @@ import { listActiveTasks } from '../src/mcp/taskTools.js';
 import { restoreTaskContext } from '../src/harness/taskContext.js';
 import { acquireFileLock, releaseFileLock } from '../src/memory/fileLock.js';
 import Database from 'better-sqlite3';
+import { matchesTargetFile } from './testUtils.js';
 
 describe('task ledger', () => {
   it('rejects a second agent claiming an exclusively held task', () => {
@@ -97,7 +98,7 @@ describe('task ledger', () => {
       let reads = 0;
       vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, options?: unknown) => {
         const result = read(file, options as never);
-        if (String(file) === filename && ++reads === 2) fs.writeFileSync(filename, original.replace('stale', 'rogue'));
+        if (matchesTargetFile(file, filename) && ++reads === 2) fs.writeFileSync(filename, original.replace('stale', 'rogue'));
         return result;
       }) as typeof fs.readFileSync);
       syncBuiltinESMExports();

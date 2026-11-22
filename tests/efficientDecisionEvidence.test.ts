@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TaskLedger } from '../src/memory/taskLedger.js';
 import { executeTaskTool } from '../src/mcp/taskTools.js';
+import { matchesTargetFile } from './testUtils.js';
 
 it('rechecks decision evidence when its source changes during construction', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-evidence-race-'));
@@ -19,7 +20,7 @@ it('rechecks decision evidence when its source changes during construction', () 
     let reads = 0;
     vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((name: fs.PathOrFileDescriptor, options?: unknown) => {
       const value = read(name, options as never);
-      if (String(name) === file && ++reads === 4) fs.writeFileSync(file, original.replace('local', 'LOCAL'));
+      if (matchesTargetFile(name, file) && ++reads === 4) fs.writeFileSync(file, original.replace('local', 'LOCAL'));
       return value;
     }) as typeof fs.readFileSync);
     syncBuiltinESMExports();

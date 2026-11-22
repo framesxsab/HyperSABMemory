@@ -56,7 +56,7 @@ describe('HyperSABMemory — doctor MCP launch verification + factual counters (
 
   it('verifies a working configured launch via initialize + tools/list handshake', async () => {
     const dir = tmpDir();
-    writeCursorConfig(dir, process.execPath, ['-e', `if (process.cwd() !== ${JSON.stringify(dir)}) process.exit(1);${FAKE_SERVER}`]);
+    writeCursorConfig(dir, process.execPath, ['-e', `const r=(p)=>process.platform==='win32'?require('fs').realpathSync.native(p).toLowerCase():require('fs').realpathSync(p);if(r(process.cwd())!==r(${JSON.stringify(dir)}))process.exit(1);${FAKE_SERVER}`]);
 
     const report = await runDoctor(dir);
 
