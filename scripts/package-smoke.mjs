@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { assertSameInstalledCliEntry } from './package-smoke-helpers.mjs';
 import { verifyHandoff } from './sprint31-consumer.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,7 +85,7 @@ try {
   const generatedEntry = generatedConfig.mcpServers.hypersabmemory;
   assert.ok(generatedEntry, 'setup writes the supported MCP server entry');
   assert.equal(generatedEntry.command, process.execPath, 'setup uses the direct installed Node executable without npx');
-  assert.equal(path.resolve(generatedEntry.args[0]), path.resolve(cli), 'setup points directly to the installed dist/cli/index.js entry');
+  assertSameInstalledCliEntry(generatedEntry.args[0], cli, 'setup points directly to the installed dist/cli/index.js entry');
   assert.equal(generatedEntry.args[1], 'mcp', 'setup passes the mcp subcommand');
   const cursorConfigPath = path.join(workspace, '.cursor', 'mcp.json');
   const cursorConfig = JSON.parse(readFileSync(cursorConfigPath, 'utf8'));
