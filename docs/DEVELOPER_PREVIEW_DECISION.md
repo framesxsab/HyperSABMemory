@@ -112,3 +112,19 @@ At the time this record is committed prior to pushing `feature/sprint2.5-2026110
 
 - Remote GitHub Actions runs across `ubuntu-latest`, `windows-latest`, and `macos-latest` on Node `20`, `22`, and `24` have **not yet executed**.
 - Post-push CI workflow IDs, logs, matrix results, and any failure classifications will be recorded locally in [DEVELOPER_PREVIEW_CI_VERIFICATION.md](./DEVELOPER_PREVIEW_CI_VERIFICATION.md) and appended in a clearly separated local update to this document after inspection.
+
+---
+
+## 6. Post-Push Remote CI Verification Results (Local Update After Push `e6d6d22`)
+
+*Note: Pushed commit `e6d6d22` did NOT contain this section or local test fix `7b3d8cc`; these results and fixes are local-only until another push is authorized.*
+
+- **Remote Run**: CI Run `45043165195` (https://github.com/framesxsab/HyperSABMemory/actions/runs/45043165195) on `feature/sprint2.5-20261106` (`e6d6d22`); [.github/workflows/release.yml](../.github/workflows/release.yml) did **not** trigger.
+- **Matrix Summary (`3/9` pass, `6/9` fail)**:
+  - `ubuntu-latest` Node `20` (`v20.20.2`, job `137271885815`), Node `22` (`v22.23.5`, job `137271885672`), Node `24` (`v24.22.3`, job `137271885874`): **PASSED** all steps (`npm ci`, native `better-sqlite3`, `tsc`, `npm test` `48/48` files including `worktreePortability` `6/6`, `eval:baseline`, and `package:smoke` offline MCP handshake).
+  - `windows-latest` Node `20` (`137271885877`), Node `22` (`137271885872`), Node `24` (`137271885960`): `npm ci`, `better-sqlite3` (`sqliteStore` `11/11`), `tsc`, and `worktreePortability` (`6/6`) **PASSED**; `npm test` **FAILED** on all 3 (`43 passed | 5 failed` files, `6` failed tests); `eval:baseline` and `package:smoke` skipped.
+  - `macos-latest` Node `20` (`137271885855`), Node `22` (`137271885865`), Node `24` (`137271885915`): `npm ci`, `better-sqlite3` (`sqliteStore` `11/11`), `tsc`, and `worktreePortability` (`6/6`) **PASSED**; `npm test` **FAILED** on all 3 (`42 passed | 6 failed` files, `7` failed tests = the same `6` spy tests + `tests/doctorVerify.test.ts:64`); `eval:baseline` and `package:smoke` skipped.
+- **Root Cause & Unpushed Local Fix (`7b3d8cc`)**:
+  - Category 4 (`POSIX /var -> /private/var` symlink on macOS & Windows 8.3 `RUNNER~1` short temp paths on GitHub `windows-latest`) + Category 5 (`process.cwd()` check in `tests/doctorVerify.test.ts:59`). Zero production defects.
+  - Fixed locally in unpushed commit `7b3d8cc` (`tests/testUtils.ts`, `tests/testUtils.test.ts`, `tests/doctorVerify.test.ts`, and the 5 spy test files). Verified locally under Windows 8.3 short `TEMP`/`TMP` (`LONGRU~1`: `7/7` files / `74/74` tests + `package:smoke` exited `0`) and full standard `npm test` (`48/48` files, `342/342` tests, `94.28s`). **Not yet remotely verified pending another authorized push.**
+- **Release Gate**: Re-verified locally after CI: `npm run release:preflight` exited `1` (`Verdict: RELEASE BLOCKED — NO-GO`, `5/12` failing); `npm run eval:option-b:shadow` exited `0` (`authorizesRelease: false`, `officialReleaseStatus: NO-GO`). **Option B thresholds remain `NOT APPROVED`; product release remains `NO-GO`.**
