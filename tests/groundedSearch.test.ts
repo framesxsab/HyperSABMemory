@@ -849,3 +849,111 @@ it('links node:test + node:assert/strict assertions while rejecting shadowed ass
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('verifies explicitly scoped nested and root JSON scalar paths while abstaining on ambiguous, duplicate, unsafe, or stale keys', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-nested-json-'));
+  try {
+    const pkgJson = [
+      '{',
+      '  "name": "demo",',
+      '  "type": "module",',
+      '  "repository": {',
+      '    "type": "git",',
+      '    "url": "https://example.invalid/repo.git"',
+      '  },',
+      '  "keywords": ["cli", "parser"],',
+      '  "private": true,',
+      '  "retries": 0,',
+      '  "offset": -5,',
+      '  "optional": null',
+      '}'
+    ].join('\n');
+    const dupJson = '{\n  "repository": {\n    "type": "git",\n    "type": "svn"\n  }\n}\n';
+    const portAJson = '{\n  "port": 3000\n}\n';
+    const portBJson = '{\n  "port": 4000\n}\n';
+
+    fs.writeFileSync(path.join(dir, 'package.json'), pkgJson);
+    fs.writeFileSync(path.join(dir, 'dup.json'), dupJson);
+    fs.writeFileSync(path.join(dir, 'port-a.json'), portAJson);
+    fs.writeFileSync(path.join(dir, 'port-b.json'), portBJson);
+
+    const refs = captureTaskSources(dir, ['package.json', 'dup.json', 'port-a.json', 'port-b.json']);
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('general', 'package manifest type module and repository type git', [], { artifacts: ['package.json'] });
+    memory.remember('general', 'duplicate json repository type', [], { artifacts: ['dup.json'] });
+    memory.remember('general', 'service port configuration a', [], { artifacts: ['port-a.json'] });
+    memory.remember('general', 'service port configuration b', [], { artifacts: ['port-b.json'] });
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const nested = searchGrounded(hybrid, dir, 'What is the value of `repository.type` in `package.json`?', refs);
+    expect(nested.status).toBe('SUPPORTED');
+    expect(nested.canAssert).toBe(true);
+    expect(nested.evidence[0]?.line).toBe(5);
+    expect(nested.evidence[0]?.source.sha256).toBe(refs[0].sha256);
+    expect(nested.claims?.[0]).toMatchObject({ type: 'json_scalar', value: '"git"' });
+
+    for (const rootQuestion of [
+      'What is the value of `$.type` in `package.json`?',
+      'What is the value of root `type` in `package.json`?',
+      'What is the root value of `type` in `package.json`?'
+    ]) {
+      const rootRes = searchGrounded(hybrid, dir, rootQuestion, refs);
+      expect(rootRes.status).toBe('SUPPORTED');
+      expect(rootRes.canAssert).toBe(true);
+      expect(rootRes.evidence[0]?.line).toBe(3);
+      expect(rootRes.claims?.[0]).toMatchObject({ type: 'json_scalar', value: '"module"' });
+    }
+
+    const ambiguousExact = searchGrounded(hybrid, dir, 'What is the value of `type` in `package.json`?', refs);
+    expect(ambiguousExact.status).toBe('CONFLICTING_EVIDENCE');
+    expect(ambiguousExact.canAssert).toBe(false);
+
+    const ambiguousKey = searchGrounded(hybrid, dir, 'What type is configured?', refs);
+    expect(ambiguousKey.canAssert).toBe(false);
+
+    const arrayItem = searchGrounded(hybrid, dir, 'What is the value of `keywords[0]` in `package.json`?', refs);
+    expect(arrayItem.status).toBe('SUPPORTED');
+    expect(arrayItem.canAssert).toBe(true);
+    expect(arrayItem.claims?.[0]).toMatchObject({ type: 'json_scalar', value: '"cli"' });
+
+    const negNumber = searchGrounded(hybrid, dir, 'What is the value of `offset` in `package.json`?', refs);
+    expect(negNumber.status).toBe('SUPPORTED');
+    expect(negNumber.canAssert).toBe(true);
+    expect(negNumber.claims?.[0]).toMatchObject({ type: 'json_scalar', value: '-5' });
+
+    const nullable = searchGrounded(hybrid, dir, 'What is the value of `optional` in `package.json`?', refs);
+    expect(nullable.status).toBe('SUPPORTED');
+    expect(nullable.claims?.[0]).toMatchObject({ type: 'json_scalar', value: 'null' });
+
+    for (const unsupportedQuery of [
+      'What is the value of `repository` in `package.json`?',
+      'What is the value of `keywords` in `package.json`?',
+      'What is the value of `keywords[9]` in `package.json`?',
+      'What is the value of `repository.branch` in `package.json`?',
+      'What is the value of `__proto__` in `package.json`?',
+      'What is the value of `constructor` in `package.json`?',
+      'What is the value of `repository.toString` in `package.json`?',
+      'What is the value of `repository..type` in `package.json`?'
+    ]) {
+      const res = searchGrounded(hybrid, dir, unsupportedQuery, refs);
+      expect(res.status).toBe('INSUFFICIENT_EVIDENCE');
+      expect(res.canAssert).toBe(false);
+    }
+
+    const duplicateKey = searchGrounded(hybrid, dir, 'What is the value of `repository.type` in `dup.json`?', refs);
+    expect(duplicateKey.status).toBe('CONFLICTING_EVIDENCE');
+    expect(duplicateKey.canAssert).toBe(false);
+
+    const multiFileConflict = searchGrounded(hybrid, dir, 'What port is configured?', refs);
+    expect(multiFileConflict.status).toBe('CONFLICTING_EVIDENCE');
+    expect(multiFileConflict.canAssert).toBe(false);
+
+    // Same-size rewrite ("git" -> "bzr") invalidates previously captured package.json
+    fs.writeFileSync(path.join(dir, 'package.json'), pkgJson.replace('"git"', '"bzr"'));
+    const stale = searchGrounded(hybrid, dir, 'What is the value of `repository.type` in `package.json`?', refs);
+    expect(stale.status).toBe('STALE_EVIDENCE');
+    expect(stale.canAssert).toBe(false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

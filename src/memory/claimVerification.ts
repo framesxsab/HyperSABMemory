@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import ts from 'typescript';
 import { inspectTaskSourceContents, type TaskSource, type TaskSourceContentInspection } from '../harness/taskSources.js';
 import { markdownProseLineIndices } from '../harness/taskContext.js';
 
@@ -60,23 +61,141 @@ function claim(type: AtomicEvidenceClaim['type'], text: string, value: string, s
   return { type, claim: text, value, source: sourceCitation(source, line, excerpt), directlyRecorded: true, verification, limitations: [limitation] };
 }
 
-export function verifyJsonScalarClaim(source: ClaimSourceSnapshot, key: string): ClaimVerification {
+type JsonPathStep = { kind: 'prop'; key: string } | { kind: 'index'; index: number };
+
+const UNSAFE_JSON_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function parseJsonPath(rawKey: string, rootOnly: boolean): { explicitRoot: boolean; steps: JsonPathStep[] } | null {
+  if (typeof rawKey !== 'string' || !rawKey || rawKey !== rawKey.trim()) return null;
+  const hasRootPrefix = rawKey.startsWith('$.');
+  const body = hasRootPrefix ? rawKey.slice(2) : rawKey;
+  if (!body || body.startsWith('.') || body.endsWith('.') || body.includes('..')) return null;
+
+  const steps: JsonPathStep[] = [];
+  for (const segment of body.split('.')) {
+    if (!segment || /\s/.test(segment)) return null;
+    const bracketIndex = segment.indexOf('[');
+    if (bracketIndex < 0) {
+      if (segment.includes(']') || UNSAFE_JSON_SEGMENTS.has(segment)) return null;
+      steps.push({ kind: 'prop', key: segment });
+      continue;
+    }
+    const propName = segment.slice(0, bracketIndex);
+    if (!propName || propName.includes(']') || UNSAFE_JSON_SEGMENTS.has(propName)) return null;
+    steps.push({ kind: 'prop', key: propName });
+    let rest = segment.slice(bracketIndex);
+    while (rest.length > 0) {
+      const m = rest.match(/^\[(\d+)\](.*)$/);
+      if (!m) return null;
+      steps.push({ kind: 'index', index: Number.parseInt(m[1], 10) });
+      rest = m[2];
+    }
+  }
+  return steps.length > 0 ? { explicitRoot: hasRootPrefix || rootOnly, steps } : null;
+}
+
+function countJsonPropertyOccurrences(node: ts.Node, key: string): number {
+  let count = 0;
+  function visit(current: ts.Node): void {
+    if (ts.isPropertyAssignment(current) && ts.isStringLiteral(current.name) && current.name.text === key) {
+      count++;
+    }
+    ts.forEachChild(current, visit);
+  }
+  visit(node);
+  return count;
+}
+
+function extractJsonScalarValue(node: ts.Expression, sourceFile: ts.SourceFile): { ok: true; value: string | number | boolean | null } | { ok: false } {
+  if (
+    ts.isStringLiteral(node) ||
+    ts.isNumericLiteral(node) ||
+    (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand)) ||
+    node.kind === ts.SyntaxKind.TrueKeyword ||
+    node.kind === ts.SyntaxKind.FalseKeyword ||
+    node.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    try {
+      const parsed: unknown = JSON.parse(node.getText(sourceFile));
+      if (parsed === null || ['string', 'number', 'boolean'].includes(typeof parsed)) {
+        return { ok: true, value: parsed as string | number | boolean | null };
+      }
+    } catch {
+      return { ok: false };
+    }
+  }
+  return { ok: false };
+}
+
+export function verifyJsonScalarClaim(
+  source: ClaimSourceSnapshot,
+  key: string,
+  options?: { rootOnly?: boolean }
+): ClaimVerification {
   if (source.status !== 'current' || !source.content || !/\.json$/i.test(source.path)) return { status: 'unsupported' };
+  const parsedPath = parseJsonPath(key, options?.rootOnly === true);
+  if (!parsedPath) return { status: 'unsupported' };
   try {
     const parsed: unknown = JSON.parse(source.content);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.hasOwn(parsed, key)) return { status: 'unsupported' };
-    const value = (parsed as Record<string, unknown>)[key];
-    if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) return { status: 'unsupported' };
-    const escapedKey = JSON.stringify(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const valueText = JSON.stringify(value);
-    const occurrences = [...source.content.matchAll(new RegExp(`${escapedKey}\\s*:`, 'g'))];
-    if (occurrences.length > 1) return { status: 'conflicting' };
-    const match = source.content.match(new RegExp(`${escapedKey}\\s*:\\s*${valueText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s*[,}])`));
-    if (!match || match[0].length > 320) return { status: 'unsupported' };
-    const position = match.index ?? -1;
-    if (position < 0) return { status: 'unsupported' };
-    return { status: 'supported', claim: claim('json_scalar', `The current configuration records ${key} ${valueText}.`, valueText, source, source.content.slice(0, position).split('\n').length, match[0], 'unique_json_scalar', 'This verifies a current JSON scalar, not runtime behavior.') };
-  } catch { return { status: 'unsupported' }; }
+    if (!parsed || typeof parsed !== 'object') return { status: 'unsupported' };
+
+    const jsonFile = ts.parseJsonText(source.path, source.content);
+    const rootExpr = jsonFile.statements[0]?.expression;
+    if (!rootExpr) return { status: 'unsupported' };
+
+    if (!parsedPath.explicitRoot && parsedPath.steps.length === 1 && parsedPath.steps[0].kind === 'prop') {
+      if (countJsonPropertyOccurrences(rootExpr, parsedPath.steps[0].key) > 1) {
+        return { status: 'conflicting' };
+      }
+    }
+
+    let current: ts.Expression = rootExpr;
+    let lastProperty: ts.PropertyAssignment | undefined;
+    for (const step of parsedPath.steps) {
+      if (step.kind === 'prop') {
+        if (!ts.isObjectLiteralExpression(current)) return { status: 'unsupported' };
+        const matches = current.properties.filter(
+          (prop): prop is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(prop) && ts.isStringLiteral(prop.name) && prop.name.text === step.key
+        );
+        if (matches.length > 1) return { status: 'conflicting' };
+        if (matches.length === 0) return { status: 'unsupported' };
+        lastProperty = matches[0];
+        current = matches[0].initializer;
+      } else {
+        if (!ts.isArrayLiteralExpression(current)) return { status: 'unsupported' };
+        if (step.index < 0 || step.index >= current.elements.length) return { status: 'unsupported' };
+        lastProperty = undefined;
+        current = current.elements[step.index];
+      }
+    }
+
+    const scalar = extractJsonScalarValue(current, jsonFile);
+    if (!scalar.ok) return { status: 'unsupported' };
+
+    const spanNode = lastProperty ?? current;
+    const start = spanNode.getStart(jsonFile);
+    const excerpt = source.content.slice(start, spanNode.end);
+    if (!excerpt || excerpt.length > 320) return { status: 'unsupported' };
+    const line = jsonFile.getLineAndCharacterOfPosition(start).line + 1;
+    const valueText = JSON.stringify(scalar.value);
+    const label = parsedPath.explicitRoot && !key.startsWith('$.') ? `root ${key}` : key;
+    return {
+      status: 'supported',
+      claim: claim(
+        'json_scalar',
+        `The current configuration records ${label} ${valueText}.`,
+        valueText,
+        source,
+        line,
+        excerpt,
+        'unique_json_scalar',
+        'This verifies a current JSON scalar, not runtime behavior.'
+      )
+    };
+  } catch {
+    return { status: 'unsupported' };
+  }
 }
 
 export function verifyQuotedTextClaim(source: ClaimSourceSnapshot, quote: string): ClaimVerification {

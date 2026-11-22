@@ -9,7 +9,7 @@ import { verifyJsonScalarClaim, verifyQuotedTextClaim, verifyRecordedClaims, typ
 export interface GroundedTiming { candidateMs: number; rankingMs: number; indexingMs?: number; pathMs: number; readMs: number; hashMs: number; excerptMs: number; decisionMs: number }
 
 export const GROUNDED_SUPPORT_THRESHOLD = 0.3;
-const CONFIG_QUERY = /^\s*what\s+is\s+the\s+value\s+of\s+`([^`]+)`\s+in\s+`([^`]+\.json)`\s*\??\s*$/i;
+const CONFIG_QUERY = /^\s*what\s+is\s+the\s+(?:(root|top-level)\s+)?value\s+of\s+(?:(?:the\s+)?(root|top-level)\s+)?`([^`]+)`\s+in\s+`([^`]+\.json)`\s*\??\s*$/i;
 const CONFIG_KEY_QUERY = /^\s*what\s+(?:is\s+)?(?:the\s+)?([A-Za-z][\w-]*)\s+(?:is\s+)?(?:configured|set|defined)\b/i;
 const QUOTATION_QUERY = /^\s*does\s+`([^`]+)`\s+contain\s+`([^`\r\n]+)`\s*\??\s*$/i;
 const sourceTokenCache = new Map<string, Set<string>>();
@@ -178,8 +178,9 @@ export function searchGrounded(
   const cacheWorkspace = path.resolve(workspaceDir);
   const symbol = explicitSymbol(query);
   const config = query.match(CONFIG_QUERY);
-  const configKey = config?.[1] ?? query.match(CONFIG_KEY_QUERY)?.[1];
-  const configPath = config?.[2];
+  const configRootOnly = Boolean(config?.[1] || config?.[2]);
+  const configKey = config?.[3] ?? query.match(CONFIG_KEY_QUERY)?.[1];
+  const configPath = config?.[4];
   const quotation = query.match(QUOTATION_QUERY);
   const candidates = hybrid.searchRecordsWithScores(query, 50, timing);
   const references = new Map<string, TaskSource>();
@@ -256,7 +257,7 @@ export function searchGrounded(
         continue;
       }
       if (configKey && (!configPath || sourceKey(filename) === sourceKey(configPath)) && /\.json$/i.test(filename)) {
-        const verified = verifyJsonScalarClaim(currentSources.get(sourceKey(filename))!, configKey);
+        const verified = verifyJsonScalarClaim(currentSources.get(sourceKey(filename))!, configKey, { rootOnly: configRootOnly });
         if (verified.status === 'supported') {
           potentialEvidence.push({ record, source, lexicalSupport: 1, content: text });
           claims.push(verified.claim);
