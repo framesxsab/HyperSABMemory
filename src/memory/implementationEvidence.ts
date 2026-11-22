@@ -29,6 +29,39 @@ type ImplementationEvidenceResult = {
 
 const MAX_AST_CACHE = 256;
 const MAX_EVIDENCE_CACHE = 128;
+const NODE_ASSERT_MODULES = new Set(['node:assert', 'node:assert/strict', 'assert', 'assert/strict']);
+const NODE_ASSERT_VALUE_METHODS = new Set([
+  'ok',
+  'equal',
+  'strictEqual',
+  'deepEqual',
+  'deepStrictEqual',
+  'notEqual',
+  'notStrictEqual',
+  'notDeepEqual',
+  'notDeepStrictEqual',
+  'match',
+  'doesNotMatch'
+]);
+const NODE_ASSERT_WRAPPER_METHODS = new Set(['throws', 'doesNotThrow', 'rejects', 'doesNotReject']);
+
+function unwrapAssertedCall(expr: ts.Expression | undefined, unwrapCallback: boolean): ts.CallExpression | undefined {
+  let current = expr;
+  while (current && (ts.isParenthesizedExpression(current) || ts.isAwaitExpression(current))) {
+    current = current.expression;
+  }
+  if (!current) return undefined;
+  if (ts.isCallExpression(current)) return current;
+  if (unwrapCallback && (ts.isArrowFunction(current) || ts.isFunctionExpression(current))) {
+    if (!ts.isBlock(current.body)) return unwrapAssertedCall(current.body, false);
+    if (current.body.statements.length === 1) {
+      const statement = current.body.statements[0];
+      if (ts.isExpressionStatement(statement)) return unwrapAssertedCall(statement.expression, false);
+      if (ts.isReturnStatement(statement)) return unwrapAssertedCall(statement.expression, false);
+    }
+  }
+  return undefined;
+}
 const unboundAstCache = new Map<string, ts.SourceFile>();
 const evidenceResultCache = new Map<string, ImplementationEvidenceResult>();
 
@@ -204,15 +237,86 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
 
       for (const { source, programAst, targetImports, importedNames } of candidateTests) {
         if (tests.length >= 4) break;
-        const imported = (name: ts.Identifier) => {
+        type ResolvedImport =
+          | { kind: 'named'; specifier: ts.ImportSpecifier; module: ts.Expression; importedName: string }
+          | { kind: 'default'; module: ts.Expression; importedName: 'default' }
+          | { kind: 'namespace'; module: ts.Expression; importedName: '*' };
+        const resolveImportBinding = (name: ts.Identifier): ResolvedImport | undefined => {
           // The checker can recover a symbol for source with duplicate imports.
           if (importedNames.get(name.text) !== 1) return;
           const declarations = checker.getSymbolAtLocation(name)?.declarations;
           const binding = declarations?.[0];
-          return declarations?.length === 1 && binding && ts.isImportSpecifier(binding) &&
-            !ts.isTypeOnlyImportDeclaration(binding) ? binding : undefined;
+          if (declarations?.length !== 1 || !binding) return;
+          if (ts.isImportSpecifier(binding)) {
+            if (ts.isTypeOnlyImportDeclaration(binding)) return;
+            return {
+              kind: 'named',
+              specifier: binding,
+              module: binding.parent.parent.parent.moduleSpecifier,
+              importedName: (binding.propertyName ?? binding.name).text
+            };
+          }
+          if (ts.isImportClause(binding)) {
+            if (binding.isTypeOnly || binding.phaseModifier === ts.SyntaxKind.TypeKeyword) return;
+            return { kind: 'default', module: binding.parent.moduleSpecifier, importedName: 'default' };
+          }
+          if (ts.isNamespaceImport(binding)) {
+            if (binding.parent.isTypeOnly || binding.parent.phaseModifier === ts.SyntaxKind.TypeKeyword) return;
+            return { kind: 'namespace', module: binding.parent.parent.moduleSpecifier, importedName: '*' };
+          }
+          return;
+        };
+        const imported = (name: ts.Identifier) => {
+          const resolved = resolveImportBinding(name);
+          return resolved?.kind === 'named' ? resolved.specifier : undefined;
         };
         const moduleOf = (binding: ts.ImportSpecifier) => binding.parent.parent.parent.moduleSpecifier;
+        const extractAssertedCall = (child: ts.CallExpression): ts.CallExpression | undefined => {
+          if (ts.isPropertyAccessExpression(child.expression)) {
+            const receiver = child.expression.expression;
+            if (ts.isCallExpression(receiver) && ts.isIdentifier(receiver.expression)) {
+              const expectBinding = imported(receiver.expression);
+              const expectModule = expectBinding && moduleOf(expectBinding);
+              if (
+                expectModule &&
+                ts.isStringLiteral(expectModule) &&
+                expectModule.text === 'vitest' &&
+                (expectBinding!.propertyName ?? expectBinding!.name).text === 'expect' &&
+                /^to(?:Be|Equal|Match|Throw|Have|Contain)/.test(child.expression.name.text)
+              ) {
+                return unwrapAssertedCall(receiver.arguments[0], true);
+              }
+            }
+            if (ts.isIdentifier(receiver)) {
+              const assertBinding = resolveImportBinding(receiver);
+              const method = child.expression.name.text;
+              if (
+                assertBinding &&
+                (assertBinding.kind === 'default' || assertBinding.kind === 'namespace') &&
+                ts.isStringLiteral(assertBinding.module) &&
+                NODE_ASSERT_MODULES.has(assertBinding.module.text)
+              ) {
+                const isWrapper = NODE_ASSERT_WRAPPER_METHODS.has(method);
+                if (isWrapper || NODE_ASSERT_VALUE_METHODS.has(method)) {
+                  return unwrapAssertedCall(child.arguments[0], isWrapper);
+                }
+              }
+            }
+          }
+          if (ts.isIdentifier(child.expression)) {
+            const assertBinding = resolveImportBinding(child.expression);
+            if (assertBinding && ts.isStringLiteral(assertBinding.module) && NODE_ASSERT_MODULES.has(assertBinding.module.text)) {
+              if (assertBinding.kind === 'default') return unwrapAssertedCall(child.arguments[0], false);
+              if (assertBinding.kind === 'named') {
+                const isWrapper = NODE_ASSERT_WRAPPER_METHODS.has(assertBinding.importedName);
+                if (isWrapper || NODE_ASSERT_VALUE_METHODS.has(assertBinding.importedName)) {
+                  return unwrapAssertedCall(child.arguments[0], isWrapper);
+                }
+              }
+            }
+          }
+          return undefined;
+        };
         function visit(node: ts.Node) {
           if (tests.length >= 4) return;
           if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
@@ -221,43 +325,33 @@ export function collectImplementationEvidence(query: string, sources: Iterable<C
             const testName = node.arguments[0].text;
             const callback = node.arguments[1];
             if (module && ts.isStringLiteral(module) && ['vitest', 'node:test'].includes(module.text) &&
-                ['it', 'test'].includes((binding!.propertyName ?? binding!.name).text) && callback && ts.isArrowFunction(callback)) {
+                ['it', 'test'].includes((binding!.propertyName ?? binding!.name).text) &&
+                callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
               function assertion(child: ts.Node) {
                 if (tests.length >= 4) return;
-                if (ts.isCallExpression(child) && ts.isPropertyAccessExpression(child.expression)) {
-                  const receiver = child.expression.expression;
-                  if (ts.isCallExpression(receiver) && ts.isIdentifier(receiver.expression)) {
-                    const expectBinding = imported(receiver.expression);
-                    const expectModule = expectBinding && moduleOf(expectBinding);
-                    let target = receiver.arguments[0];
-                    if (target && ts.isArrowFunction(target) && !ts.isBlock(target.body)) target = target.body;
-                    if (expectModule && ts.isStringLiteral(expectModule) && expectModule.text === 'vitest' &&
-                        (expectBinding!.propertyName ?? expectBinding!.name).text === 'expect' &&
-                        /^to(?:Be|Equal|Match|Throw|Have|Contain)/.test(child.expression.name.text) &&
-                        target && ts.isCallExpression(target)) {
-                      const callee = target.expression;
-                      for (const [index, location] of locations.entries()) {
-                        const declaration = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
-                          ? checker.getSymbolAtLocation(callee.expression)?.valueDeclaration : undefined;
-                        const constructor = declaration && ts.isVariableDeclaration(declaration) &&
-                          (declaration.parent.flags & ts.NodeFlags.Const) && declaration.initializer && ts.isNewExpression(declaration.initializer)
-                          ? declaration.initializer.expression : undefined;
-                        const local = location.owner
-                          ? ts.isPropertyAccessExpression(callee) && callee.name.text === location.name && constructor
-                          : callee;
-                        if (!local || !ts.isIdentifier(local)) continue;
-                        const targetImport = imported(local);
-                        const targetPath = location.node.getSourceFile().fileName;
-                        if (!targetImport || targetImports.get(targetImport) !== targetPath ||
-                            (targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name)) continue;
-                        const exported = ts.isMethodDeclaration(location.node) ? location.node.parent : location.node;
-                        if (ts.getModifiers(location.node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) continue;
-                        if (!ts.canHaveModifiers(exported) || !ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
-                            ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
-                        tests.push({ kind: 'test_defined', symbol: code[index].symbol, name: testName.slice(0, 160), source: span(child, source), imports: span(targetImport.parent.parent.parent, source), target: code[index].source, execution: 'unverified' });
-                        break;
-                      }
-                    }
+                const target = ts.isCallExpression(child) ? extractAssertedCall(child) : undefined;
+                if (target) {
+                  const callee = target.expression;
+                  for (const [index, location] of locations.entries()) {
+                    const declaration = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
+                      ? checker.getSymbolAtLocation(callee.expression)?.valueDeclaration : undefined;
+                    const constructor = declaration && ts.isVariableDeclaration(declaration) &&
+                      (declaration.parent.flags & ts.NodeFlags.Const) && declaration.initializer && ts.isNewExpression(declaration.initializer)
+                      ? declaration.initializer.expression : undefined;
+                    const local = location.owner
+                      ? ts.isPropertyAccessExpression(callee) && callee.name.text === location.name && constructor
+                      : callee;
+                    if (!local || !ts.isIdentifier(local)) continue;
+                    const targetImport = imported(local);
+                    const targetPath = location.node.getSourceFile().fileName;
+                    if (!targetImport || targetImports.get(targetImport) !== targetPath ||
+                        (targetImport.propertyName ?? targetImport.name).text !== (location.owner ?? location.name)) continue;
+                    const exported = ts.isMethodDeclaration(location.node) ? location.node.parent : location.node;
+                    if (ts.getModifiers(location.node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) continue;
+                    if (!ts.canHaveModifiers(exported) || !ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
+                        ts.getModifiers(exported)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
+                    tests.push({ kind: 'test_defined', symbol: code[index].symbol, name: testName.slice(0, 160), source: span(child, source), imports: span(targetImport.parent.parent.parent, source), target: code[index].source, execution: 'unverified' });
+                    break;
                   }
                 }
                 ts.forEachChild(child, assertion);

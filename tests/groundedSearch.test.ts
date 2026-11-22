@@ -730,3 +730,122 @@ it('preserves high-ranked primary source evidence over lower-ranked verbose neig
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('links node:test + node:assert/strict assertions while rejecting shadowed assert or shadowed targets', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-node-assert-impl-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'tests'), { recursive: true });
+    const mathSrc = [
+      'export function clampPort(port) {',
+      '  if (port <= 0) throw new RangeError("invalid");',
+      '  return Math.min(port, 65535);',
+      '}',
+      'export class PortRange {',
+      '  contains(port) { return port >= 1 && port <= 65535; }',
+      '}'
+    ].join('\n');
+    const validTest = [
+      "import { describe, test } from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "import { clampPort, PortRange } from '../lib/ports.js';",
+      '',
+      "describe('ports', () => {",
+      "  test('clamps high port', () => {",
+      '    assert.equal(clampPort(70000), 65535);',
+      '  });',
+      "  test('throws on non-positive port', () => {",
+      '    assert.throws(() => clampPort(0));',
+      '  });',
+      "  test('checks range membership', () => {",
+      '    const range = new PortRange();',
+      '    assert.equal(range.contains(443), true);',
+      '  });',
+      '});'
+    ].join('\n');
+    const namedAssertTest = [
+      "import { test } from 'node:test';",
+      "import { strictEqual } from 'node:assert/strict';",
+      "import { clampPort } from '../lib/ports.js';",
+      '',
+      "test('named assert strictEqual links target', () => {",
+      '  strictEqual(clampPort(80), 80);',
+      '});'
+    ].join('\n');
+    const shadowedAssertTest = [
+      "import { test } from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "import { clampPort } from '../lib/ports.js';",
+      '',
+      "test('shadowed assert must not link', () => {",
+      '  const assert = { equal: () => true };',
+      '  assert.equal(clampPort(80), 80);',
+      '});'
+    ].join('\n');
+    const shadowedTargetTest = [
+      "import { test } from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "import { clampPort } from '../lib/ports.js';",
+      '',
+      "test('shadowed target must not link', () => {",
+      '  const clampPort = (p) => p;',
+      '  assert.equal(clampPort(80), 80);',
+      '});'
+    ].join('\n');
+
+    fs.writeFileSync(path.join(dir, 'lib', 'ports.js'), mathSrc);
+    fs.writeFileSync(path.join(dir, 'tests', 'ports.test.js'), validTest);
+    fs.writeFileSync(path.join(dir, 'tests', 'named-assert.test.js'), namedAssertTest);
+    fs.writeFileSync(path.join(dir, 'tests', 'shadowed-assert.test.js'), shadowedAssertTest);
+    fs.writeFileSync(path.join(dir, 'tests', 'shadowed-target.test.js'), shadowedTargetTest);
+
+    const files = ['lib/ports.js', 'tests/ports.test.js', 'tests/named-assert.test.js', 'tests/shadowed-assert.test.js', 'tests/shadowed-target.test.js'];
+    const refs = captureTaskSources(dir, files);
+    const memory = new TemporalMemoryEngine(dir);
+    for (const file of files) {
+      memory.remember('architecture', `${file} defines or tests clampPort and PortRange`, [], { artifacts: [file] });
+    }
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const clampResult = searchGrounded(hybrid, dir, 'Where is clampPort implemented and which tests call it?', refs);
+    expect(clampResult.canAssert).toBe(false);
+    expect(clampResult.implementationEvidence?.tests).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'test_defined',
+        symbol: 'clampPort',
+        name: 'clamps high port',
+        execution: 'unverified',
+        source: expect.objectContaining({ path: 'tests/ports.test.js', sha256: refs[1].sha256 })
+      }),
+      expect.objectContaining({
+        kind: 'test_defined',
+        symbol: 'clampPort',
+        name: 'throws on non-positive port',
+        execution: 'unverified',
+        source: expect.objectContaining({ path: 'tests/ports.test.js', sha256: refs[1].sha256 })
+      }),
+      expect.objectContaining({
+        kind: 'test_defined',
+        symbol: 'clampPort',
+        name: 'named assert strictEqual links target',
+        execution: 'unverified',
+        source: expect.objectContaining({ path: 'tests/named-assert.test.js', sha256: refs[2].sha256 })
+      })
+    ]));
+    expect(clampResult.implementationEvidence?.tests.some(item => item.source.path === 'tests/shadowed-assert.test.js')).toBe(false);
+    expect(clampResult.implementationEvidence?.tests.some(item => item.source.path === 'tests/shadowed-target.test.js')).toBe(false);
+
+    const rangeResult = searchGrounded(hybrid, dir, 'Where is contains implemented and which tests call it?', refs);
+    expect(rangeResult.implementationEvidence?.tests).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'test_defined',
+        symbol: 'PortRange.contains',
+        name: 'checks range membership',
+        execution: 'unverified',
+        source: expect.objectContaining({ path: 'tests/ports.test.js', sha256: refs[1].sha256 })
+      })
+    ]));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
