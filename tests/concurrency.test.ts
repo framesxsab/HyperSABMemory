@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SqliteStore } from '../src/memory/sqliteStore.js';
 import { SwarmMeshEngine } from '../src/memory/swarmMesh.js';
-import { spawn, execFileSync, type ChildProcess } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
@@ -20,10 +20,48 @@ function uniqueSuffix(): string {
   return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
 }
 
-function waitForExit(child: ChildProcess): Promise<number> {
+const MAX_CHILD_DIAGNOSTIC_CHARS = 4096;
+
+export interface ChildRunResult {
+  label: string;
+  code: number;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
+function appendBoundedOutput(current: string, chunk: string): string {
+  if (current.length >= MAX_CHILD_DIAGNOSTIC_CHARS) return current;
+  const remaining = MAX_CHILD_DIAGNOSTIC_CHARS - current.length;
+  return chunk.length <= remaining ? current + chunk : `${current}${chunk.slice(0, remaining)}\n...[truncated]`;
+}
+
+export function formatChildExitDiagnostics(results: readonly ChildRunResult[]): string {
+  return results
+    .map((r) => {
+      const details = [
+        `[${r.label}] exit=${r.code}${r.signal ? ` signal=${r.signal}` : ''}`,
+        r.stderr.trim().length > 0 ? `stderr:\n${r.stderr.trim()}` : 'stderr: <empty>',
+        r.stdout.trim().length > 0 ? `stdout:\n${r.stdout.trim()}` : undefined
+      ].filter((line): line is string => line !== undefined);
+      return details.join('\n');
+    })
+    .join('\n---\n');
+}
+
+export function spawnChildWithDiagnostics(label: string, args: string[]): Promise<ChildRunResult> {
   return new Promise((resolve, reject) => {
-    child.on('exit', (code) => resolve(code ?? -1));
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout = appendBoundedOutput(stdout, chunk.toString('utf8'));
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr = appendBoundedOutput(stderr, chunk.toString('utf8'));
+    });
     child.on('error', reject);
+    child.on('close', (code, signal) => resolve({ label, code: code ?? -1, signal, stdout, stderr }));
   });
 }
 
@@ -124,8 +162,8 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
     const rand = uniqueSuffix();
     const script = childScript();
 
-    const children = (['procA', 'procB'] as const).map((prefix) => spawn(
-      process.execPath,
+    const results = await Promise.all((['procA', 'procB'] as const).map((prefix) => spawnChildWithDiagnostics(
+      prefix,
       [
         '--input-type=module',
         '-e',
@@ -134,12 +172,10 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
         dir,
         prefix,
         `${prefix}-content-${rand}`
-      ],
-      { stdio: 'ignore' }
-    ));
+      ]
+    )));
 
-    const exitCodes = await Promise.all(children.map(waitForExit));
-    expect(exitCodes).toEqual([0, 0]);
+    expect(results.map((r) => r.code), formatChildExitDiagnostics(results)).toEqual([0, 0]);
 
     const raw = readRawStore(dir);
     for (let i = 0; i < 5; i++) {
@@ -157,8 +193,8 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
       "new TemporalMemoryEngine(process.argv[2]).remember('architecture', process.argv[3]);"
     ].join('\n');
 
-    const children = contents.map((content) => spawn(
-      process.execPath,
+    const results = await Promise.all(contents.map((content, idx) => spawnChildWithDiagnostics(
+      `remember-${idx}`,
       [
         '--input-type=module',
         '-e',
@@ -166,11 +202,10 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
         pathToFileURL(distTemporalMemoryEntry).href,
         dir,
         content
-      ],
-      { stdio: 'ignore' }
-    ));
+      ]
+    )));
 
-    expect(await Promise.all(children.map(waitForExit))).toEqual([0, 0]);
+    expect(results.map((r) => r.code), formatChildExitDiagnostics(results)).toEqual([0, 0]);
     const records = JSON.parse(readRawStore(path.join(dir, '.hypersabmemory'))) as Array<{
       id: string;
       content: string;
@@ -195,13 +230,32 @@ describe('HyperSABMemory — Concurrent store access (C2/C3)', () => {
     fs.writeFileSync(path.join(dir, 'work.txt'), 'shared change');
     const entry = pathToFileURL(path.join(repoRoot, 'dist/hooks/autoCommit.js')).href;
     const script = "const { AutoCommitEngine } = await import(process.argv[1]); const result = await new AutoCommitEngine({ workspaceDir: process.argv[2] }).createCheckpoint(); if (result.status === 'failed') process.exitCode = 1;";
-    const children = Array.from({ length: 2 }, () => spawn(process.execPath,
-      ['--input-type=module', '-e', script, entry, dir], { stdio: 'ignore' }));
+    const results = await Promise.all(Array.from({ length: 2 }, (_, idx) => spawnChildWithDiagnostics(
+      `checkpoint-${idx}`,
+      ['--input-type=module', '-e', script, entry, dir]
+    )));
 
-    expect(await Promise.all(children.map(waitForExit))).toEqual([0, 0]);
+    expect(results.map((r) => r.code), formatChildExitDiagnostics(results)).toEqual([0, 0]);
     expect(git(['rev-list', '--count', 'HEAD']).trim()).toBe('2');
     expect(git(['status', '--porcelain']).trim()).toBe('');
   }, 30_000);
+
+  it('(diag) captures bounded child stderr and stdout when a child process exits nonzero', async () => {
+    const results = await Promise.all([
+      spawnChildWithDiagnostics('failing-child', [
+        '-e',
+        "process.stderr.write('simulated-concurrency-error: ' + 'x'.repeat(5000)); process.exit(1);"
+      ]),
+      spawnChildWithDiagnostics('healthy-child', ['-e', 'process.exit(0);'])
+    ]);
+
+    expect(results.map((r) => r.code)).toEqual([1, 0]);
+    const diagnostics = formatChildExitDiagnostics(results);
+    expect(diagnostics).toContain('[failing-child] exit=1');
+    expect(diagnostics).toContain('simulated-concurrency-error:');
+    expect(diagnostics).toContain('...[truncated]');
+    expect(diagnostics.length).toBeLessThan(MAX_CHILD_DIAGNOSTIC_CHARS * 2);
+  });
 
   it('(c) evicts a lock sentinel held by a dead pid within the 2s budget', async () => {
     const lockModule = (await import(FILE_LOCK_SPECIFIER)) as {
