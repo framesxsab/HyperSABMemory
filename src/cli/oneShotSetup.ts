@@ -16,30 +16,52 @@ import { seedWorkspace, writeGenesisRecord } from '../memory/seeding.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { McpAccessEngine } from '../harness/mcpAccess.js';
+import { canonicalPath, isPathContained, resolveVerifiedGitWorktree } from '../harness/gitWorktree.js';
+import { withFileLock } from '../memory/fileLock.js';
 
 const execFileAsync = promisify(execFile);
 
 const STORE_DIR = '.hypersabmemory';
 const EXCLUDE_LINE = `${STORE_DIR}/`;
 
+function assertSafeTarget(baseDir: string, targetPath: string, expectedKind: 'dir' | 'file'): boolean {
+  try {
+    const lstat = fs.lstatSync(targetPath);
+    if (lstat.isSymbolicLink()) return false;
+    if (expectedKind === 'dir' ? !lstat.isDirectory() : !lstat.isFile()) return false;
+    return isPathContained(baseDir, canonicalPath(targetPath));
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
+
 /**
  * Keeps the memory store out of the user's commits: appends the store dir to
- * .git/info/exclude (idempotent) and untracks it if an older setup already
- * committed it. Silent no-op outside a git work tree.
+ * the repository's common info/exclude (works across both normal repos and
+ * linked git worktrees, idempotent) and untracks an older committed store.
  */
-async function containStoreInGit(targetDir: string): Promise<void> {
-  const gitDir = path.join(targetDir, '.git');
-  if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) return;
+async function containStoreInGit(targetDir: string): Promise<boolean> {
+  const resolved = await resolveVerifiedGitWorktree(targetDir);
+  if (resolved.status !== 'valid') return false;
 
-  const infoDir = path.join(gitDir, 'info');
+  const commonDir = resolved.worktree.commonDir;
+  const infoDir = path.join(commonDir, 'info');
+  if (!assertSafeTarget(commonDir, infoDir, 'dir')) return false;
   fs.mkdirSync(infoDir, { recursive: true });
+
   const excludePath = path.join(infoDir, 'exclude');
-  const current = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf-8') : '';
-  const alreadyListed = current.split(/\r?\n/).some((line) => line.trim() === EXCLUDE_LINE);
-  if (!alreadyListed) {
-    const separator = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
-    fs.writeFileSync(excludePath, `${current}${separator}${EXCLUDE_LINE}\n`, 'utf-8');
-  }
+  if (!assertSafeTarget(commonDir, excludePath, 'file')) return false;
+
+  const excludeLock = path.join(infoDir, 'hypersabmemory-exclude.lock');
+  withFileLock(excludeLock, () => {
+    if (!assertSafeTarget(commonDir, excludePath, 'file')) return;
+    const current = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf-8') : '';
+    const alreadyListed = current.split(/\r?\n/).some((line) => line.trim() === EXCLUDE_LINE);
+    if (!alreadyListed) {
+      const separator = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
+      fs.writeFileSync(excludePath, `${current}${separator}${EXCLUDE_LINE}\n`, 'utf-8');
+    }
+  });
 
   try {
     const { stdout } = await execFileAsync('git', ['ls-files', '--', STORE_DIR], { cwd: targetDir });
@@ -49,6 +71,7 @@ async function containStoreInGit(targetDir: string): Promise<void> {
   } catch {
     // git unavailable or not a work tree — the exclude rule still guards future commits
   }
+  return true;
 }
 
 export interface SetupOutcome {
@@ -72,6 +95,16 @@ export class OneShotSetupEngine {
     let createdFiles: string[] = [];
 
     try {
+      let targetStat: fs.Stats | undefined;
+      try {
+        targetStat = fs.statSync(this.targetDir);
+      } catch {
+        targetStat = undefined;
+      }
+      if (!targetStat || !targetStat.isDirectory()) {
+        return { success: false, createdFiles: [], error: 'Target workspace must be an existing directory.' };
+      }
+
       // 0. Cold-start bootstrap: seed first-boot facts before the engine loads the store.
       const seedResult = await seedWorkspace(this.targetDir);
 
@@ -89,9 +122,7 @@ export class OneShotSetupEngine {
       const connected = access.connect();
       createdFiles = createdFiles.concat(connected.written);
 
-      await containStoreInGit(this.targetDir);
-      const gitDir = path.join(this.targetDir, '.git');
-      const contained = fs.existsSync(gitDir) && fs.statSync(gitDir).isDirectory();
+      const contained = await containStoreInGit(this.targetDir);
 
       const graph = new StructuralGraphEngine(this.targetDir);
       await graph.updateGraph();

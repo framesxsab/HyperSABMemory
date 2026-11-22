@@ -26,6 +26,7 @@ import { ContextHarness } from '../harness/contextHarness.js';
 import { AutoCommitEngine } from '../hooks/autoCommit.js';
 import { UniversalAdaptersEngine } from '../harness/universalAdapters.js';
 import { getPackageVersion } from '../version.js';
+import { canonicalPath, isPathContained, sameCanonicalPath } from '../harness/gitWorktree.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -105,14 +106,34 @@ export function parseRememberArgs(args: Record<string, unknown> | undefined): Pa
 }
 
 /**
- * Contains activeFile inside the workspace: escaping paths (../ or absolute
- * outside workspaceDir) resolve to undefined instead of a readable file.
+ * Contains activeFile inside the workspace: escaping paths (../, absolute outside,
+ * or symlinks escaping workspaceDir) resolve to undefined instead of a readable file.
  */
 export function resolveActiveFilePath(workspaceDir: string, activeFile: string): string | undefined {
-  const resolved = path.resolve(workspaceDir, activeFile);
-  const rel = path.relative(workspaceDir, resolved);
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
-  return resolved;
+  if (!activeFile || activeFile.includes('\0')) return undefined;
+  const base = path.resolve(workspaceDir);
+  const resolved = path.resolve(base, activeFile);
+  if (!isPathContained(base, resolved) || resolved === base) return undefined;
+
+  let rootReal: string;
+  try {
+    rootReal = canonicalPath(base);
+    if (!fs.statSync(rootReal).isDirectory()) return undefined;
+  } catch {
+    return undefined;
+  }
+
+  try {
+    fs.lstatSync(resolved);
+    const targetReal = canonicalPath(resolved);
+    if (!isPathContained(rootReal, targetReal) || sameCanonicalPath(rootReal, targetReal)) {
+      return undefined;
+    }
+    return resolved;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return undefined;
+  }
 }
 
 export class HyperSABMemoryMcpServer {
@@ -128,6 +149,8 @@ export class HyperSABMemoryMcpServer {
 
   constructor(workspaceDir: string = process.cwd()) {
     this.workspaceDir = workspaceDir;
+    // Validate workspace existence first so non-existent paths fail closed before mkdirSync side effects.
+    this.tasks = new TaskLedger(workspaceDir);
     this.memory = new TemporalMemoryEngine(workspaceDir);
     this.harness = new ContextHarness(1500);
     this.autoCommit = new AutoCommitEngine({
@@ -136,7 +159,6 @@ export class HyperSABMemoryMcpServer {
     this.graph = new StructuralGraphEngine(workspaceDir);
     this.hybridSearch = new HybridSearchEngine(workspaceDir, this.memory, this.graph);
     this.swarm = new SwarmMeshEngine(workspaceDir);
-    this.tasks = new TaskLedger(workspaceDir);
 
     this.server = new Server(
       {

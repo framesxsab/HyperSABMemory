@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import type { McpLaunch } from '../harness/mcpAccess.js';
+import { resolveVerifiedGitWorktree } from '../harness/gitWorktree.js';
 import { TokenCompressor } from '../harness/tokenCompressor.js';
 import { estimateNaiveCorpusTokens } from '../eval/tokenEfficiency.js';
 import { buildContextBlock } from '../memory/contextBlock.js';
@@ -45,9 +46,26 @@ async function checkGitOnPath(): Promise<DoctorCheck> {
 }
 
 async function checkInsideWorkTree(cwd: string): Promise<DoctorCheck> {
+  let hasDotGit = false;
+  try {
+    fs.lstatSync(path.join(cwd, '.git'));
+    hasDotGit = true;
+  } catch {
+    hasDotGit = false;
+  }
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd });
-    return { name: 'worktree', ok: stdout.trim() === 'true', detail: stdout.trim() === 'true' ? cwd : 'not a git work tree' };
+    const inside = stdout.trim() === 'true';
+    if (!inside) {
+      return { name: 'worktree', ok: false, detail: 'not a git work tree' };
+    }
+    if (hasDotGit) {
+      const verified = await resolveVerifiedGitWorktree(cwd);
+      if (verified.status === 'invalid') {
+        return { name: 'worktree', ok: false, detail: `untrusted git pointer: ${verified.reason}` };
+      }
+    }
+    return { name: 'worktree', ok: true, detail: cwd };
   } catch {
     return { name: 'worktree', ok: false, detail: 'not a git repository' };
   }

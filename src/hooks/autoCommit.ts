@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { acquireFileLockAsync, releaseFileLock } from '../memory/fileLock.js';
+import { resolveVerifiedGitWorktree, verifyGitWorktree } from '../harness/gitWorktree.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -101,12 +102,26 @@ export class AutoCommitEngine {
     let heldLock: string | undefined;
     try {
       let gitDirRaw: string;
+      let toplevelRaw: string;
       try {
-        ({ stdout: gitDirRaw } = await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir }));
+        [{ stdout: gitDirRaw }, { stdout: toplevelRaw }] = await Promise.all([
+          execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: this.workspaceDir }),
+          execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: this.workspaceDir })
+        ]);
       } catch {
         return { committed: false, status: 'not-a-repo' };
       }
-      const gitDir = path.resolve(this.workspaceDir, gitDirRaw.trim());
+      const verified = verifyGitWorktree(this.workspaceDir, gitDirRaw, toplevelRaw, {
+        allowMockedMissingDotGit: true
+      });
+      if (verified.status === 'subdir') {
+        return { committed: false, status: 'subdir-of-repo' };
+      }
+      if (verified.status !== 'valid') {
+        return { committed: false, status: 'not-a-repo' };
+      }
+
+      const gitDir = verified.worktree.gitDir;
       const lockPath = path.join(gitDir, 'hypersabmemory-checkpoint.lock');
       await acquireFileLockAsync(lockPath, 30_000);
       heldLock = lockPath;
@@ -118,29 +133,6 @@ export class AutoCommitEngine {
         fs.existsSync(path.join(gitDir, 'rebase-apply'))
       ) {
         return { committed: false, status: 'operation-in-progress' };
-      }
-
-      // Safety: whole-tree add from a monorepo subdir sweeps teammates' WIP.
-      const normalize = (p: string): string => {
-        const resolved = path.resolve(p);
-        try {
-          // native resolves symlinks AND 8.3 short names (CI runners expose
-          // os.tmpdir() as C:\Users\RUNNER~1\... while git reports the long form).
-          return process.platform === 'win32'
-            ? fs.realpathSync.native(resolved)
-            : fs.realpathSync(resolved);
-        } catch {
-          return resolved;
-        }
-      };
-      const { stdout: toplevelRaw } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: this.workspaceDir });
-      const wsCanonical = normalize(this.workspaceDir);
-      const topCanonical = normalize(toplevelRaw.trim());
-      const sameRoot = process.platform === 'win32'
-        ? wsCanonical.toLowerCase() === topCanonical.toLowerCase()
-        : wsCanonical === topCanonical;
-      if (!sameRoot) {
-        return { committed: false, status: 'subdir-of-repo' };
       }
 
       const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: this.workspaceDir });
@@ -275,6 +267,11 @@ export class AutoCommitEngine {
   public async rollback(hash: string): Promise<boolean> {
     if (!/^[0-9a-f]{4,40}$/i.test(hash)) {
       console.error('[HyperSABMemory :: AutoCommit] Rejected rollback: invalid hash');
+      return false;
+    }
+    const verified = await resolveVerifiedGitWorktree(this.workspaceDir);
+    if (verified.status !== 'valid') {
+      console.error('[HyperSABMemory :: AutoCommit] Rejected rollback: not a verified git worktree');
       return false;
     }
     try {
