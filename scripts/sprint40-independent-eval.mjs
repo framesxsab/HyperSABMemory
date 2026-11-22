@@ -528,6 +528,9 @@ try {
             topPaths,
             recordCount: packet.records.length,
             evidenceCount: packet.evidence.length,
+            evidenceClassification: packet.evidenceClassification ?? null,
+            groundedSourceExcerpts: packet.evidenceSummary?.groundedSourceExcerpts ?? 0,
+            weakCandidateExcerpts: packet.evidenceSummary?.weakCandidateExcerpts ?? 0,
             answerVerified: packet.answerVerified,
             assertionsCount: packet.assertions.length,
             status: packet.status,
@@ -612,6 +615,41 @@ try {
       const shadowId = shadowMem.content[0].text.match(/\[([^\]]+)\]/)?.[1];
       if (shadowId) await mcp.client.callTool({ name: 'hypersabmemory_forget', arguments: { id: shadowId } });
       fs.unlinkSync(shadowAbs);
+
+      // Parameterized false-link probes (shadowed parameter & type-only import inside it.each) on ni
+      let parameterizedFalseLinksRejected = null;
+      if (spec.key === 'ni') {
+        const paramProbes = [
+          {
+            file: 'test/programmatic/shadowed-param.spec.ts',
+            code: "import { expect, it } from 'vitest'\nimport { isVerbatimSpec } from '../../src/catalog/spec'\nit.each(['latest'])('shadowed %s', (isVerbatimSpec) => {\n  expect(isVerbatimSpec('latest')).toBe(false)\n})\n"
+          },
+          {
+            file: 'test/programmatic/typeonly-param.spec.ts',
+            code: "import { expect, it } from 'vitest'\nimport type { isVerbatimSpec } from '../../src/catalog/spec'\nit.each(['latest'])('erased %s', (spec) => {\n  expect(isVerbatimSpec(spec)).toBe(false)\n})\n"
+          }
+        ];
+        parameterizedFalseLinksRejected = true;
+        for (const p of paramProbes) {
+          const abs = path.join(workspace, p.file);
+          fs.writeFileSync(abs, p.code);
+          const mem = await mcp.client.callTool({
+            name: 'hypersabmemory_remember',
+            arguments: { category: 'general', content: `Negative parameterized probe ${p.file}`, artifacts: [p.file] }
+          });
+          const qRes = await mcp.client.callTool({
+            name: 'hypersabmemory_query_evidence',
+            arguments: { query: 'Where is isVerbatimSpec implemented and which tests call it?', limit: 5 }
+          });
+          const qPacket = JSON.parse(qRes.content[0].text);
+          if ((qPacket.implementationEvidence?.tests ?? []).some((t) => t.source.path === p.file)) {
+            parameterizedFalseLinksRejected = false;
+          }
+          const memId = mem.content[0].text.match(/\[([^\]]+)\]/)?.[1];
+          if (memId) await mcp.client.callTool({ name: 'hypersabmemory_forget', arguments: { id: memId } });
+          fs.unlinkSync(abs);
+        }
+      }
 
       // C. Grounding Safety, Exact Checks, Freshness & Containment
       const exactJsonResults = [];
@@ -839,7 +877,8 @@ try {
         },
         implementationEvidence: {
           checks: implResults,
-          shadowedImportRejected: !shadowedLinked
+          shadowedImportRejected: !shadowedLinked,
+          ...(parameterizedFalseLinksRejected !== null ? { parameterizedFalseLinksRejected } : {})
         },
         groundingSafety: {
           exactJsonChecks: exactJsonResults,
