@@ -140,7 +140,10 @@ const REPOS = [
     exactJsonChecks: [
       { query: 'What is the value of `name` in `package.json`?', expectedValue: '@antfu/ni', path: 'package.json', expectVerified: true },
       { query: 'What is the value of `version` in `package.json`?', expectedValue: '30.6.0', path: 'package.json', expectVerified: true },
-      { query: 'What is the value of `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: false }
+      { query: 'What is the value of `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: false },
+      { query: 'What is the value of `repository.type` in `package.json`?', expectedValue: 'git', path: 'package.json', expectVerified: true },
+      { query: 'What is the value of `$.type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: true },
+      { query: 'What is the value of root `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: true }
     ],
     exactSymbolCheck: {
       query: 'Where is `parsePackageSpec` defined?',
@@ -264,7 +267,10 @@ const REPOS = [
     exactJsonChecks: [
       { query: 'What is the value of `name` in `package.json`?', expectedValue: 'commander', path: 'package.json', expectVerified: true },
       { query: 'What is the value of `version` in `package.json`?', expectedValue: '15.1.0', path: 'package.json', expectVerified: true },
-      { query: 'What is the value of `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: false }
+      { query: 'What is the value of `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: false },
+      { query: 'What is the value of `repository.type` in `package.json`?', expectedValue: 'git', path: 'package.json', expectVerified: true },
+      { query: 'What is the value of `$.type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: true },
+      { query: 'What is the value of root `type` in `package.json`?', expectedValue: 'module', path: 'package.json', expectVerified: true }
     ],
     exactSymbolCheck: {
       query: 'Where is `suggestSimilar` defined?',
@@ -358,13 +364,26 @@ try {
   const installedVersion = execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim();
   assert.equal(installedVersion, manifest.version);
 
-  async function connectMcp(cwd, name) {
+  const emptyCache = path.join(tempRoot, 'offline-npm-cache');
+  const emptyPrefix = path.join(tempRoot, 'offline-npm-prefix');
+  fs.mkdirSync(emptyCache, { recursive: true });
+  fs.mkdirSync(emptyPrefix, { recursive: true });
+  const offlineEnv = {
+    ...process.env,
+    npm_config_offline: 'true',
+    npm_config_registry: 'http://127.0.0.1:1',
+    npm_config_cache: emptyCache,
+    npm_config_prefix: emptyPrefix
+  };
+
+  async function connectMcp(cwd, name, launch) {
     const client = new Client({ name, version: '1.0.0' });
     const started = performance.now();
     await client.connect(new StdioClientTransport({
-      command: process.execPath,
-      args: [cli, 'mcp'],
+      command: launch.command,
+      args: launch.args,
       cwd,
+      env: offlineEnv,
       stderr: 'pipe'
     }));
     const tools = await client.listTools();
@@ -381,10 +400,23 @@ try {
     fs.mkdirSync(workspace, { recursive: true });
     const baselineHead = copyTrackedRepo(cloneDir, workspace);
 
-    // D. Consumer setup & idempotency
+    // D. Consumer setup & idempotency + direct offline MCP config verification
     const setupStart = performance.now();
     execFileSync(process.execPath, [cli, 'setup'], { cwd: workspace, stdio: 'pipe' });
     const setupFirstMs = +(performance.now() - setupStart).toFixed(2);
+
+    const claudeEntry = JSON.parse(fs.readFileSync(path.join(workspace, '.mcp.json'), 'utf8')).mcpServers?.hypersabmemory;
+    const cursorEntry = JSON.parse(fs.readFileSync(path.join(workspace, '.cursor', 'mcp.json'), 'utf8')).mcpServers?.hypersabmemory;
+    const vscodeEntry = JSON.parse(fs.readFileSync(path.join(workspace, '.vscode', 'mcp.json'), 'utf8')).servers?.hypersabmemory;
+    assert.ok(claudeEntry && cursorEntry && vscodeEntry, `${spec.key} setup must write all three host configs`);
+    assert.equal(claudeEntry.command, process.execPath, `${spec.key} setup must use installed Node executable without npx`);
+    assert.equal(path.resolve(claudeEntry.args[0]), path.resolve(cli), `${spec.key} setup must point to installed dist/cli/index.js`);
+    assert.equal(claudeEntry.args[1], 'mcp');
+    const offlineConfigGenerated =
+      claudeEntry.command === process.execPath &&
+      !claudeEntry.args.includes('npx') &&
+      cursorEntry.command === process.execPath &&
+      vscodeEntry.command === process.execPath;
 
     const storePath = path.join(workspace, '.hypersabmemory', 'memory_store.json');
     const firstStore = JSON.parse(fs.readFileSync(storePath, 'utf8'));
@@ -398,8 +430,15 @@ try {
     assert.equal(repeatSeeds.length, firstSeeds.length, `${spec.key} repeat setup must not duplicate seeds`);
     assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim(), baselineHead, `${spec.key} setup must not commit`);
 
-    const mcp = await connectMcp(workspace, `eval-${spec.key}-1`);
+    const mcp = await connectMcp(workspace, `eval-${spec.key}-1`, claudeEntry);
     try {
+      const scoped = await mcp.client.callTool({ name: 'hypersabmemory_scope_sources', arguments: {} });
+      assert.ok(!scoped.isError, `scope_sources failed for ${spec.key}`);
+      const discoveredSources = scoped.structuredContent?.sources ?? [];
+      const rootReadme = discoveredSources.find((s) => s.path === spec.readmeFile);
+      assert.ok(rootReadme, `${spec.key} must discover exact root documentation ${spec.readmeFile}`);
+      assert.equal(rootReadme.status, 'current');
+      assert.equal(rootReadme.sha256, sha256File(path.join(workspace, spec.readmeFile)));
       const remembered = [];
       for (const entry of spec.records) {
         if (!entry.content) continue;
@@ -588,11 +627,16 @@ try {
         const expectedSha = sha256File(path.join(workspace, jc.path));
         exactJsonResults.push({
           query: jc.query,
+          expectedValue: jc.expectedValue,
+          expectVerified: jc.expectVerified,
           answerVerified: packet.answerVerified,
-          hasAssertion: packet.assertions.some((a) => a.claim.includes(jc.expectedValue)),
-          shaMatch: ev?.source?.sha256 === expectedSha,
+          matchedExpectation: packet.answerVerified === jc.expectVerified,
+          hasAssertion: jc.expectVerified
+            ? packet.assertions.some((a) => a.claim.includes(jc.expectedValue))
+            : packet.assertions.length === 0,
+          shaMatch: jc.expectVerified ? ev?.source?.sha256 === expectedSha : true,
           line: ev?.source?.line ?? null,
-          lineAccurate
+          lineAccurate: jc.expectVerified ? lineAccurate : null
         });
       }
 
@@ -733,6 +777,21 @@ try {
         unknownTaskRes.isError === true &&
         unknownTaskRes.structuredContent?.error?.code === 'TASK_NOT_FOUND';
 
+      // Offline MCP restart using setup-generated .mcp.json entry
+      await mcp.client.close();
+      const restartedMcp = await connectMcp(workspace, `eval-${spec.key}-restart`, claudeEntry);
+      let offlineRestartOk = false;
+      try {
+        const probeQuery = spec.queries[0].query;
+        const probeRes = await restartedMcp.client.callTool({
+          name: 'hypersabmemory_query_evidence',
+          arguments: { query: probeQuery, limit: 5 }
+        });
+        offlineRestartOk = !probeRes.isError && JSON.parse(probeRes.content[0].text).evidence.length > 0;
+      } finally {
+        await restartedMcp.client.close();
+      }
+
       // Cleanup disposable files
       for (const f of [sameSizePath, conflictA, conflictB]) {
         if (fs.existsSync(path.join(workspace, f))) fs.unlinkSync(path.join(workspace, f));
@@ -745,6 +804,10 @@ try {
         license: spec.license,
         indexedRecords: remembered.length,
         consumerExperience: {
+          offlineConfigGenerated,
+          offlineRestartOk,
+          rootReadmeDiscovered: rootReadme.path,
+          rootReadmeShaMatch: rootReadme.sha256 === sha256File(path.join(workspace, spec.readmeFile)),
           setupFirstMs,
           setupRepeatMs,
           setupIdempotent: true,
@@ -789,7 +852,7 @@ try {
         }
       });
     } finally {
-      await mcp.client.close();
+      try { await mcp.client.close(); } catch {}
     }
   }
 
