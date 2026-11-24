@@ -128,3 +128,17 @@ At the time this record is committed prior to pushing `feature/sprint2.5-2026110
   - Category 4 (`POSIX /var -> /private/var` symlink on macOS & Windows 8.3 `RUNNER~1` short temp paths on GitHub `windows-latest`) + Category 5 (`process.cwd()` check in `tests/doctorVerify.test.ts:59`). Zero production defects.
   - Fixed locally in unpushed commit `7b3d8cc` (`tests/testUtils.ts`, `tests/testUtils.test.ts`, `tests/doctorVerify.test.ts`, and the 5 spy test files). Verified locally under Windows 8.3 short `TEMP`/`TMP` (`LONGRU~1`: `7/7` files / `74/74` tests + `package:smoke` exited `0`) and full standard `npm test` (`48/48` files, `342/342` tests, `94.28s`). **Not yet remotely verified pending another authorized push.**
 - **Release Gate**: Re-verified locally after CI: `npm run release:preflight` exited `1` (`Verdict: RELEASE BLOCKED — NO-GO`, `5/12` failing); `npm run eval:option-b:shadow` exited `0` (`authorizesRelease: false`, `officialReleaseStatus: NO-GO`). **Option B thresholds remain `NOT APPROVED`; product release remains `NO-GO`.**
+
+---
+
+## 7. Gate 4 Remote CI Completion & Gate 5 Acceptance Contract Proposal
+
+*Status unchanged: **Option B product direction: APPROVED**; **Option B acceptance thresholds: NOT APPROVED**; **Replacement release contract: NOT APPROVED**; **Product release: NO-GO**.*
+
+- **Gate 4 Final Remote CI Verification (`2ebb9757290b5fe1d31e4f6010af8d44782fa7db`)**:
+  - **Run ID / URL**: CI Run `45372059755` (`https://github.com/framesxsab/HyperSABMemory/actions/runs/45372059755`) passed **`9/9` matrix jobs** (`ubuntu-latest`, `windows-latest`, `macos-latest` × Node `20.20.2`, `22.23.5`, `24.22.3`), `49/49` test files and `356/356` tests per job, zero skipped steps.
+  - All `9/9` jobs passed `npm ci` (`better-sqlite3@12.9.0`), `npx tsc --noEmit`, `npm test` (including [atomicStoreWrites.test.ts](../tests/atomicStoreWrites.test.ts) `8/8`, [concurrency.test.ts](../tests/concurrency.test.ts) `8/8`, [worktreePortability.test.ts](../tests/worktreePortability.test.ts) `6/6`, [autoCommit.test.ts](../tests/autoCommit.test.ts) `14/14`, [testUtils.test.ts](../tests/testUtils.test.ts) `6/6`, [packageSmokePaths.test.ts](../tests/packageSmokePaths.test.ts) `4/4`), `npm run eval:baseline` (`passed: true`), and `npm run package:smoke` (`Sprint 3.1 installed MCP handoff passed.`, `Packed install smoke passed: hypersabmemory@1.4.1`, `188.8–189.0 kB`, `171` files).
+  - Standalone `scripts/sprint42-worktree-eval.mjs` ran locally on Windows (`Node v22.14.0`) and WSL2 Ubuntu `ext4` (`Node v24.14.1`), not as a step inside `.github/workflows/ci.yml`.
+  - `.github/workflows/release.yml` did **not** trigger; npm publication safeguards remain intact (`NO-GO`).
+- **CI progression summary**: Gate 1 Run `45043165195` (`3/9`) -> Gate 2 Run `45048987296` (`5/9`) -> Gate 4 Runs `45331032640` (`8/9`) & `45344342678` (`8/9`, exposing `EPERM` on `writeAtomicText` retry via bounded child diagnostics) -> Gate 4 Run `45372059755` (**`9/9`** after bounded `[20, 40, 80, 160]` ms `writeAtomicText` backoff in `a024e1e`).
+- **Gate 5 Decision Package**: Complete Option B developer-preview vs. stable-release contract, mandatory safety gates, proposed numeric thresholds (`PENDING PRODUCT-OWNER APPROVAL`), `supportedAnswerCoverage` resolution, readiness matrix, bounded 3-repo independent acceptance evaluation plan, and draft preview positioning are documented in [OPTION_B_ACCEPTANCE_CONTRACT_PROPOSAL.md](./OPTION_B_ACCEPTANCE_CONTRACT_PROPOSAL.md).
