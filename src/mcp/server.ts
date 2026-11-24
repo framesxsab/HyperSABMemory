@@ -18,8 +18,16 @@ import { StructuralGraphEngine } from '../memory/structuralGraph.js';
 import { HybridSearchEngine, HybridSearchResult } from '../memory/hybridSearch.js';
 import { SwarmMeshEngine } from '../memory/swarmMesh.js';
 import { TaskLedger } from '../memory/taskLedger.js';
-import { captureTaskSources, inspectTaskSourceContents } from '../harness/taskSources.js';
-import { excerptFor, searchGrounded } from '../memory/groundedSearch.js';
+import { captureTaskSourceContents, inspectTaskSourceContents, type TaskSource, type TaskSourceContentInspection } from '../harness/taskSources.js';
+import {
+  distinctiveCodeIdentifiers,
+  excerptFor,
+  isDocOrDecisionQuery,
+  lexicalSupportBreakdown,
+  searchGrounded,
+  sourceContainsIdentifier,
+  sourceKey
+} from '../memory/groundedSearch.js';
 import { TASK_TOOLS, TASK_LIST_RESOURCE, executeTaskTool, listActiveTasks } from './taskTools.js';
 import { MemoryRecord, StructuredMemory } from '../memory/sqliteStore.js';
 import { ContextHarness } from '../harness/contextHarness.js';
@@ -423,7 +431,8 @@ export class HyperSABMemoryMcpServer {
           const query = typeof args?.query === 'string' ? args.query.trim() : '';
           if (!query) throw new Error('query must be a non-empty string');
           const limit = Number.isInteger(args?.limit) ? Math.min(Math.max(args?.limit as number, 1), 5) : 5;
-          const ranked = this.hybridSearch.searchRecordsWithScores(query, 20);
+          const allRanked = this.hybridSearch.searchRecordsWithScores(query, 50);
+          const ranked = allRanked.slice(0, 20);
           const records = ranked.slice(0, limit).map(({ record, score }) => ({
             id: record.id,
             category: record.category,
@@ -433,18 +442,42 @@ export class HyperSABMemoryMcpServer {
             rankScore: score,
             attribution: 'recorded_memory'
           }));
-          const references = new Map<string, { path: string; sha256: string }>();
+          const candidatePaths: string[] = [];
+          const seenRawPaths = new Set<string>();
           for (const { record } of ranked) {
             for (const sourcePath of record.artifacts ?? []) {
-              if (references.size >= 64) break;
-              try {
-                const captured = captureTaskSources(this.workspaceDir, [sourcePath])[0];
-                if (captured?.sha256) references.set(captured.path, captured);
-              } catch {}
+              if (typeof sourcePath === 'string' && !seenRawPaths.has(sourcePath)) {
+                seenRawPaths.add(sourcePath);
+                candidatePaths.push(sourcePath);
+              }
             }
-            if (references.size >= 64) break;
           }
-          const grounded = searchGrounded(this.hybridSearch, this.workspaceDir, query, [...references.values()]);
+          const sharedParentRealCache = new Map<string, string>();
+          const references = new Map<string, TaskSource>();
+          const preinspectedSources = new Map<string, TaskSourceContentInspection>();
+          for (let offset = 0; offset < candidatePaths.length && references.size < 64; offset += 64) {
+            const batch = captureTaskSourceContents(this.workspaceDir, candidatePaths.slice(offset, offset + 64), {
+              parentRealCache: sharedParentRealCache,
+              ignoreErrors: true
+            });
+            for (const item of batch) {
+              if (references.size >= 64) break;
+              if (!item.sha256) continue;
+              const key = sourceKey(item.path);
+              if (references.has(key)) continue;
+              references.set(key, { path: item.path, sha256: item.sha256 });
+              preinspectedSources.set(key, item);
+            }
+          }
+          const grounded = searchGrounded(
+            this.hybridSearch,
+            this.workspaceDir,
+            query,
+            [...references.values()],
+            [],
+            undefined,
+            { precomputedCandidates: allRanked, preinspectedSources, sharedParentRealCache }
+          );
           const compound = grounded.compoundAnswer ? { ...grounded, text: grounded.compoundAnswer.text, limitation: grounded.compoundAnswer.limitation } : undefined;
           const evidence = grounded.evidence.slice(0, limit).map(item => ({
             excerpt: item.excerpt ?? '',
@@ -454,23 +487,64 @@ export class HyperSABMemoryMcpServer {
             lexicalSupport: item.lexicalSupport
           }));
           const included = new Set(evidence.map(item => item.source.path));
-          for (const reference of references.values()) {
-            if (evidence.length >= limit || included.has(reference.path)) continue;
-            const inspected = inspectTaskSourceContents(this.workspaceDir, [reference])[0];
-            if (inspected.status !== 'current' || !inspected.content) continue;
-            const excerpt = excerptFor(query, inspected.content.toString('utf8'), reference.path);
-            if (!excerpt) continue;
-            const checked = inspectTaskSourceContents(this.workspaceDir, [reference])[0];
-            if (checked.status !== 'current') continue;
-            const line = checked.content?.toString('utf8').indexOf(excerpt) ?? -1;
-            evidence.push({
-              excerpt,
-              source: { path: reference.path, sha256: checked.currentSha256, freshness: checked.status, ...(line >= 0 ? { line: checked.content!.toString('utf8').slice(0, line).split('\n').length } : {}) },
-              supportType: 'candidate_excerpt',
-              verification: 'insufficient_evidence',
-              lexicalSupport: 0
-            });
-            included.add(reference.path);
+          const staleKeys = new Set(grounded.staleSources.map(item => sourceKey(item.path)));
+          const codeIds = distinctiveCodeIdentifiers(query);
+          const docOrDecision = isDocOrDecisionQuery(query);
+          const hasMissingCodeId = codeIds.some(id =>
+            ![...preinspectedSources.values()].some(
+              item => item.status === 'current' && !staleKeys.has(sourceKey(item.path)) && item.content && sourceContainsIdentifier(item.content.toString('utf8'), id)
+            )
+          );
+          const allowBackfill =
+            evidence.length < limit &&
+            grounded.status !== 'CONFLICTING_EVIDENCE' &&
+            grounded.status !== 'STALE_EVIDENCE' &&
+            !hasMissingCodeId;
+          if (allowBackfill) {
+            const candidateMeta = new Map<string, (typeof ranked)[number]>();
+            for (const item of ranked) {
+              for (const artifact of item.record.artifacts ?? []) {
+                const key = sourceKey(artifact);
+                if (!candidateMeta.has(key)) candidateMeta.set(key, item);
+              }
+            }
+            const pendingBackfill: Array<{ reference: TaskSource; excerpt: string }> = [];
+            for (const reference of references.values()) {
+              if (evidence.length + pendingBackfill.length >= limit) break;
+              const refKey = sourceKey(reference.path);
+              if (included.has(reference.path) || staleKeys.has(refKey)) continue;
+              const captured = preinspectedSources.get(refKey);
+              if (!captured || captured.status !== 'current' || !captured.content) continue;
+              const text = captured.content.toString('utf8');
+              const meta = candidateMeta.get(refKey);
+              const { support, matchedTerms, queryTerms } = lexicalSupportBreakdown(query, text, meta?.queryTermEvidence);
+              const qualifies = queryTerms >= 2 ? matchedTerms >= 2 && support >= 0.15 : matchedTerms >= 1 && support >= 0.25;
+              if (!qualifies) continue;
+              if (/\.md$/i.test(reference.path) && !docOrDecision && !meta?.exactPathMatch && evidence.length === 0 && (matchedTerms < 3 || support < 0.22)) {
+                continue;
+              }
+              const excerpt = excerptFor(query, text, reference.path, reference.sha256);
+              if (!excerpt) continue;
+              pendingBackfill.push({ reference, excerpt });
+            }
+            if (pendingBackfill.length) {
+              const verified = inspectTaskSourceContents(this.workspaceDir, pendingBackfill.map(item => item.reference));
+              for (let index = 0; index < pendingBackfill.length; index++) {
+                const { reference, excerpt } = pendingBackfill[index];
+                const checked = verified[index];
+                if (!checked || checked.status !== 'current' || !checked.content) continue;
+                const checkedText = checked.content.toString('utf8');
+                const line = checkedText.indexOf(excerpt);
+                evidence.push({
+                  excerpt,
+                  source: { path: reference.path, sha256: checked.currentSha256, freshness: checked.status, ...(line >= 0 ? { line: checkedText.slice(0, line).split('\n').length } : {}) },
+                  supportType: 'candidate_excerpt',
+                  verification: 'insufficient_evidence',
+                  lexicalSupport: 0
+                });
+                included.add(reference.path);
+              }
+            }
           }
           const limitations = [
             'Recorded memory statements are agent-authored and are not independently verified.',

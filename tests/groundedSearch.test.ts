@@ -6,7 +6,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine } from '../src/memory/hybridSearch.js';
-import { captureTaskSources, createTaskSourceContentInspector, inspectTaskSourceContents, inspectTaskSources } from '../src/harness/taskSources.js';
+import { captureTaskSourceContents, captureTaskSources, createTaskSourceContentInspector, inspectTaskSourceContents, inspectTaskSources } from '../src/harness/taskSources.js';
 import { excerptFor, searchGrounded } from '../src/memory/groundedSearch.js';
 import { matchesTargetFile } from './testUtils.js';
 
@@ -1007,5 +1007,168 @@ it('links parameterized it.each tests in searchGrounded and drops them cleanly o
     expect(stale.staleSources.some(item => item.path === 'test/programmatic/catalog-spec.spec.ts' && item.status === 'modified')).toBe(true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it('abstains on near-miss queries whose queried code identifiers are absent even when prose matches', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-missing-ident-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(
+      path.join(dir, 'README.md'),
+      '# Store Guide\n\nConfigure retry intervals, timeout defaults, clean stores, and lifecycle listeners across modules.\n'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'src', 'queue.ts'),
+      'export function scheduleQueue(intervalCap: number) {\n  return intervalCap;\n}\n'
+    );
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', 'Queue interval defaults, timeout handling, and README store guide.', [], { artifacts: ['README.md'] });
+    memory.remember('architecture', 'scheduleQueue enforces intervalCap.', [], { artifacts: ['src/queue.ts'] });
+    const refs = captureTaskSources(dir, ['README.md', 'src/queue.ts']);
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const nearMiss = searchGrounded(
+      hybrid,
+      dir,
+      'How does scheduleQueue compute retryBackoffMs and AbortController timeout defaults in the store guide?',
+      refs
+    );
+    expect(nearMiss.status).toBe('INSUFFICIENT_EVIDENCE');
+    expect(nearMiss.canAssert).toBe(false);
+    expect(nearMiss.evidence).toEqual([]);
+    expect(nearMiss.assertions).toEqual([]);
+    expect(nearMiss.implementationEvidence).toBeUndefined();
+
+    const missingImpl = searchGrounded(
+      hybrid,
+      dir,
+      'Where is retryBackoffMs implemented on scheduleQueue and which tests verify intervalCap?',
+      refs
+    );
+    expect(missingImpl.status).toBe('INSUFFICIENT_EVIDENCE');
+    expect(missingImpl.evidence).toEqual([]);
+    expect(missingImpl.implementationEvidence).toBeUndefined();
+
+    const scatterLowSupport = searchGrounded(
+      hybrid,
+      dir,
+      'How does queue cache warmup scheduleQueue timeout retry jitter backoff serialization persistence compaction and sharding work?',
+      refs
+    );
+    expect(scatterLowSupport.status).toBe('INSUFFICIENT_EVIDENCE');
+    expect(scatterLowSupport.evidence).toEqual([]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it('ranks concise defining implementation ahead of verbose README prose and preserves doc queries', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-code-over-readme-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(
+      path.join(dir, 'README.md'),
+      '# Parse URL Guide\n\nHow parseURL handles special script protocols, data protocols, Windows drive letters, file URLs, host parsing, pathnames, hashes, queries, and relative normalization in browsers and Node.\n'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'src', 'parse.d.ts'),
+      'export declare function parseURL(input: string): { protocol: string };\n'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'src', 'parse.js'),
+      'export function parseURL(input) {\n  if (input.startsWith("script:")) return { protocol: "script:" };\n  return { protocol: "file:" };\n}\n'
+    );
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', fs.readFileSync(path.join(dir, 'README.md'), 'utf8'), [], { artifacts: ['README.md'] });
+    memory.remember('architecture', fs.readFileSync(path.join(dir, 'src', 'parse.d.ts'), 'utf8'), [], { artifacts: ['src/parse.d.ts'] });
+    memory.remember('architecture', fs.readFileSync(path.join(dir, 'src', 'parse.js'), 'utf8'), [], { artifacts: ['src/parse.js'] });
+    const refs = captureTaskSources(dir, ['README.md', 'src/parse.d.ts', 'src/parse.js']);
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const codeQuery = searchGrounded(
+      hybrid,
+      dir,
+      'How does parseURL handle special script protocols, data protocols, Windows drive letters, host parsing, hashes, queries, and normalization?',
+      refs
+    );
+    expect(codeQuery.evidence.length).toBeGreaterThanOrEqual(1);
+    expect(codeQuery.evidence[0].source.path).toBe('src/parse.js');
+
+    const docQuery = searchGrounded(
+      hybrid,
+      dir,
+      'What does README.md document about browsers, host parsing, queries, and normalization?',
+      refs
+    );
+    expect(docQuery.evidence.length).toBeGreaterThanOrEqual(1);
+    expect(docQuery.evidence[0].source.path).toBe('README.md');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it('still catches same-size mutations and symlink escapes in final check when preinspectedSources is passed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-preinspected-safety-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-grounded-preinspected-out-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'sub'));
+    const targetFile = path.join(dir, 'sub', 'policy.txt');
+    const outsideFile = path.join(outside, 'secret.txt');
+    fs.writeFileSync(targetFile, 'lease validation policy alpha');
+    fs.writeFileSync(outsideFile, 'lease validation policy alpha');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', 'lease validation policy alpha', [], { artifacts: ['sub/policy.txt'] });
+    const hybrid = new HybridSearchEngine(dir, memory);
+
+    const sharedCache = new Map<string, string>();
+    const captured = captureTaskSourceContents(dir, ['sub/policy.txt'], { parentRealCache: sharedCache });
+    const preinspected = new Map(captured.map(item => [item.path, item]));
+    const precomputed = hybrid.searchRecordsWithScores('lease validation policy alpha', 50);
+
+    // Same-size mutation on disk between request capture and final verification MUST fail as STALE_EVIDENCE
+    fs.writeFileSync(targetFile, 'lease validation policy omegX');
+    expect(Buffer.byteLength('lease validation policy omegX')).toBe(Buffer.byteLength('lease validation policy alpha'));
+    const stale = searchGrounded(
+      hybrid,
+      dir,
+      'lease validation policy alpha',
+      captured.map(({ path: p, sha256 }) => ({ path: p, sha256 })),
+      [],
+      undefined,
+      { precomputedCandidates: precomputed, preinspectedSources: preinspected, sharedParentRealCache: sharedCache }
+    );
+    expect(stale.status).toBe('STALE_EVIDENCE');
+    expect(stale.evidence).toEqual([]);
+    expect(stale.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'sub/policy.txt', status: 'modified' })]));
+
+    // Restore original content, swap parent folder to symlink outside workspace despite populated sharedParentRealCache
+    fs.writeFileSync(targetFile, 'lease validation policy alpha');
+    const linkCaptured = captureTaskSourceContents(dir, ['sub/policy.txt'], { parentRealCache: sharedCache });
+    const linkPreinspected = new Map(linkCaptured.map(item => [item.path, item]));
+    let symlinkSwapped = true;
+    try {
+      fs.rmSync(path.join(dir, 'sub'), { recursive: true, force: true });
+      fs.writeFileSync(outsideFile, 'lease validation policy alpha');
+      fs.symlinkSync(outside, path.join(dir, 'sub'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      symlinkSwapped = false;
+    }
+    if (symlinkSwapped) {
+      const escaped = searchGrounded(
+        hybrid,
+        dir,
+        'lease validation policy alpha',
+        linkCaptured.map(({ path: p, sha256 }) => ({ path: p, sha256 })),
+        [],
+        undefined,
+        { precomputedCandidates: precomputed, preinspectedSources: linkPreinspected, sharedParentRealCache: sharedCache }
+      );
+      expect(escaped.evidence).toEqual([]);
+      expect(escaped.staleSources.length).toBeGreaterThanOrEqual(1);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
   }
 });

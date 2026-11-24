@@ -3,8 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  captureTaskSourceContents,
   discoverProjectSources,
-  selectRootDocumentationNames
+  inspectTaskSourceContents,
+  selectRootDocumentationNames,
+  TaskSourceError
 } from '../src/harness/taskSources.js';
 import { removeTestDirs } from './testUtils.js';
 
@@ -109,5 +112,45 @@ describe('HyperSABMemory — cross-platform root documentation discovery', () =>
       fs.writeFileSync(path.join(workspace, 'Architecture.md'), '# Arch\n');
       expect(discoverProjectSources(workspace).map((s) => s.path)).toEqual(['Architecture.md', 'docs/real-readme.md']);
     }
+  });
+
+  it('captures batch contents with shared parentRealCache while rejecting escapes and catching same-size mutations', () => {
+    const workspace = makeTempDir('hm-capture-contents-');
+    const outside = makeTempDir('hm-capture-outside-');
+    fs.mkdirSync(path.join(workspace, 'src'));
+    const insideFile = path.join(workspace, 'src', 'index.ts');
+    const siblingFile = path.join(workspace, 'src', 'helper.ts');
+    fs.writeFileSync(insideFile, 'export const value = 10;\n');
+    fs.writeFileSync(siblingFile, 'export const helper = () => 10;\n');
+    fs.writeFileSync(path.join(outside, 'secret.ts'), 'export const secret = true;\n');
+
+    const parentRealCache = new Map<string, string>();
+    const captured = captureTaskSourceContents(workspace, ['src/index.ts', 'src/helper.ts', './src/index.ts'], { parentRealCache });
+    expect(captured).toHaveLength(2);
+    expect(captured[0]).toMatchObject({ path: 'src/index.ts', status: 'current', currentSha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(captured[0].content?.toString('utf8')).toBe('export const value = 10;\n');
+    expect(parentRealCache.size).toBeGreaterThanOrEqual(2);
+
+    expect(() => captureTaskSourceContents(workspace, ['../outside.ts'])).toThrow(TaskSourceError);
+
+    let symlinkCreated = true;
+    const escapedLink = path.join(workspace, 'src', 'escape.ts');
+    try {
+      fs.symlinkSync(path.join(outside, 'secret.ts'), escapedLink, 'file');
+    } catch {
+      symlinkCreated = false;
+    }
+
+    if (symlinkCreated) {
+      expect(() => captureTaskSourceContents(workspace, ['src/escape.ts'])).toThrow(TaskSourceError);
+      const partial = captureTaskSourceContents(workspace, ['src/escape.ts', 'src/index.ts'], { ignoreErrors: true });
+      expect(partial.map((item) => item.path)).toEqual(['src/index.ts']);
+    }
+
+    // Same-size mutation on disk must be caught when re-inspecting
+    fs.writeFileSync(insideFile, 'export const value = 20;\n');
+    const rechecked = inspectTaskSourceContents(workspace, [{ path: captured[0].path, sha256: captured[0].sha256 }]);
+    expect(rechecked[0].status).toBe('modified');
+    expect(rechecked[0].currentSha256).not.toBe(captured[0].sha256);
   });
 });

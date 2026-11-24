@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   classifyQueryEvidence,
   HyperSABMemoryMcpServer,
@@ -10,6 +10,8 @@ import {
 import { TemporalMemoryEngine } from '../src/memory/temporalMemory.js';
 import { HybridSearchEngine, HybridSearchResult } from '../src/memory/hybridSearch.js';
 import * as fs from 'fs';
+import fsDefault from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { removeTestDirs } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
@@ -306,7 +308,13 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
       expect(unverifiedSource.evidenceClassification).toBe('unverified_source_evidence');
       expect(unverifiedSource.evidenceSummary.groundedSourceExcerpts).toBeGreaterThanOrEqual(1);
 
-      const weakCandidate = await ask('Which PostgreSQL schema migration runner does it use for version tracking?');
+      const noisyUnanswerable = await ask('Which PostgreSQL schema migration runner does it use for version tracking?');
+      expect(noisyUnanswerable.answerVerified).toBe(false);
+      expect(noisyUnanswerable.evidenceClassification).toBe('memory_only_no_source_evidence');
+      expect(noisyUnanswerable.evidence).toEqual([]);
+      expect(noisyUnanswerable.evidenceSummary).toMatchObject({ groundedSourceExcerpts: 0, verifiedAssertions: 0, weakCandidateExcerpts: 0 });
+
+      const weakCandidate = await ask('What catalog version rollback strategy, migration policy, and pipeline does it use?');
       expect(weakCandidate.status).toBe('evidence_found');
       expect(weakCandidate.answerVerified).toBe(false);
       expect(weakCandidate.evidenceClassification).toBe('weak_lexical_candidates');
@@ -346,5 +354,67 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
       staleSourcesCount: 1,
       implementationCodeCount: 0
     })).toBe('stale_evidence');
+  });
+
+  it('calls searchRecordsWithScores once, suppresses near-miss backfill noise, and catches mid-request same-size mutations', async () => {
+    const dir = tmpDir();
+    const targetPath = path.join(dir, 'service.ts');
+    const readmePath = path.join(dir, 'README.md');
+    const initialService = 'export function resolveCatalog(spec: string) {\n  // catalog version resolution pipeline\n  return spec;\n}\n';
+    const rewrittenService = 'export function resolveCatalog(spec: string) {\n  // catalog version resolution pipeXine\n  return spec;\n}\n';
+    expect(Buffer.byteLength(rewrittenService)).toBe(Buffer.byteLength(initialService));
+    fs.writeFileSync(targetPath, initialService);
+    fs.writeFileSync(readmePath, '# Service Guide\n\nConfigure retry intervals, store updates, clean stores, and lifecycle batching.\n');
+    const memory = new TemporalMemoryEngine(dir);
+    memory.remember('architecture', 'resolveCatalog catalog version resolution pipeline', [], { artifacts: ['service.ts'] });
+    memory.remember('general', 'Configure retry intervals, store updates, clean stores, and lifecycle batching.', [], { artifacts: ['README.md'] });
+
+    const server = new HyperSABMemoryMcpServer(dir);
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+    const client = new Client({ name: 'mcp-opt-noise-test', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+      const searchSpy = vi.spyOn(HybridSearchEngine.prototype, 'searchRecordsWithScores');
+      const nearMissRes = await client.callTool({
+        name: 'hypersabmemory_query_evidence',
+        arguments: { query: 'How does retryBackoffMs configure clean stores and lifecycle batching in the guide?' }
+      });
+      const nearMiss = JSON.parse(nearMissRes.content[0].text);
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+      expect(nearMiss.evidence).toEqual([]);
+      expect(nearMiss.evidenceSummary.weakCandidateExcerpts).toBe(0);
+      expect(nearMiss.answerVerified).toBe(false);
+      searchSpy.mockRestore();
+
+      const origRead = fsDefault.readFileSync;
+      let mutatedAfterCapture = false;
+      const readSpy = vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: Parameters<typeof origRead>[0], options?: Parameters<typeof origRead>[1]) => {
+        const result = origRead(file, options);
+        if (typeof file === 'string' && path.resolve(file) === path.resolve(targetPath) && !mutatedAfterCapture) {
+          mutatedAfterCapture = true;
+          fs.writeFileSync(targetPath, rewrittenService);
+        }
+        return result;
+      }) as typeof origRead);
+      syncBuiltinESMExports();
+      try {
+        const staleRes = await client.callTool({
+          name: 'hypersabmemory_query_evidence',
+          arguments: { query: 'How does resolveCatalog handle catalog version resolution pipeline?' }
+        });
+        const stalePacket = JSON.parse(staleRes.content[0].text);
+        expect(mutatedAfterCapture).toBe(true);
+        expect(stalePacket.evidence.some((item: any) => item.source.path === 'service.ts')).toBe(false);
+        expect(stalePacket.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'service.ts', status: 'modified' })]));
+      } finally {
+        readSpy.mockRestore();
+        syncBuiltinESMExports();
+      }
+    } finally {
+      await client.close();
+    }
   });
 });

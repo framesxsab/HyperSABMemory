@@ -96,13 +96,18 @@ export function recordSearchText(record: MemoryRecord): string {
 export function queryIdentifiers(text: string): string[] {
   return [...new Set([
     ...(text.match(/\b[A-Za-z][A-Za-z0-9_$]*[A-Z][A-Za-z0-9_$]*\b/g) ?? []),
-    ...(text.match(/\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b/g) ?? [])
+    ...(text.match(/\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b/g) ?? []),
+    ...(text.match(/(?<!\.)\b[A-Za-z_$][A-Za-z0-9_$]{1,}(?=\(\))/g) ?? [])
   ])];
 }
 
+const CODE_EXT_RE = /\.[cm]?[jt]sx?$/i;
+const DECL_EXT_RE = /\.d\.[cm]?[jt]sx?$/i;
+const TEST_PATH_RE = /(?:^|\/)(?:tests?|__tests__|spec)\/|\.(?:test|spec)(?:-d)?\.[cm]?[jt]sx?$/i;
+
 function declaresIdentifier(text: string, identifier: string): boolean {
   const escaped = identifier.replace(/[$]/g, '\\$');
-  return new RegExp(`\\b(?:class|function|interface|type|const|let|var|enum)\\s+${escaped}(?![\\w$])`).test(text);
+  return new RegExp(`\\b(?:class|function\\*?|interface|type|const|let|var|enum)\\s+${escaped}(?![\\w$])`).test(text);
 }
 
 function staticImports(content: string): string[] {
@@ -310,14 +315,17 @@ export class HybridSearchEngine {
           if (cached.pathTerms.has(term)) pathMatches++;
         }
         const pathCoverage = pathMatches / Math.max(1, queryTerms.size);
-        const identifierDefinitions = identifiers.filter(identifier => declaresIdentifier(record.content, identifier));
-        return { record, cached, bm25Score, exactPathMatch, identifierDefinitions, exactPhraseBoost, pathCoverage, score: bm25Score + exactPhraseBoost };
+        const hasAnyCode = cached.normalizedPaths.some(artifact => CODE_EXT_RE.test(artifact));
+        const hasRuntimeCode = cached.normalizedPaths.some(artifact => CODE_EXT_RE.test(artifact) && !DECL_EXT_RE.test(artifact) && !TEST_PATH_RE.test(artifact));
+        const identifierDefinitions = hasAnyCode ? identifiers.filter(identifier => declaresIdentifier(record.content, identifier)) : [];
+        const runtimeIdentifierCount = hasRuntimeCode ? identifierDefinitions.length : 0;
+        return { record, cached, bm25Score, exactPathMatch, identifierDefinitions, runtimeIdentifierCount, exactPhraseBoost, pathCoverage, score: bm25Score + exactPhraseBoost };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const maximumScore = scored.reduce((maximum, entry) => Math.max(maximum, entry.score), 1);
     const ranked = scored
       .map(entry => ({ ...entry, rankingScore: entry.score / maximumScore + entry.pathCoverage }))
-      .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore);
+      .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.runtimeIdentifierCount - a.runtimeIdentifierCount || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore);
     const paths = new Set<string>();
     for (const entry of ranked) for (const artifact of entry.cached.normalizedPaths) paths.add(artifact);
     const links = new Map<string, Set<string>>();
@@ -364,12 +372,12 @@ export class HybridSearchEngine {
         const normalized = entry.cached.normalizedPaths;
         if (!normalized.length) return entry;
         const relationship = anchors.reduce((sum, anchor, index) => sum + (normalized.some(artifact => anchor.has(artifact)) ? 1 / (index + 1) : 0), 0);
-        return relationship ? { ...entry, rankingScore: entry.rankingScore + 0.5 * relationship } : entry;
+        return relationship ? { ...entry, rankingScore: entry.rankingScore + 0.3 * relationship } : entry;
       })
-      .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore) : ranked;
+      .sort((a, b) => Number(b.exactPathMatch) - Number(a.exactPathMatch) || b.runtimeIdentifierCount - a.runtimeIdentifierCount || b.identifierDefinitions.length - a.identifierDefinitions.length || b.rankingScore - a.rankingScore) : ranked;
     const results = reranked
       .slice(0, clampLimit(limit))
-      .map(({ cached, ...entry }) => {
+      .map(({ cached, runtimeIdentifierCount: _runtimeIdentifierCount, ...entry }) => {
         const queryTermEvidence = [...queryTerms].map(term => {
           const frequency = stats.docFreq.get(term) ?? 0;
           return { term, idf: Math.log(1 + (stats.n - frequency + 0.5) / (frequency + 0.5)), matched: cached.termFrequency.has(term) };

@@ -132,26 +132,53 @@ function readContent(absolute: string, knownStat?: fs.Stats): Buffer {
   return fs.readFileSync(absolute);
 }
 
-function readDigest(absolute: string): string {
-  return createHash('sha256').update(readContent(absolute)).digest('hex');
+export interface CaptureTaskSourcesOptions {
+  parentRealCache?: Map<string, string>;
+  ignoreErrors?: boolean;
+}
+
+/** Capture exact bytes and contents; absent/unreadable files remain explicitly unverified. */
+export function captureTaskSourceContents(
+  workspaceDir: string,
+  sourcePaths: string[],
+  options?: CaptureTaskSourcesOptions
+): TaskSourceContentInspection[] {
+  if (!Array.isArray(sourcePaths)) throw new TaskSourceError('source paths must be an array');
+  if (!options?.ignoreErrors && sourcePaths.length > MAX_DISCOVERED_SOURCES) {
+    throw new TaskSourceError('at most 64 source references may be captured at once');
+  }
+  const root = fs.realpathSync.native(workspaceDir);
+  const parentRealCache = options?.parentRealCache ?? new Map<string, string>();
+  if (!parentRealCache.has(root)) parentRealCache.set(root, root);
+  const seen = new Set<string>();
+  const results: TaskSourceContentInspection[] = [];
+  for (const sourcePath of sourcePaths) {
+    if (results.length >= MAX_DISCOVERED_SOURCES) break;
+    let resolved: { absolute: string; relative: string; directStat?: fs.Stats };
+    try {
+      resolved = resolveSource(workspaceDir, sourcePath, root, parentRealCache);
+    } catch (error) {
+      if (options?.ignoreErrors) continue;
+      throw error;
+    }
+    const key = process.platform === 'win32' ? resolved.relative.toLowerCase() : resolved.relative;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const content = readContent(resolved.absolute, resolved.directStat);
+      const sha256 = createHash('sha256').update(content).digest('hex');
+      results.push({ path: resolved.relative, sha256, status: 'current', currentSha256: sha256, content });
+    } catch (error) {
+      const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+      results.push({ path: resolved.relative, sha256: '', status: missing ? 'missing' : 'unavailable', detail: (error as Error).message });
+    }
+  }
+  return results;
 }
 
 /** Capture exact bytes; absent/unreadable files remain explicitly unverified. */
-export function captureTaskSources(workspaceDir: string, sourcePaths: string[]): TaskSource[] {
-  if (!Array.isArray(sourcePaths)) throw new TaskSourceError('source paths must be an array');
-  if (sourcePaths.length > MAX_DISCOVERED_SOURCES) throw new TaskSourceError('at most 64 source references may be captured at once');
-  const seen = new Set<string>();
-  return sourcePaths.flatMap((sourcePath) => {
-    const resolved = resolveSource(workspaceDir, sourcePath);
-    const key = process.platform === 'win32' ? resolved.relative.toLowerCase() : resolved.relative;
-    if (seen.has(key)) return [];
-    seen.add(key);
-    try {
-      return [{ path: resolved.relative, sha256: readDigest(resolved.absolute) }];
-    } catch {
-      return [{ path: resolved.relative, sha256: '' }];
-    }
-  });
+export function captureTaskSources(workspaceDir: string, sourcePaths: string[], options?: CaptureTaskSourcesOptions): TaskSource[] {
+  return captureTaskSourceContents(workspaceDir, sourcePaths, options).map(({ path: p, sha256 }) => ({ path: p, sha256 }));
 }
 
 /** Re-hash each source rather than trusting size or timestamps. */

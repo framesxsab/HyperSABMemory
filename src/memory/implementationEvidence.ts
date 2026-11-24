@@ -128,9 +128,17 @@ export function collectImplementationEvidence(
     evidenceResultCache.set(cacheKey, cached);
     return cloneEvidence(cached);
   }
+  const isTest = (file: string) => /(?:^|\/)(?:tests?|__tests__)\//.test(file) || /\.(?:test|spec)\./.test(file);
+  const identifierList = [...identifiers];
   const files = new Map<string, { source: ClaimSourceSnapshot; ast: ts.SourceFile }>();
   for (const source of eligible) {
-    files.set(source.path, { source, ast: getUnboundAst(source.path, source.content!, source.currentSha256!, diagnostics) });
+    const content = source.content!;
+    if (isTest(source.path) || /\.d\.[cm]?[jt]sx?$/i.test(source.path)) continue;
+    if (!content.includes('\\u')) {
+      if (identifierList.length && !identifierList.some(id => content.includes(id))) continue;
+      if (!/\b(?:function|class)\b/.test(content)) continue;
+    }
+    files.set(source.path, { source, ast: getUnboundAst(source.path, content, source.currentSha256!, diagnostics) });
   }
   function span(node: ts.Node, sourceOverride?: ClaimSourceSnapshot) {
     const ast = node.getSourceFile();
@@ -142,7 +150,6 @@ export function collectImplementationEvidence(
       excerpt: node.getText().slice(0, 320)
     };
   }
-  const isTest = (file: string) => /(?:^|\/)(?:tests?|__tests__)\//.test(file) || /\.(?:test|spec)\./.test(file);
   type Location = { node: ts.FunctionDeclaration | ts.MethodDeclaration; name: string; owner?: string };
   const locations = [...files.values()].filter(({ ast }) => !isTest(ast.fileName)).flatMap(({ ast }) =>
     ast.statements.flatMap<Location>(statement => {
@@ -179,10 +186,11 @@ export function collectImplementationEvidence(
   const wantsTests = /\b(?:tests?|evidence)\b/i.test(query);
   if (wantsTests && locations.length) {
     const byStem = new Map<string, string[]>();
-    for (const file of files.keys()) {
-      const stem = file.replace(/\.[cm]?[jt]sx?$/, '');
-      byStem.set(stem, [...(byStem.get(stem) ?? []), file]);
+    for (const source of eligible) {
+      const stem = source.path.replace(/\.[cm]?[jt]sx?$/, '');
+      byStem.set(stem, [...(byStem.get(stem) ?? []), source.path]);
     }
+    const targetSymbols = [...new Set(locations.map(location => location.owner ?? location.name))];
     const candidateTests: Array<{
       fileName: string;
       source: ClaimSourceSnapshot;
@@ -190,30 +198,41 @@ export function collectImplementationEvidence(
       targetImports: Map<ts.ImportSpecifier, string>;
       importedNames: Map<string, number>;
     }> = [];
-    for (const { source, ast } of files.values()) {
-      if (!isTest(ast.fileName)) continue;
-      let hasMatchingImport = false;
-      for (const statement of ast.statements) {
-        if (!ts.isImportDeclaration(statement)) continue;
-        const bindings = statement.importClause?.namedBindings;
-        if (!bindings || !ts.isNamedImports(bindings)) continue;
-        if (!ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith('.')) continue;
-        const stem = path.posix.normalize(path.posix.join(path.posix.dirname(ast.fileName), statement.moduleSpecifier.text)).replace(/\.[cm]?[jt]sx?$/, '');
-        const matches = byStem.get(stem);
-        if (matches?.length !== 1) continue;
-        for (const binding of bindings.elements) {
-          if (ts.isTypeOnlyImportDeclaration(binding)) continue;
-          if (locations.some(location => location.node.getSourceFile().fileName === matches[0] &&
-              (location.owner ?? location.name) === (binding.propertyName ?? binding.name).text)) {
-            hasMatchingImport = true;
-            break;
+    for (const source of eligible) {
+      if (!isTest(source.path)) continue;
+      const content = source.content!;
+      if (!content.includes('import')) continue;
+      if (!content.includes('\\u') && !targetSymbols.some(symbol => content.includes(symbol))) continue;
+      const astKey = `${source.path}\0${source.currentSha256!}`;
+      const cachedAst = unboundAstCache.get(astKey);
+      let programAst: ts.SourceFile;
+      if (cachedAst) {
+        let hasMatchingImport = false;
+        for (const statement of cachedAst.statements) {
+          if (!ts.isImportDeclaration(statement)) continue;
+          const bindings = statement.importClause?.namedBindings;
+          if (!bindings || !ts.isNamedImports(bindings)) continue;
+          if (!ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith('.')) continue;
+          const stem = path.posix.normalize(path.posix.join(path.posix.dirname(cachedAst.fileName), statement.moduleSpecifier.text)).replace(/\.[cm]?[jt]sx?$/, '');
+          const matches = byStem.get(stem);
+          if (matches?.length !== 1) continue;
+          for (const binding of bindings.elements) {
+            if (ts.isTypeOnlyImportDeclaration(binding)) continue;
+            if (locations.some(location => location.node.getSourceFile().fileName === matches[0] &&
+                (location.owner ?? location.name) === (binding.propertyName ?? binding.name).text)) {
+              hasMatchingImport = true;
+              break;
+            }
           }
+          if (hasMatchingImport) break;
         }
-        if (hasMatchingImport) break;
+        if (!hasMatchingImport) continue;
+        if (diagnostics) diagnostics.astParsed += 1;
+        programAst = ts.createSourceFile(source.path, content, ts.ScriptTarget.Latest, true);
+      } else {
+        if (diagnostics) diagnostics.astParsed += 1;
+        programAst = ts.createSourceFile(source.path, content, ts.ScriptTarget.Latest, true);
       }
-      if (!hasMatchingImport) continue;
-      if (diagnostics) diagnostics.astParsed += 1;
-      const programAst = ts.createSourceFile(ast.fileName, source.content!, ts.ScriptTarget.Latest, true);
       const targetImports = new Map<ts.ImportSpecifier, string>();
       const importedNames = new Map<string, number>();
       const countImport = (name: ts.Identifier) => {
@@ -242,6 +261,12 @@ export function collectImplementationEvidence(
       }
       if (targetImports.size) {
         candidateTests.push({ fileName: programAst.fileName, source, programAst, targetImports, importedNames });
+      } else if (!cachedAst) {
+        if (unboundAstCache.size >= MAX_AST_CACHE) {
+          const oldest = unboundAstCache.keys().next().value;
+          if (oldest !== undefined) unboundAstCache.delete(oldest);
+        }
+        unboundAstCache.set(astKey, programAst);
       }
     }
 

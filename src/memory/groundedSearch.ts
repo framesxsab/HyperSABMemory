@@ -1,6 +1,6 @@
-import { createTaskSourceContentInspector, type TaskSource, type TaskSourceInspection } from '../harness/taskSources.js';
+import { createTaskSourceContentInspector, type TaskSource, type TaskSourceContentInspection, type TaskSourceInspection } from '../harness/taskSources.js';
 import type { MemoryRecord } from './sqliteStore.js';
-import { HybridSearchEngine, queryIdentifiers, tokenizeSearchQuery, tokenizeSearchText } from './hybridSearch.js';
+import { HybridSearchEngine, queryIdentifiers, tokenizeSearchQuery, tokenizeSearchText, type ScoredMemoryRecord } from './hybridSearch.js';
 import { performance } from 'node:perf_hooks';
 import * as path from 'node:path';
 import { collectImplementationEvidence, wantsImplementationEvidence } from './implementationEvidence.js';
@@ -8,7 +8,14 @@ import { verifyJsonScalarClaim, verifyQuotedTextClaim, verifyRecordedClaims, typ
 
 export interface GroundedTiming { candidateMs: number; rankingMs: number; indexingMs?: number; pathMs: number; readMs: number; hashMs: number; excerptMs: number; decisionMs: number }
 
+export interface GroundedSearchOptions {
+  precomputedCandidates?: ScoredMemoryRecord[];
+  preinspectedSources?: Map<string, TaskSourceContentInspection> | TaskSourceContentInspection[];
+  sharedParentRealCache?: Map<string, string>;
+}
+
 export const GROUNDED_SUPPORT_THRESHOLD = 0.3;
+const MARKDOWN_PROSE_SUPPORT_THRESHOLD = 0.45;
 const CONFIG_QUERY = /^\s*what\s+is\s+the\s+(?:(root|top-level)\s+)?value\s+of\s+(?:(?:the\s+)?(root|top-level)\s+)?`([^`]+)`\s+in\s+`([^`]+\.json)`\s*\??\s*$/i;
 const CONFIG_KEY_QUERY = /^\s*what\s+(?:is\s+)?(?:the\s+)?([A-Za-z][\w-]*)\s+(?:is\s+)?(?:configured|set|defined)\b/i;
 const QUOTATION_QUERY = /^\s*does\s+`([^`]+)`\s+contain\s+`([^`\r\n]+)`\s*\??\s*$/i;
@@ -32,12 +39,60 @@ export function lexicalSupport(
   return lexicalTokenSupport(query, new Set(tokenizeSearchText(content)), termEvidence);
 }
 
-function lexicalTokenSupport(query: string, document: Set<string>, termEvidence?: Array<{ term: string; idf: number; matched: boolean }>): number {
+export function lexicalSupportBreakdown(
+  query: string,
+  content: string,
+  termEvidence?: Array<{ term: string; idf: number; matched: boolean }>
+): { support: number; matchedTerms: number; queryTerms: number } {
+  return lexicalMatchMetrics(query, new Set(tokenizeSearchText(content)), termEvidence);
+}
+
+function lexicalMatchMetrics(
+  query: string,
+  document: Set<string>,
+  termEvidence?: Array<{ term: string; idf: number; matched: boolean }>
+): { support: number; matchedTerms: number; queryTerms: number } {
   const tokens = [...new Set(tokenizeSearchQuery(query))];
-  if (!tokens.length) return 0;
+  if (!tokens.length) return { support: 0, matchedTerms: 0, queryTerms: 0 };
   const idf = new Map(termEvidence?.map(item => [item.term, item.idf]));
-  const total = tokens.reduce((sum, token) => sum + (idf.get(token) ?? 1), 0);
-  return total ? tokens.reduce((sum, token) => sum + (document.has(token) ? idf.get(token) ?? 1 : 0), 0) / total : 0;
+  let total = 0;
+  let matchedWeight = 0;
+  let matchedTerms = 0;
+  for (const token of tokens) {
+    const weight = idf.get(token) ?? 1;
+    total += weight;
+    if (document.has(token)) {
+      matchedWeight += weight;
+      matchedTerms++;
+    }
+  }
+  return { support: total ? matchedWeight / total : 0, matchedTerms, queryTerms: tokens.length };
+}
+
+function lexicalTokenSupport(query: string, document: Set<string>, termEvidence?: Array<{ term: string; idf: number; matched: boolean }>): number {
+  return lexicalMatchMetrics(query, document, termEvidence).support;
+}
+
+export function distinctiveCodeIdentifiers(query: string): string[] {
+  return [...new Set([
+    ...(query.match(/\b[A-Za-z][A-Za-z0-9_$]*[a-z0-9][A-Z][A-Za-z0-9_$]*\b/g) ?? []),
+    ...(query.match(/\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b/g) ?? []),
+    ...(query.match(/(?<!\.)\b[A-Za-z_$][A-Za-z0-9_$]{1,}(?=\(\))/g) ?? [])
+  ])];
+}
+
+export function sourceContainsIdentifier(text: string, identifier: string): boolean {
+  const escaped = escapeIdentifier(identifier);
+  if (new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`).test(text)) return true;
+  if (/^[A-Z][a-z]+[A-Z][a-z]+$/.test(identifier)) {
+    return new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`, 'i').test(text);
+  }
+  return false;
+}
+
+export function isDocOrDecisionQuery(query: string): boolean {
+  return /\b(?:readme|docs?|documentation|architect(?:ure)?|decid(?:ed|e)?|decisions?|rationale|constraint|relationship|changelog|contributing|guide|install(?:ation)?|usage|caveat|example|agents?|rules?|prd|phases?|design|polic(?:y|ies))\b/i.test(query)
+    || /\.md\b/i.test(query);
 }
 
 export interface GroundedEvidence {
@@ -171,7 +226,8 @@ export function searchGrounded(
   query: string,
   sources: TaskSource[],
   conflictingPaths: string[] = [],
-  timing?: GroundedTiming
+  timing?: GroundedTiming,
+  options?: GroundedSearchOptions
 ): GroundedResult {
   const started = timing ? performance.now() : 0;
   const previous = timing ? { ...timing } : undefined;
@@ -182,7 +238,9 @@ export function searchGrounded(
   const configKey = config?.[3] ?? query.match(CONFIG_KEY_QUERY)?.[1];
   const configPath = config?.[4];
   const quotation = query.match(QUOTATION_QUERY);
-  const candidates = hybrid.searchRecordsWithScores(query, 50, timing);
+  const candidates = options?.precomputedCandidates
+    ? options.precomputedCandidates.map(candidate => ({ ...candidate }))
+    : hybrid.searchRecordsWithScores(query, 50, timing);
   const references = new Map<string, TaskSource>();
   const referenceConflicts = new Set<string>();
   for (const source of sources) {
@@ -205,10 +263,25 @@ export function searchGrounded(
       });
     }
   }
+  let preinspectedMap: Map<string, TaskSourceContentInspection> | undefined;
+  if (options?.preinspectedSources instanceof Map) {
+    preinspectedMap = new Map<string, TaskSourceContentInspection>();
+    for (const [key, item] of options.preinspectedSources.entries()) preinspectedMap.set(sourceKey(key), item);
+  } else if (Array.isArray(options?.preinspectedSources)) {
+    preinspectedMap = new Map<string, TaskSourceContentInspection>();
+    for (const item of options.preinspectedSources) preinspectedMap.set(sourceKey(item.path), item);
+  }
   const inspected = new Set<string>();
-  const initialParentCache = new Map<string, string>();
+  const initialParentCache = options?.sharedParentRealCache ?? new Map<string, string>();
   const inspectSource = createTaskSourceContentInspector(workspaceDir, timing, initialParentCache);
-  const potentialEvidence: Array<{ record: MemoryRecord; source: TaskSourceInspection; lexicalSupport: number; content?: string; rank?: number }> = [];
+  const readForGrounding = (reference: TaskSource): TaskSourceContentInspection | undefined => {
+    const pre = preinspectedMap?.get(sourceKey(reference.path));
+    if (pre && pre.status === 'current' && pre.sha256 === reference.sha256 && pre.currentSha256 === reference.sha256 && pre.content) {
+      return pre;
+    }
+    return inspectSource([reference])[0];
+  };
+  const potentialEvidence: Array<{ record: MemoryRecord; source: TaskSourceInspection; lexicalSupport: number; content?: string; rank?: number; priority?: number }> = [];
   let lexicalEvidenceCount = 0;
   const staleSources: TaskSourceInspection[] = [];
   const assertions: GroundedResult['assertions'] = [];
@@ -222,15 +295,19 @@ export function searchGrounded(
   const configConflicts = new Set<string>();
   const declarationPattern = symbol ? new RegExp(`^\\s*(?:(?:export|declare|abstract|default)\\s+)*(?:class|function|interface|type|const|let|var|enum)\\s+${escapeIdentifier(symbol)}(?![\\w$])`) : undefined;
   const naturalQuery = !symbol && !config && !quotation;
-  for (const [candidateIndex, { record, queryTermEvidence, score }] of candidates.entries()) {
-    if (naturalQuery && candidateIndex >= 10 && lexicalEvidenceCount >= 5) break;
+  const docOrDecisionQuery = isDocOrDecisionQuery(query);
+  const asksTests = /\b(?:tests?|specs?|exercis(?:e|es|ed|ing)|verif(?:y|ies|ied)|assert(?:s|ed|ions?)?)\b/i.test(query);
+  const codeIds = naturalQuery ? distinctiveCodeIdentifiers(query) : [];
+  const foundCodeIds = new Set<string>();
+  for (const [candidateIndex, { record, queryTermEvidence, score, exactPathMatch, identifierDefinitions }] of candidates.entries()) {
+    if (naturalQuery && candidateIndex >= 12 && lexicalEvidenceCount >= 5) break;
     for (const artifact of record.artifacts ?? []) {
       const reference = references.get(sourceKey(artifact));
       if (!reference) continue;
       const filename = reference.path;
       if (inspected.has(sourceKey(filename))) continue;
       inspected.add(sourceKey(filename));
-      const inspectedSource = inspectSource([reference])[0];
+      const inspectedSource = readForGrounding(reference);
       if (!inspectedSource) continue;
       const { content: sourceBytes, ...source } = inspectedSource;
       if (source.status !== 'current') {
@@ -242,6 +319,11 @@ export function searchGrounded(
       currentSources.set(sourceKey(filename), { ...source, content: text });
       sourceRecords.set(sourceKey(filename), record);
       sourceScores.set(sourceKey(filename), score);
+      if (codeIds.length) {
+        for (const id of codeIds) {
+          if (!foundCodeIds.has(id) && sourceContainsIdentifier(text, id)) foundCodeIds.add(id);
+        }
+      }
       if (symbol && directSourceKeys.has(sourceKey(filename)) && !text.includes(symbol)) continue;
       if (quotation && sourceKey(filename) === sourceKey(quotation[1]) && quotation[2].length <= 320 && text.includes(quotation[2])) {
         const verified = verifyQuotedTextClaim(currentSources.get(sourceKey(filename))!, quotation[2]);
@@ -286,7 +368,7 @@ export function searchGrounded(
           sourceTokenCacheBytes += size;
         }
       }
-      const support = lexicalTokenSupport(query, sourceTokens, termEvidence);
+      const { support, matchedTerms } = lexicalMatchMetrics(query, sourceTokens, termEvidence);
       const sourceLines = text.split(/\r?\n/);
       const codeLines = symbol && declarationPattern && /\.[cm]?[jt]sx?$/i.test(filename) ? stripStringsAndComments(text).split(/\r?\n/) : [];
       const declarationIndex = codeLines.findIndex(line => declarationPattern?.test(line));
@@ -300,14 +382,77 @@ export function searchGrounded(
         }
         continue;
       }
-      if (support < GROUNDED_SUPPORT_THRESHOLD || (!naturalQuery && lexicalEvidenceCount >= 5)) continue;
-      potentialEvidence.push({ record, source, lexicalSupport: support, content: text, rank: candidateIndex + 1 });
+      if (!naturalQuery) {
+        if (support < GROUNDED_SUPPORT_THRESHOLD || lexicalEvidenceCount >= 5) continue;
+        potentialEvidence.push({ record, source, lexicalSupport: support, content: text, rank: candidateIndex + 1 });
+        lexicalEvidenceCount++;
+        continue;
+      }
+      const isMarkdown = /\.md$/i.test(filename);
+      const isTypeDecl = /\.d\.[cm]?[jt]sx?$/i.test(filename);
+      const isTestFile = /(?:^|\/)(?:tests?|__tests__|spec)\/|\.(?:test|spec)(?:-d)?\.[cm]?[jt]sx?$/i.test(filename);
+      const isConfig = /\.(?:json|ya?ml|toml)$/i.test(filename);
+      const isRuntimeCode = /\.[cm]?[jt]sx?$/i.test(filename) && !isTypeDecl && !isTestFile;
+      const runtimeIdDefsCount = isRuntimeCode ? (identifierDefinitions?.length ?? 0) : 0;
+      const hasDecisionHeader = /^(?:\uFEFF)?Decision(?:-Source)?:\s/m.test(text);
+      const standardAdmitted = isMarkdown && !docOrDecisionQuery && !exactPathMatch && !hasDecisionHeader
+        ? support >= MARKDOWN_PROSE_SUPPORT_THRESHOLD && matchedTerms >= 2
+        : support >= GROUNDED_SUPPORT_THRESHOLD;
+      const strongCodeOrConfigAdmitted = !isMarkdown && (
+        (Boolean(exactPathMatch) && matchedTerms >= 2 && support >= 0.1) ||
+        (runtimeIdDefsCount > 0 && support >= 0.04) ||
+        ((isRuntimeCode || isConfig) && candidateIndex < 15 && matchedTerms >= 3 && support >= 0.14) ||
+        (isTestFile && asksTests && candidateIndex < 10 && matchedTerms >= 3 && support >= 0.2)
+      );
+      if (!standardAdmitted && !strongCodeOrConfigAdmitted) continue;
+      const priority =
+        1 / (2 + (candidateIndex + 1)) +
+        0.12 * support +
+        (exactPathMatch ? 0.5 : 0) +
+        (runtimeIdDefsCount > 0 ? 0.25 + 0.08 * Math.min(3, runtimeIdDefsCount) : 0) +
+        (isMarkdown && !docOrDecisionQuery && !exactPathMatch && !hasDecisionHeader ? -0.25 : 0) +
+        (isTypeDecl && !docOrDecisionQuery ? -0.18 : 0) +
+        (isTestFile && !asksTests ? -0.1 : 0);
+      potentialEvidence.push({ record, source, lexicalSupport: support, content: text, rank: candidateIndex + 1, priority });
       lexicalEvidenceCount++;
-      if (naturalQuery) {
-        potentialEvidence.sort((first, second) => (1 / (2 + second.rank!) + 0.12 * second.lexicalSupport) - (1 / (2 + first.rank!) + 0.12 * first.lexicalSupport) || first.rank! - second.rank!);
-        if (potentialEvidence.length > 5) potentialEvidence.pop();
+      potentialEvidence.sort((first, second) => (second.priority ?? 0) - (first.priority ?? 0) || first.rank! - second.rank!);
+      if (potentialEvidence.length > 5) potentialEvidence.pop();
+    }
+  }
+  let hasMissingCodeIds = false;
+  if (naturalQuery && codeIds.length > foundCodeIds.size) {
+    for (const { record, score } of candidates) {
+      if (foundCodeIds.size >= codeIds.length) break;
+      for (const artifact of record.artifacts ?? []) {
+        const reference = references.get(sourceKey(artifact));
+        if (!reference) continue;
+        const filename = reference.path;
+        if (inspected.has(sourceKey(filename))) continue;
+        inspected.add(sourceKey(filename));
+        const inspectedSource = readForGrounding(reference);
+        if (!inspectedSource) continue;
+        const { content: sourceBytes, ...source } = inspectedSource;
+        if (source.status !== 'current') {
+          staleSources.push(source);
+          continue;
+        }
+        const text = sourceBytes?.toString('utf8');
+        if (!text) continue;
+        currentSources.set(sourceKey(filename), { ...source, content: text });
+        sourceRecords.set(sourceKey(filename), record);
+        sourceScores.set(sourceKey(filename), score);
+        for (const id of codeIds) {
+          if (!foundCodeIds.has(id) && sourceContainsIdentifier(text, id)) foundCodeIds.add(id);
+        }
       }
     }
+    hasMissingCodeIds = foundCodeIds.size < codeIds.length;
+    if (hasMissingCodeIds && !assertions.length) {
+      potentialEvidence.length = 0;
+    }
+  }
+  if (naturalQuery && !assertions.length && potentialEvidence.length > 0 && !potentialEvidence.some(item => item.lexicalSupport >= 0.15)) {
+    potentialEvidence.length = 0;
   }
   const allCurrentSources = [...currentSources.values()];
   const decisionSources = allCurrentSources.filter(source => /^(?:\uFEFF)?Decision: /m.test(source.content ?? ''));
@@ -361,7 +506,7 @@ export function searchGrounded(
   }
   const declaredConflicts = [...new Set(conflictingPaths)];
   const queryCandidates = candidates.slice(0, 20).map(({ record, score }) => ({ recordId: record.id, sourcePaths: record.artifacts ?? [], score }));
-  const implementation = !declaredConflicts.length && !referenceConflicts.size && wantsImplementationEvidence(query)
+  const implementation = !declaredConflicts.length && !referenceConflicts.size && !hasMissingCodeIds && wantsImplementationEvidence(query)
     ? collectImplementationEvidence(query, currentSources.values()) : undefined;
   const finalSources = new Map<string, TaskSource>(evidence.map(item => [item.source.path, item.source]));
   for (const item of [...(implementation?.code ?? []), ...(implementation?.tests ?? [])]) {
@@ -369,7 +514,8 @@ export function searchGrounded(
     if (source) finalSources.set(source.path, source);
   }
   initialParentCache.clear();
-  const checked = inspectSource([...finalSources.values()]);
+  const finalInspectSource = createTaskSourceContentInspector(workspaceDir, timing);
+  const checked = finalInspectSource([...finalSources.values()]);
   const rechecked = evidence.map(item => checked.find(source => source.path === item.source.path)!);
   const evidencePaths = new Set(evidence.map(item => item.source.path));
   for (const { content: _content, ...source } of checked) {
