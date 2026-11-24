@@ -157,3 +157,174 @@ describe('TemporalMemoryEngine.remember — transactional persistence', () => {
     expect(engine.getActive().map(({ id }) => id)).toEqual(['old']);
   });
 });
+
+describe('TemporalMemoryEngine — forgotten and superseded memory safety in Memory.md (P0)', () => {
+  it('excludes forgotten and superseded records from Memory.md and fresh-engine views while preserving store audit history', () => {
+    const workspace = tmpWorkspace();
+    const memoryMdPath = path.join(workspace, 'Memory.md');
+    fs.writeFileSync(
+      memoryMdPath,
+      '# Workspace Memory\n\n## Manual Notes\nPreserve this manual section.\n',
+      'utf-8'
+    );
+    fs.mkdirSync(path.join(workspace, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(workspace, 'docs', 'canary-note.md'), 'Decision: keep active routing.\n', 'utf-8');
+
+    const engine = new TemporalMemoryEngine(workspace);
+
+    const forgetCanary = 'CANARY_FORGET_TOKEN_9F3A1C_ALPHA';
+    const forgetIntent = 'CANARY_FORGET_INTENT_9F3A1C';
+    const forgetFix = 'CANARY_FORGET_FIX_9F3A1C';
+    const forgetNext = 'CANARY_FORGET_NEXT_9F3A1C';
+    const forgetRecord = engine.remember(
+      'decision',
+      `Deprecated token rule ${forgetCanary} must not survive revocation.`,
+      ['canary-forget'],
+      {
+        intent: forgetIntent,
+        artifacts: ['docs/canary-note.md'],
+        errorsAndFixes: forgetFix,
+        nextSteps: forgetNext
+      }
+    );
+
+    // >= 48-char shared lowercase-trimmed prefix triggers automatic supersede in remember().
+    const sharedPrefix = 'CANARY_SUPERSEDE_SHARED_PREFIX_48_CHARS_0123456789_XYZ';
+    const supersededOldTail = 'CANARY_SUPERSEDED_OLD_V1_8842';
+    const supersededIntent = 'CANARY_SUPERSEDED_INTENT_8842';
+    const supersededNext = 'CANARY_SUPERSEDED_NEXT_8842';
+    const supersededRecord = engine.remember(
+      'architecture',
+      `${sharedPrefix}: ${supersededOldTail}`,
+      ['canary-supersede-v1'],
+      {
+        intent: supersededIntent,
+        artifacts: ['docs/canary-note.md'],
+        nextSteps: supersededNext
+      }
+    );
+
+    const keepCanary = 'CANARY_KEEP_ACTIVE_7C2E9B';
+    const keepRecord = engine.remember('decision', `Active policy ${keepCanary} with literal $& and $1 tokens.`);
+
+    // Step 3: Active canaries appear in Memory.md, query, and Context Block before invalidation.
+    const activeMemoryMd = fs.readFileSync(memoryMdPath, 'utf-8');
+    expect(activeMemoryMd).toContain(forgetCanary);
+    expect(activeMemoryMd).toContain(supersededOldTail);
+    expect(activeMemoryMd).toContain(keepCanary);
+    expect(engine.query(forgetCanary).map((r) => r.id)).toEqual([forgetRecord.id]);
+    expect(engine.query(supersededOldTail).map((r) => r.id)).toEqual([supersededRecord.id]);
+    expect(engine.getContextBlock()).toContain(forgetCanary);
+    expect(engine.getContextBlock()).toContain(supersededOldTail);
+
+    // Step 4 & 5: Forget one canary and supersede the other (>= 48-char prefix), syncing Memory.md.
+    const forgotten = engine.forget(forgetRecord.id);
+    expect(forgotten?.status).toBe('forgotten');
+
+    const successorTail = 'CANARY_SUPERSEDING_NEW_V2_9951';
+    const successorRecord = engine.remember(
+      'architecture',
+      `${sharedPrefix}: ${successorTail}`,
+      ['canary-supersede-v2']
+    );
+
+    // Step 6: Memory.md excludes forgotten & superseded content and preserves active & manual sections.
+    const syncedMemoryMd = fs.readFileSync(memoryMdPath, 'utf-8');
+    expect(syncedMemoryMd).toContain('Preserve this manual section.');
+    expect(syncedMemoryMd).toContain(keepCanary);
+    expect(syncedMemoryMd).toContain('with literal $& and $1 tokens.');
+    expect(syncedMemoryMd).toContain(successorTail);
+    for (const leaked of [
+      forgetCanary,
+      forgetIntent,
+      forgetFix,
+      forgetNext,
+      supersededOldTail,
+      supersededIntent,
+      supersededNext,
+      '[forgotten]',
+      '[superseded]'
+    ]) {
+      expect(syncedMemoryMd).not.toContain(leaked);
+    }
+
+    // Historical records remain preserved in SqliteStore and memory_store.json for auditability.
+    const storePath = path.join(workspace, '.hypersabmemory', 'memory_store.json');
+    const persistedRaw = JSON.parse(fs.readFileSync(storePath, 'utf-8')) as Array<{
+      id: string;
+      status?: string;
+      invalidAt?: string;
+      content: string;
+      tags?: string[];
+    }>;
+    const rawForgotten = persistedRaw.find((r) => r.id === forgetRecord.id);
+    const rawSuperseded = persistedRaw.find((r) => r.id === supersededRecord.id);
+    expect(rawForgotten?.status).toBe('forgotten');
+    expect(rawForgotten?.invalidAt).toBeTruthy();
+    expect(rawForgotten?.content).toContain(forgetCanary);
+    expect(rawSuperseded?.status).toBe('superseded');
+    expect(rawSuperseded?.invalidAt).toBeTruthy();
+    expect(rawSuperseded?.tags).toContain(`superseded-by:${successorRecord.id}`);
+    expect(rawSuperseded?.content).toContain(supersededOldTail);
+
+    const store = new SqliteStore(path.join(workspace, '.hypersabmemory'));
+    expect(store.getAll()).toHaveLength(4);
+    expect(store.getActive().map((r) => r.id).sort()).toEqual([keepRecord.id, successorRecord.id].sort());
+
+    // Step 7: Fresh TemporalMemoryEngine cannot surface forgotten or superseded content via any current-memory API.
+    const freshEngine = new TemporalMemoryEngine(workspace);
+    expect(freshEngine.getCounts()).toEqual({ recorded: 4, active: 2 });
+    expect(freshEngine.getActive().map((r) => r.id).sort()).toEqual([keepRecord.id, successorRecord.id].sort());
+    expect(freshEngine.query(forgetCanary)).toEqual([]);
+    expect(freshEngine.query(supersededOldTail)).toEqual([]);
+    expect(freshEngine.query('CANARY_').map((r) => r.id).sort()).toEqual([keepRecord.id, successorRecord.id].sort());
+
+    const freshContextBlock = freshEngine.getContextBlock();
+    const freshSummary = freshEngine.getSummary();
+    const freshLedger = JSON.stringify(freshEngine.getLedger(50));
+    for (const leaked of [forgetCanary, forgetIntent, forgetFix, forgetNext, supersededOldTail, supersededIntent, supersededNext]) {
+      expect(freshContextBlock).not.toContain(leaked);
+      expect(freshSummary).not.toContain(leaked);
+      expect(freshLedger).not.toContain(leaked);
+    }
+    expect(freshContextBlock).toContain(keepCanary);
+    expect(freshContextBlock).toContain(successorTail);
+    expect(freshSummary).toContain('2 items recorded.');
+    expect(freshLedger).toContain(keepCanary);
+    expect(freshLedger).toContain(successorTail);
+  });
+
+  it('overwrites a previously synced Memory.md index cleanly with "No records logged yet." when the last active record is forgotten', () => {
+    const workspace = tmpWorkspace();
+    const memoryMdPath = path.join(workspace, 'Memory.md');
+    const preSyncedForgotten = 'CANARY_PRESYNCED_FORGOTTEN_INDEX_LINE';
+    const lastActiveCanary = 'CANARY_LAST_ACTIVE_RECORD_31415';
+    fs.writeFileSync(
+      memoryMdPath,
+      [
+        '# Workspace Memory',
+        '',
+        '## Persistent Memory Index',
+        `- **[DECISION]** (12:00:00 PM) [forgotten]: ${preSyncedForgotten}`,
+        '',
+        '## Footer',
+        'Keep footer intact.',
+        ''
+      ].join('\n'),
+      'utf-8'
+    );
+
+    const engine = new TemporalMemoryEngine(workspace);
+    const record = engine.remember('decision', `Sole active record ${lastActiveCanary}.`);
+    expect(fs.readFileSync(memoryMdPath, 'utf-8')).toContain(lastActiveCanary);
+
+    engine.forget(record.id);
+
+    const updated = fs.readFileSync(memoryMdPath, 'utf-8');
+    expect(updated).toContain('## Persistent Memory Index\nNo records logged yet.');
+    expect(updated).toContain('## Footer\nKeep footer intact.');
+    expect(updated).not.toContain(preSyncedForgotten);
+    expect(updated).not.toContain(lastActiveCanary);
+    expect(updated).not.toContain('[forgotten]');
+  });
+});

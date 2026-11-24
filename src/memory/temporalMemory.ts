@@ -127,7 +127,7 @@ export class TemporalMemoryEngine {
     }
 
     try {
-      const records = this.store.getAll();
+      const records = this.store.getActive();
       const recordsFormatted = records.map(r => {
         const lines = [
           `- **[${r.category.toUpperCase()}]** (${new Date(r.timestamp).toLocaleTimeString()}) [${r.status ?? 'active'}]: ${r.content}`
@@ -145,7 +145,8 @@ export class TemporalMemoryEngine {
       const newSection = `${sectionHeader}\n${recordsFormatted || 'No records logged yet.'}`;
 
       if (content.includes(sectionHeader)) {
-        content = content.replace(new RegExp(`${sectionHeader}[\\s\\S]*?(?=\\n## |$)`), `${newSection}\n\n`);
+        // Function replacer avoids interpreting $&, $1, etc. inside memory content.
+        content = content.replace(new RegExp(`${sectionHeader}[\\s\\S]*?(?=\\n## |$)`), () => `${newSection}\n\n`);
       } else {
         content += `\n\n${newSection}`;
       }
