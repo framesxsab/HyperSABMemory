@@ -170,46 +170,61 @@ function taskAnswerBundle(workspaceDir: string, task: TaskRecord, compact = fals
   }
   const truncated = selectedLinks.length < validLinks.length || selectedMemories.length < validMemories.length;
   if (compact) {
-    const compactSources = context.sources.map(source => source.status === 'current'
+    const projectSource = (source: TaskSourceInspection) => source.status === 'current'
       ? { path: source.path, sha256: source.sha256, status: source.status }
-      : { path: source.path, sha256: source.sha256, status: source.status, ...(source.currentSha256 ? { currentSha256: source.currentSha256 } : {}), ...(source.detail ? { detail: source.detail } : {}) });
-    const compactEvidence = context.evidence.map(source => source.status === 'current'
-      ? { path: source.path, sha256: source.sha256, status: source.status }
-      : { path: source.path, sha256: source.sha256, status: source.status, ...(source.currentSha256 ? { currentSha256: source.currentSha256 } : {}), ...(source.detail ? { detail: source.detail } : {}) });
+      : { path: source.path, sha256: source.sha256, status: source.status, ...(source.currentSha256 ? { currentSha256: source.currentSha256 } : {}), ...(source.detail ? { detail: source.detail } : {}) };
+    const compactSources = context.sources.map(projectSource);
+    const compactEvidence = context.evidence.map(projectSource);
     const changedReread = [...context.sources, ...context.evidence].filter(item => item.status !== 'current').map(item => item.path);
     const implementationReread = context.sources.filter(item => !/\.md$/i.test(item.path)).map(item => item.path);
     const compactReread = [...new Set(changedReread.length ? [...changedReread, ...implementationReread] : (implementationReread.length ? implementationReread : context.sources.map(item => item.path)))];
+    const compactDecisionEvidence = context.decisionEvidence.map(item => ({
+      decision: item.decision,
+      sourcePath: item.sourcePath,
+      line: item.line,
+      ...(item.rationale ? { rationale: { text: item.rationale.text, line: item.rationale.line } } : {})
+    }));
+    const compactLinks = selectedLinks.map(link => ({
+      decision: link.decision,
+      constraint: link.constraint,
+      sources: link.sources.map(source => `${source.path}:${source.line}`)
+    }));
+    const compactMemories = selectedMemories.map(({ attribution: _attribution, ...memory }) => memory);
+    const { snapshotRevision: _rev, evaluatedAt: _evalAt, ...compactLease } = context.lease;
     return {
       compact: true as const,
       taskId: task.id,
       revision: task.revision,
       state: task.state,
-      lease: context.lease,
+      lease: compactLease,
       goal: task.goal,
       nextAction: task.nextAction || null,
-      summary: task.summary || null,
+      ...(task.summary ? { summary: task.summary } : {}),
+      ...(task.completedWork.length ? { completedWork: task.completedWork } : {}),
+      ...(task.openIssues.length ? { openIssues: task.openIssues } : {}),
+      ...(task.blockers.length ? { blockers: task.blockers } : {}),
+      ...(task.checks.length ? { checks: task.checks } : {}),
       constraints: task.constraints,
       acceptanceCriteria: task.acceptanceCriteria,
       decisions: task.decisions,
       decisionsStatus: context.decisionsStatus,
-      decisionEvidence: context.decisionEvidence,
-      linkedConstraints: selectedLinks,
-      relatedMemories: selectedMemories,
+      decisionEvidence: compactDecisionEvidence,
+      linkedConstraints: compactLinks,
+      relatedMemories: compactMemories,
       sources: compactSources,
       ...(compactEvidence.length ? { evidence: compactEvidence } : {}),
-      reread: compactReread,
-      warnings: context.warnings,
-      conflicts: context.conflicts,
-      unsupportedAssumptions: context.unsupportedAssumptions,
+      ...(compactReread.length ? { reread: compactReread } : {}),
+      ...(context.warnings.length ? { warnings: context.warnings } : {}),
+      ...(context.conflicts.length ? { conflicts: context.conflicts } : {}),
+      ...(context.unsupportedAssumptions.length ? { unsupportedAssumptions: context.unsupportedAssumptions } : {}),
       attribution: {
         task: 'agent_reported' as const,
         decisionEvidence: 'source_recorded' as const,
         linkedConstraints: 'source_recorded' as const,
         relatedMemories: 'recorded_memory' as const
       },
-      truncated,
-      limitation: 'Task fields and related memories are recorded statements, not independently verified implementation facts. Source-recorded decisions and linked constraints verify source text and hashes only, not semantic correctness or compliance.',
-      estimatedTokens: context.estimatedTokens
+      ...(truncated ? { truncated: true } : {}),
+      limitation: 'Recorded task/memory statements are unverified; source links match text and SHA-256 only, not compliance.'
     };
   }
   return { ...context, answerBundle: {
@@ -452,9 +467,9 @@ interface TaskToolResult {
   isError?: boolean;
 }
 
-function result(payload: Record<string, unknown>, isError = false): TaskToolResult {
+function result(payload: Record<string, unknown>, isError = false, compact = false): TaskToolResult {
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: 'text', text: compact ? JSON.stringify(payload) : JSON.stringify(payload, null, 2) }],
     structuredContent: payload,
     ...(isError ? { isError: true } : {})
   };
@@ -572,7 +587,7 @@ export function executeTaskTool(
       if (compact !== undefined && typeof compact !== 'boolean') {
         throw new TaskError('INVALID_ARGUMENT', 'compact must be a boolean');
       }
-      return result(taskAnswerBundle(workspaceDir, resolveContextTask(ledger, requestedTaskId), Boolean(compact)));
+      return result(taskAnswerBundle(workspaceDir, resolveContextTask(ledger, requestedTaskId), Boolean(compact)), false, Boolean(compact));
     }
     const taskId = stringArg(args, 'taskId', true)!;
     if (name === 'hypersabmemory_task_grounded_query') {

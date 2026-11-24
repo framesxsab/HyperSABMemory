@@ -208,7 +208,7 @@ it('delivers task-linked active memories and a compact one-call handoff projecti
       answerBundle: { relatedMemories: Array<{ id: string; statement: string; attribution: string }> };
     };
     const compactPayload = compactCall.structuredContent as Record<string, unknown> & {
-      relatedMemories: Array<{ id: string; statement: string; attribution: string }>;
+      relatedMemories: Array<{ id: string; category: string; statement: string; matchedSources: string[] }>;
       sources: Array<Record<string, unknown>>;
     };
 
@@ -227,9 +227,9 @@ it('delivers task-linked active memories and a compact one-call handoff projecti
       nextAction: 'Update invoice persistence guard',
       decisions: ['Keep invoices local.'],
       decisionsStatus: 'reported_unverified',
-      decisionEvidence: [{ decision: 'Keep invoices local.', sourcePath: 'choice.md', sha256: task.sourceRefs[0].sha256, rationale: { text: 'Avoid hosted processing.', line: 2 } }],
-      linkedConstraints: [{ decision: 'Keep invoices local.', constraint: 'Invoice data stays on device.' }],
-      relatedMemories: defaultPayload.answerBundle.relatedMemories,
+      decisionEvidence: [{ decision: 'Keep invoices local.', sourcePath: 'choice.md', line: 1, rationale: { text: 'Avoid hosted processing.', line: 2 } }],
+      linkedConstraints: [{ decision: 'Keep invoices local.', constraint: 'Invoice data stays on device.', sources: ['choice.md:1', 'rule.md:1', 'rule.md:2'] }],
+      relatedMemories: defaultPayload.answerBundle.relatedMemories.map(({ attribution: _attribution, ...rest }) => rest),
       attribution: {
         task: 'agent_reported',
         decisionEvidence: 'source_recorded',
@@ -268,5 +268,172 @@ it('delivers task-linked active memories and a compact one-call handoff projecti
     expect((staleDefault.answerBundle as { linkedConstraints: unknown[]; relatedMemories: unknown[] }).relatedMemories).toEqual([]);
     expect(staleCompact.linkedConstraints).toEqual([]);
     expect(staleCompact.relatedMemories).toEqual([]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('achieves >= 50% UTF-8 byte reduction on the Gate 5.1 3-source fixture while preserving complete semantic equivalence', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-answer-g51-compact-'));
+  try {
+    const key = 'p-queue';
+    const readmeFile = 'readme.md';
+    const decFile = `g51-lat-${key}-dec.md`;
+    const conFile = `g51-lat-${key}-con.md`;
+    fs.writeFileSync(path.join(dir, readmeFile), '# p-queue\nPromise queue with concurrency control.\n');
+    fs.writeFileSync(path.join(dir, decFile), `Decision: Keep ${key} handoff snapshots deterministic and hash-checked.\nRationale: Prevent stale context assumptions across agent restarts.\n`);
+    fs.writeFileSync(path.join(dir, conFile), `Decision-Source: ${decFile}\nConstraint: Verify all referenced files against current SHA-256 checksums before emitting decisions.\n`);
+
+    const mem = new TemporalMemoryEngine(dir);
+    mem.remember('decision', `Keep ${key} handoff snapshots deterministic and hash-checked across restarts.`, [], {
+      artifacts: [readmeFile, decFile, conFile]
+    });
+
+    const ledger = new TaskLedger(dir);
+    const created = ledger.create({
+      goal: `Benchmark compact handoff on ${key}`,
+      constraints: [
+        'Verify all referenced files against current SHA-256 checksums before emitting decisions.',
+        'Preserve existing baseline test guarantees without regressions.'
+      ],
+      acceptanceCriteria: ['Compact handoff preserves goal, decisions, constraints, and verified sources'],
+      sourceRefs: [readmeFile, decFile, conFile],
+      nextAction: `Resume ${key} audit and run baseline tests.`
+    });
+    const claimed = ledger.claim({ taskId: created.id, agentId: 'lat-seed' });
+    const checkpointed = ledger.checkpoint({
+      taskId: created.id,
+      agentId: 'lat-seed',
+      expectedRevision: claimed.revision,
+      leaseGeneration: claimed.leaseGeneration,
+      summary: `Captured architectural constraints and source refs for ${key}.`,
+      decisions: [`Keep ${key} handoff snapshots deterministic and hash-checked.`],
+      completedWork: ['Indexed repository sources', 'Verified decision-constraint Markdown pair'],
+      nextAction: `Implement requested extension in ${key} and verify tests.`
+    });
+    ledger.claim({ taskId: created.id, agentId: 'lat-seed', action: 'release', leaseGeneration: checkpointed.leaseGeneration });
+
+    const fullCall = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: false })!;
+    const compactCall = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: true })!;
+    const fullText = fullCall.content[0].text;
+    const compactText = compactCall.content[0].text;
+    const fullJson = JSON.parse(fullText) as any;
+    const cJson = JSON.parse(compactText) as any;
+
+    expect(cJson).toEqual(compactCall.structuredContent);
+
+    // Byte reduction checks: wire UTF-8 (content[0].text vs full), same-format pretty, and same-format minified
+    const fullBytes = Buffer.byteLength(fullText, 'utf8');
+    const compactWireBytes = Buffer.byteLength(compactText, 'utf8');
+    const fullMinBytes = Buffer.byteLength(JSON.stringify(fullJson), 'utf8');
+    const compactMinBytes = Buffer.byteLength(JSON.stringify(cJson), 'utf8');
+    const compactPrettyBytes = Buffer.byteLength(JSON.stringify(cJson, null, 2), 'utf8');
+
+    expect((fullBytes - compactWireBytes) / fullBytes).toBeGreaterThanOrEqual(0.5);
+    expect((fullBytes - compactPrettyBytes) / fullBytes).toBeGreaterThanOrEqual(0.5);
+    expect((fullMinBytes - compactMinBytes) / fullMinBytes).toBeGreaterThanOrEqual(0.5);
+
+    // Complete 1:1 semantic equivalence across every required task context field
+    const rec = fullJson.answerBundle.recordedTask;
+    expect(cJson.compact).toBe(true);
+    expect(cJson.taskId).toBe(fullJson.taskId);
+    expect(cJson.revision).toBe(fullJson.revision);
+    expect(cJson.state).toBe(fullJson.state);
+    expect(cJson.lease).toMatchObject({
+      status: fullJson.lease.status,
+      generation: fullJson.lease.generation
+    });
+    expect(cJson.goal).toBe(rec.goal);
+    expect(cJson.nextAction).toBe(rec.nextAction);
+    expect(cJson.summary ?? null).toBe(rec.summary);
+    expect(cJson.completedWork ?? []).toEqual(rec.completedWork);
+    expect(cJson.openIssues ?? []).toEqual(rec.openIssues);
+    expect(cJson.blockers ?? []).toEqual(rec.blockers);
+    expect(cJson.checks ?? []).toEqual(rec.checks);
+    expect(cJson.constraints).toEqual(rec.constraints);
+    expect(cJson.acceptanceCriteria).toEqual(rec.acceptanceCriteria);
+    expect(cJson.decisions).toEqual(rec.decisions);
+    expect(cJson.decisionsStatus).toBe(fullJson.decisionsStatus);
+
+    // Source references preserve full 64-hex SHA-256 and freshness
+    const shaByPath = new Map<string, string>(cJson.sources.map((s: any) => [s.path, s.sha256]));
+    expect(cJson.sources.map((s: any) => ({ path: s.path, sha256: s.sha256, status: s.status }))).toEqual(
+      fullJson.sources.map((s: any) => ({ path: s.path, sha256: s.sha256, status: s.status }))
+    );
+    expect(cJson.sources.every((s: any) => /^[a-f0-9]{64}$/.test(s.sha256))).toBe(true);
+
+    // decisionEvidence recovers full sha256, excerpt, and rationale.excerpt
+    expect(cJson.decisionEvidence).toHaveLength(fullJson.decisionEvidence.length);
+    for (let i = 0; i < fullJson.decisionEvidence.length; i++) {
+      const fDec = fullJson.decisionEvidence[i];
+      const cDec = cJson.decisionEvidence[i];
+      expect(cDec.decision).toBe(fDec.decision);
+      expect(cDec.sourcePath).toBe(fDec.sourcePath);
+      expect(cDec.line).toBe(fDec.line);
+      expect(shaByPath.get(cDec.sourcePath)).toBe(fDec.sha256);
+      expect(`Decision: ${cDec.decision}`).toBe(fDec.excerpt);
+      if (fDec.rationale) {
+        expect(cDec.rationale.text).toBe(fDec.rationale.text);
+        expect(cDec.rationale.line).toBe(fDec.rationale.line);
+        expect(`Rationale: ${cDec.rationale.text}`).toBe(fDec.rationale.excerpt);
+      }
+    }
+
+    // linkedConstraints recovers decision, constraint, and all source path:line + sha256 references
+    expect(cJson.linkedConstraints).toHaveLength(fullJson.answerBundle.linkedConstraints.length);
+    for (let i = 0; i < fullJson.answerBundle.linkedConstraints.length; i++) {
+      const fLink = fullJson.answerBundle.linkedConstraints[i];
+      const cLink = cJson.linkedConstraints[i];
+      expect(cLink.decision).toBe(fLink.decision);
+      expect(cLink.constraint).toBe(fLink.constraint);
+      expect(cLink.sources).toHaveLength(fLink.sources.length);
+      for (let j = 0; j < fLink.sources.length; j++) {
+        const match = String(cLink.sources[j]).match(/^(.*):(\d+)$/);
+        expect(match).not.toBeNull();
+        expect(match![1]).toBe(fLink.sources[j].path);
+        expect(Number(match![2])).toBe(fLink.sources[j].line);
+        expect(shaByPath.get(match![1])).toBe(fLink.sources[j].sha256);
+      }
+    }
+
+    // relatedMemories recovers id, category, statement, matchedSources, and top-level attribution
+    expect(cJson.relatedMemories).toHaveLength(fullJson.answerBundle.relatedMemories.length);
+    for (let i = 0; i < fullJson.answerBundle.relatedMemories.length; i++) {
+      const fMem = fullJson.answerBundle.relatedMemories[i];
+      const cMem = cJson.relatedMemories[i];
+      expect({ ...cMem, attribution: cJson.attribution.relatedMemories }).toEqual(fMem);
+    }
+
+    expect(cJson.reread).toEqual(fullJson.reread);
+    expect(cJson.warnings ?? []).toEqual(fullJson.warnings);
+    expect(cJson.conflicts ?? []).toEqual(fullJson.conflicts);
+    expect(cJson.unsupportedAssumptions ?? []).toEqual(fullJson.unsupportedAssumptions);
+    expect(cJson.attribution).toEqual({
+      task: 'agent_reported',
+      decisionEvidence: 'source_recorded',
+      linkedConstraints: 'source_recorded',
+      relatedMemories: 'recorded_memory'
+    });
+    expect(typeof cJson.limitation).toBe('string');
+    expect(cJson.limitation.length).toBeGreaterThan(20);
+
+    // Also verify active-lease owner/expiry + openIssues/blockers/checks preservation in compact mode
+    const reClaimed = ledger.claim({ taskId: created.id, agentId: 'worker-2', leaseMinutes: 15 });
+    ledger.checkpoint({
+      taskId: created.id,
+      agentId: 'worker-2',
+      expectedRevision: reClaimed.revision,
+      leaseGeneration: reClaimed.leaseGeneration,
+      openIssues: ['Check retry edge case'],
+      checks: ['tsc --noEmit pass']
+    });
+    const activeFull = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: false })!.structuredContent as any;
+    const activeCompact = executeTaskTool(dir, ledger, 'hypersabmemory_task_context', { compact: true })!.structuredContent as any;
+    expect(activeCompact.lease).toEqual({
+      status: 'active',
+      generation: reClaimed.leaseGeneration,
+      recordedOwner: 'worker-2',
+      expiresAt: reClaimed.leaseExpiresAt
+    });
+    expect(activeCompact.openIssues).toEqual(activeFull.answerBundle.recordedTask.openIssues);
+    expect(activeCompact.checks).toEqual(activeFull.answerBundle.recordedTask.checks);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
