@@ -25,16 +25,29 @@ const MAX_BACKOFF_MS = 50;
 const BUDGET_MS = 2000;
 const UNPARSEABLE_GRACE_MS = 5000;
 
+// Bounded rename backoff: 5 total attempts with 300ms cumulative sleep (< 2000ms lock budget, PID stays live).
+export const ATOMIC_RENAME_RETRY_DELAYS_MS: readonly number[] = [20, 40, 80, 160];
+export const ATOMIC_RENAME_MAX_ATTEMPTS = ATOMIC_RENAME_RETRY_DELAYS_MS.length + 1;
+
+export interface WriteAtomicOptions {
+  sleep?: (ms: number) => void;
+}
+
 // Leave the temporary file after a failed rename for store recovery.
-export function writeAtomicText(filePath: string, payload: string): void {
+export function writeAtomicText(filePath: string, payload: string, options?: WriteAtomicOptions): void {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, payload, 'utf-8');
-  try {
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'EPERM' || code === 'EBUSY') fs.renameSync(tmpPath, filePath);
-    else throw err;
+  const sleep = options?.sleep ?? sleepSync;
+  for (let attempt = 0; attempt < ATOMIC_RENAME_MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.renameSync(tmpPath, filePath);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const isRetryable = code === 'EPERM' || code === 'EBUSY';
+      if (!isRetryable || attempt === ATOMIC_RENAME_MAX_ATTEMPTS - 1) throw err;
+      sleep(ATOMIC_RENAME_RETRY_DELAYS_MS[attempt]);
+    }
   }
 }
 
