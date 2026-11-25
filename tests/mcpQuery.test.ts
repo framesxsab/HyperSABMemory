@@ -12,7 +12,7 @@ import { HybridSearchEngine, HybridSearchResult } from '../src/memory/hybridSear
 import * as fs from 'fs';
 import fsDefault from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { removeTestDirs } from './testUtils.js';
+import { removeTestDirs, matchesTargetFile } from './testUtils.js';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -393,7 +393,7 @@ describe('HyperSABMemory — Hybrid MCP Query (P7)', () => {
       let mutatedAfterCapture = false;
       const readSpy = vi.spyOn(fsDefault, 'readFileSync').mockImplementation(((file: Parameters<typeof origRead>[0], options?: Parameters<typeof origRead>[1]) => {
         const result = origRead(file, options);
-        if (typeof file === 'string' && path.resolve(file) === path.resolve(targetPath) && !mutatedAfterCapture) {
+        if (matchesTargetFile(file, targetPath) && !mutatedAfterCapture) {
           mutatedAfterCapture = true;
           fs.writeFileSync(targetPath, rewrittenService);
         }
