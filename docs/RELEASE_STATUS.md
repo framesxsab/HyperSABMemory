@@ -2,7 +2,7 @@
 
 - **Current Target Release**: **`v1.5.0-preview.1`** — **Release-Prepared / Preflight `GO` Locally** (awaiting final CI verification & explicit owner authorization for Git tag / `npm publish --tag preview`)
 - **Published Package State (Verified)**: `npm` versions `1.3.0`, `1.4.0`, `1.4.1`; Git tags through `v1.4.1` (`1.5.0-preview.1` and `v1.5.0-preview.1` confirmed unused)
-- **Active Development Branch**: `feature/sprint2.5-20261106` (evaluated candidate source SHA `fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae`, `src/` tree SHA-256 `4e0db8856f4481f322ed79e731d6955c3af264c49db5a5467165694c1e2f9dea`, `47` files)
+- **Active Development Branch**: `feature/sprint2.5-20261106` (evaluated candidate source SHA `fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae`, normalized `src/` tree SHA-256 `acfe0e144b414f1af9b8327fbfe21e20f3088a1c9373b18dc09fa5c1d1d0bc70`, `47` files)
 
 ---
 

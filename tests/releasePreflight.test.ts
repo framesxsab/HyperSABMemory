@@ -395,6 +395,21 @@ describe('Option B Profile 1 preview acceptance gate', () => {
     );
   });
 
+  it('normalizes LF/CRLF and leading UTF-8 BOM identically in computeSrcTreeHash across platforms', () => {
+    const dirLf = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-hash-lf-'));
+    const dirCrlf = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-hash-crlf-'));
+    try {
+      fs.mkdirSync(path.join(dirLf, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(dirCrlf, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(dirLf, 'src', 'a.ts'), 'export const a = 1;\nexport const b = 2;\n', 'utf8');
+      fs.writeFileSync(path.join(dirCrlf, 'src', 'a.ts'), '\uFEFFexport const a = 1;\r\nexport const b = 2;\r\n', 'utf8');
+      expect(computeSrcTreeHash(dirCrlf)).toEqual(computeSrcTreeHash(dirLf));
+    } finally {
+      fs.rmSync(dirLf, { recursive: true, force: true });
+      fs.rmSync(dirCrlf, { recursive: true, force: true });
+    }
+  });
+
   it('keeps stable X.Y.Z releases fail-closed NO-GO even if a preview ledger exists', () => {
     withPreviewWorkspace(
       {

@@ -158,7 +158,10 @@ export function computeSrcTreeHash(rootDir = repoRoot) {
   for (const file of files) {
     hash.update(file.rel);
     hash.update('\0');
-    hash.update(readFileSync(file.fullPath));
+    const normalizedText = readFileSync(file.fullPath, 'utf8')
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n/g, '\n');
+    hash.update(Buffer.from(normalizedText, 'utf8'));
     hash.update('\0');
   }
   return { fileCount: files.length, sha256: hash.digest('hex') };
