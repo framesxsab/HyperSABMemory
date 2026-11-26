@@ -48,6 +48,13 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm publish
+      - name: Publish preview package to npm
+        if: contains(github.ref_name, '-preview.')
+        run: npm publish --tag preview
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+      - name: Publish stable package to npm
+        if: "!contains(github.ref_name, '-preview.')"
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}

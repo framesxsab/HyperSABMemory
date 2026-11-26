@@ -4,8 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  computeSrcTreeHash,
   formatPreflightSummary,
   inspectEvaluatorOutput,
+  runPreviewAcceptancePreflight,
   runReleasePreflight
 } from '../scripts/release-preflight.mjs';
 
@@ -222,6 +224,8 @@ describe('fail-closed release preflight guard', () => {
     expect(releaseWorkflow).toContain('macos-latest');
     expect(releaseWorkflow).toContain('needs: gates');
     expect(releaseWorkflow).toContain("if: github.event_name == 'push' && github.ref_type == 'tag'");
+    expect(releaseWorkflow).toContain("if: contains(github.ref_name, '-preview.')");
+    expect(releaseWorkflow).toContain('npm publish --tag preview');
     expect(releaseWorkflow).not.toContain('continue-on-error: true');
 
     const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
@@ -231,5 +235,180 @@ describe('fail-closed release preflight guard', () => {
     expect(ciWorkflow).not.toContain('release-readiness:');
     expect(ciWorkflow).not.toContain('run: npm run release:preflight');
     expect(ciWorkflow).not.toContain('continue-on-error: true');
+  });
+});
+
+describe('Option B Profile 1 preview acceptance gate', () => {
+  function withPreviewWorkspace(
+    opts: {
+      packageVersion?: string;
+      writeLedger?: (srcInfo: { fileCount: number; sha256: string }) => unknown;
+      rawLedgerText?: string;
+    },
+    run: (ws: string) => void
+  ): void {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-preview-preflight-'));
+    try {
+      const version = opts.packageVersion ?? '1.5.0-preview.1';
+      fs.writeFileSync(path.join(ws, 'package.json'), JSON.stringify({ name: 'hypersabmemory', version }), 'utf8');
+      fs.mkdirSync(path.join(ws, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(ws, 'src', 'index.ts'), 'export const ok = true;\n', 'utf8');
+      const srcInfo = computeSrcTreeHash(ws);
+
+      const ledgerPath = path.join(ws, 'docs', 'acceptance', `v${version}-acceptance.json`);
+      if (opts.rawLedgerText !== undefined) {
+        fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+        fs.writeFileSync(ledgerPath, opts.rawLedgerText, 'utf8');
+      } else if (opts.writeLedger) {
+        const payload = opts.writeLedger(srcInfo);
+        if (payload !== null && payload !== undefined) {
+          fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+          fs.writeFileSync(ledgerPath, JSON.stringify(payload, null, 2), 'utf8');
+        }
+      }
+      run(ws);
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  }
+
+  function makePassingPreviewLedger(srcInfo: { fileCount: number; sha256: string }, overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1,
+      profile: 'Option B Profile 1 (Developer Preview)',
+      targetVersion: '1.5.0-preview.1',
+      candidateCommit: 'fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae',
+      ciRunUrl: 'https://github.com/framesxsab/HyperSABMemory/actions/runs/45784340050',
+      ciJobsPassed: 9,
+      ciJobsTotal: 9,
+      srcFileCount: srcInfo.fileCount,
+      srcTreeSha256: srcInfo.sha256,
+      retrieval: {
+        queriesTotal: 45,
+        rawMacroRecallAt5: 0.85,
+        groundedMacroRecallAt5: 0.8,
+        rawNormalizedPrecisionAt5: 0.7917,
+        groundedNormalizedPrecisionAt5: 0.75,
+        groundedMrrAt5: 0.9,
+        groundedTop1Precision: 0.8667,
+        unanswerableStrictEmitRate: 0.4
+      },
+      safety: {
+        unsupportedAssertionsTotal: 0,
+        forgottenCanaryLeaks: 0,
+        populatedMemoryMdLeaks: 0,
+        emptyAfterLastForgetEdgePassed: true,
+        sameSizeStaleLeaks: 0,
+        sameSizeStaleRate: 1,
+        midVerificationMutationPassed: 3,
+        midVerificationMutationTotal: 3,
+        workspaceContainmentViolations: 0,
+        junctionEscapeBlocked: true,
+        falseStaticTestLinks: 0,
+        positiveDeterministicRate: 0.9333,
+        unsupportedDeterministicRate: 1,
+        conflictingEvidenceRate: 1,
+        setupCleanDiffVerified: true
+      },
+      performance: {
+        warmMcpP95Ms: 34.13,
+        coldTsP95MsExcludingStartup: 220.44,
+        compactHandoffP95Ms: 21.54,
+        compactByteReductionMinObserved: 0.5993,
+        compactCompletenessVerified: true
+      },
+      continuation: {
+        passedTasks: 3,
+        totalTasks: 3,
+        allPassed: true
+      },
+      ...overrides
+    };
+  }
+
+  it('approves GO when -preview.N ledger, live src/ tree hash, and all Profile 1 metrics satisfy requirements', () => {
+    const repoLedgerPath = path.join(repoRoot, 'docs', 'acceptance', 'v1.5.0-preview.1-acceptance.json');
+    expect(fs.existsSync(repoLedgerPath)).toBe(true);
+    const repoLedger = JSON.parse(fs.readFileSync(repoLedgerPath, 'utf8')) as { srcTreeSha256: string; srcFileCount: number };
+    const liveSrc = computeSrcTreeHash(repoRoot);
+    expect(repoLedger.srcTreeSha256).toBe(liveSrc.sha256);
+    expect(repoLedger.srcFileCount).toBe(liveSrc.fileCount);
+
+    const previewRes = runPreviewAcceptancePreflight({ cwd: repoRoot, version: '1.5.0-preview.1', checkBuildArtifact: false });
+    expect(previewRes.eligible).toBe(true);
+    expect(previewRes.exitCode).toBe(0);
+    expect(previewRes.failureReasons).toEqual([]);
+  });
+
+  it('tolerates documentation-only changes when src/ hash remains identical', () => {
+    withPreviewWorkspace(
+      { writeLedger: (srcInfo) => makePassingPreviewLedger(srcInfo) },
+      (ws) => {
+        fs.writeFileSync(path.join(ws, 'README.md'), '# Updated Docs Only\n', 'utf8');
+        fs.writeFileSync(path.join(ws, 'CHANGELOG.md'), '## 1.5.0-preview.1\n', 'utf8');
+        const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+        expect(res.eligible).toBe(true);
+        expect(res.exitCode).toBe(0);
+      }
+    );
+  });
+
+  it('blocks NO-GO on missing or malformed acceptance ledger, src/ tree mismatch, unmet metrics, safety leak, or latency regression', () => {
+    withPreviewWorkspace({}, (ws) => {
+      const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(res.eligible).toBe(false);
+      expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('PREVIEW_ACCEPTANCE_LEDGER_MISSING');
+    });
+
+    withPreviewWorkspace({ rawLedgerText: '{broken-json' }, (ws) => {
+      const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(res.eligible).toBe(false);
+      expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('PREVIEW_ACCEPTANCE_LEDGER_MALFORMED');
+    });
+
+    withPreviewWorkspace(
+      { writeLedger: (srcInfo) => makePassingPreviewLedger(srcInfo) },
+      (ws) => {
+        fs.writeFileSync(path.join(ws, 'src', 'index.ts'), 'export const modified = true;\n', 'utf8');
+        const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+        expect(res.eligible).toBe(false);
+        expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('SRC_TREE_HASH_MISMATCH');
+      }
+    );
+
+    withPreviewWorkspace(
+      {
+        writeLedger: (srcInfo) => makePassingPreviewLedger(srcInfo, {
+          continuation: { passedTasks: 2, totalTasks: 3, allPassed: false },
+          safety: { ...makePassingPreviewLedger(srcInfo).safety, forgottenCanaryLeaks: 1 },
+          performance: { ...makePassingPreviewLedger(srcInfo).performance, compactHandoffP95Ms: 88 }
+        })
+      },
+      (ws) => {
+        const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+        expect(res.eligible).toBe(false);
+        const failIds = res.failingCriteria.map((c: { id: string }) => c.id);
+        expect(failIds).toContain('preview.continuation.passedTasks');
+        expect(failIds).toContain('preview.safety.forgottenCanaryLeaks');
+        expect(failIds).toContain('preview.performance.compactHandoffP95Ms');
+      }
+    );
+  });
+
+  it('keeps stable X.Y.Z releases fail-closed NO-GO even if a preview ledger exists', () => {
+    withPreviewWorkspace(
+      {
+        packageVersion: '1.5.0',
+        writeLedger: (srcInfo) => ({
+          ...makePassingPreviewLedger(srcInfo),
+          targetVersion: '1.5.0'
+        })
+      },
+      (ws) => {
+        const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+        expect(res.eligible).toBe(false);
+        expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('EVALUATOR_MISSING');
+      }
+    );
   });
 });

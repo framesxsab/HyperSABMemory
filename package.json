@@ -1,7 +1,7 @@
 {
   "name": "hypersabmemory",
-  "version": "1.4.1",
-  "description": "Open-source IDE context harness and persistent memory engine for AI coding agents",
+  "version": "1.5.0-preview.1",
+  "description": "Local-first, source-verifiable MCP context harness and task-continuation memory engine for AI coding agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -62,7 +62,8 @@
     "CONTRIBUTING.md",
     "CHANGELOG.md",
     "SECURITY.md",
-    "docs/AGENT_HANDOFF.md"
+    "docs/AGENT_HANDOFF.md",
+    "docs/KNOWN_LIMITATIONS.md"
   ],
   "dependencies": {
     "stemmer": "2.0.1",

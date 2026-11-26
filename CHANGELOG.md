@@ -6,18 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0-preview.1] - 2026-11-26
+
+> **Developer Preview (`--tag preview`)**: Verified under Option B Profile 1 across three unseen MIT repositories (`mswjs/headers-polyfill`, `nodeca/js-yaml`, `fastify/fast-json-stringify`) with `3/3` live Codex Session A -> Session B continuation tasks passing. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for explicit scope boundaries.
+
+### Added
+
+- Non-destructive default `setup` and `inject` behavior (`preserveTrackedFiles: true` default with `--inject-tracked` / `injectTracked` opt-in), leaving Git-tracked repository instruction files clean across repeated runs while configuring local MCP servers and `.hypersabmemory/` state.
+- Compact task-continuation projection (`hypersabmemory_task_context({ compact: true })`) with active-only memory filtering, single-owner lease fencing, SHA-256 freshness validation, and same-size / mid-verification mutation invalidation (`STALE_EVIDENCE`).
+- Profile-scoped Option B Profile 1 release preflight verification (`scripts/release-preflight.mjs` + `docs/acceptance/v1.5.0-preview.1-acceptance.json` bound to live `src/` tree SHA-256) and `--tag preview` publishing path in `.github/workflows/release.yml`, keeping stable `X.Y.Z` releases fail-closed `NO-GO`.
+- Package/lockfile metadata checks, a packed-install CLI smoke check, repository-grounded retrieval/context baseline, and non-destructive setup test suite.
+
 ### Fixed
 
-- Memory writes now surface persistence errors, and remember-plus-supersede persists as one locked transaction.
+- Memory writes now surface persistence errors, and remember-plus-supersede persists as one locked transaction with active-only `Memory.md` and resource projection.
 - Checkpoint requests serialize across engines/processes; overlapping requests on one engine share an in-flight commit.
 - Background file watching reports persistence failures and retries subsequent events.
 - Builds clear generated output before compilation so removed source modules cannot remain in the package.
 - Updated existing MCP SDK v1 and Vitest dependencies plus compatible transitive patches; the clean install reports zero npm advisories.
 - Doctor launches MCP checks in the requested workspace and waits for the child process to close.
-
-### Added
-
-- Package/lockfile metadata checks, a packed-install CLI smoke check, and a repository-grounded retrieval/context baseline.
 
 ## [1.4.1] - 2026-08-23
 

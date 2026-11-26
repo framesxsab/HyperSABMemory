@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "profile": "Option B Profile 1 (Developer Preview)",
+  "targetVersion": "1.5.0-preview.1",
+  "gate": "Gate 5.5",
+  "evaluatedAt": "2026-11-26T09:53:03.413Z",
+  "candidateCommit": "fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae",
+  "ciRunUrl": "https://github.com/framesxsab/HyperSABMemory/actions/runs/45784340050",
+  "ciJobsPassed": 9,
+  "ciJobsTotal": 9,
+  "tarballSha256": "d8ffaf03f5fc68c85e4f5dfb88e6f42af3b89324b8a59c12907953e9ccd0fbf6",
+  "srcFileCount": 47,
+  "srcTreeSha256": "4e0db8856f4481f322ed79e731d6955c3af264c49db5a5467165694c1e2f9dea",
+  "preregistrationHashes": {
+    "build/hypersabmemory-1.4.1.tgz": "d8ffaf03f5fc68c85e4f5dfb88e6f42af3b89324b8a59c12907953e9ccd0fbf6",
+    "artifacts/GATE_5_5_PREREGISTRATION.md": "a002288f481219988d1bd1dc8370613143e788fdec64f4e2c32324ce6ccaaee2",
+    "artifacts/acceptance-manifest.json": "5c1d85c3ab1f06a97e0ce7fcf5ecccb432237767e94b28ddb94f6c6a11ccc378",
+    "artifacts/acceptance-queries.json": "5bdaf645dad4b8001cb6821ee112be8a117e6cd719337d724834c79af99b5721",
+    "artifacts/acceptance-ground-truth.json": "fda62a33989b0667c7999d4011b602f9f293901abe1110ebbb80ad96178bb878"
+  },
+  "repositories": [
+    { "key": "headers-polyfill", "name": "mswjs/headers-polyfill", "license": "MIT", "commit": "b02d0437eaf705a1cfe2657fea6ee47ee7496f47" },
+    { "key": "js-yaml", "name": "nodeca/js-yaml", "license": "MIT", "commit": "3edb91fbc78a10a8ddc15d2e82c8f6d0baa1c3d3" },
+    { "key": "fast-json-stringify", "name": "fastify/fast-json-stringify", "license": "MIT", "commit": "192949a2baaf827648ef6b8fce4e3183fe7cceef" }
+  ],
+  "retrieval": {
+    "queriesTotal": 45,
+    "answerableCount": 30,
+    "unanswerableCount": 15,
+    "rawMacroRecallAt5": 0.85,
+    "groundedMacroRecallAt5": 0.8,
+    "rawNormalizedPrecisionAt5": 0.7917,
+    "groundedNormalizedPrecisionAt5": 0.75,
+    "groundedMrrAt5": 0.9,
+    "groundedTop1Precision": 0.8667,
+    "unanswerableStrictEmitRate": 0.4,
+    "honestAbstentionRate": 1,
+    "provenancePassed": 170,
+    "provenanceTotal": 170
+  },
+  "safety": {
+    "unsupportedAssertionsTotal": 0,
+    "forgottenCanaryLeaks": 0,
+    "populatedMemoryMdLeaks": 0,
+    "emptyAfterLastForgetEdgePassed": true,
+    "sameSizeStaleLeaks": 0,
+    "sameSizeStaleRate": 1,
+    "midVerificationMutationPassed": 3,
+    "midVerificationMutationTotal": 3,
+    "workspaceContainmentViolations": 0,
+    "junctionEscapeBlocked": true,
+    "falseStaticTestLinks": 0,
+    "positiveStaticTestLinks": 0,
+    "positiveDeterministicRate": 0.9333,
+    "unsupportedDeterministicRate": 1,
+    "conflictingEvidenceRate": 1,
+    "setupCleanDiffVerified": true
+  },
+  "performance": {
+    "warmMcpSamples": 90,
+    "warmMcpP95Ms": 34.13,
+    "coldTsSamples": 30,
+    "coldTsP95MsExcludingStartup": 220.44,
+    "compactHandoffSamples": 60,
+    "compactHandoffP95Ms": 21.54,
+    "compactByteReductionMinObserved": 0.5993,
+    "compactByteReductionMean": 0.6044,
+    "compactCompletenessVerified": true
+  },
+  "continuation": {
+    "passedTasks": 3,
+    "totalTasks": 3,
+    "allPassed": true,
+    "model": "gpt-6.2-sol",
+    "cliVersion": "codex-cli 0.171.0",
+    "results": [
+      { "repoKey": "headers-polyfill", "verdict": "PASS" },
+      { "repoKey": "js-yaml", "verdict": "PASS" },
+      { "repoKey": "fast-json-stringify", "verdict": "PASS" }
+    ]
+  },
+  "knownLimitations": {
+    "positiveStaticTestAttributionObserved": "0/9 (0 false links)",
+    "fileSymlinkStatusWindows": "UNVERIFIED (EPERM); NTFS junction containment PASS"
+  }
+}

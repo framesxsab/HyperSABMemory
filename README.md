@@ -37,10 +37,9 @@ npx hypersabmemory setup
 
 That command:
 
-1. Injects editor rules (`AGENTS.md`, Cursor `.mdc`, `CLAUDE.md`, Copilot, Windsurf) without wiping your existing text
-2. Writes MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) and keeps other servers intact
-3. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
-4. Seeds first-boot facts from your README, package.json, and git history without creating a Git commit. Pass `--checkpoint` to opt into one initial local checkpoint; in a fresh Git repository it also records the `GENESIS <hash>` baseline.
+1. Writes local MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) keeping existing servers intact, and preserves existing Git-tracked instruction files (`AGENTS.md`, `CLAUDE.md`, `.windsurfrules`, `.github/copilot-instructions.md`, etc.) by default unless `--inject-tracked` is explicitly passed; untracked or new workspaces receive managed harness rules without overwriting custom text
+2. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
+3. Seeds first-boot facts from your README, package.json, and git history without creating a Git commit. Pass `--checkpoint` to opt into one initial local checkpoint; in a fresh Git repository it also records the `GENESIS <hash>` baseline.
 
 Then **reload the IDE** and **enable** the `hypersabmemory` MCP server:
 
@@ -74,7 +73,7 @@ npx hypersabmemory status
 
 Resource-aware clients can also pull the context block and memory log passively via MCP resources (`resources/list` + `resources/read`).
 
-For projects that want agents to check prior decisions and unfinished tasks when resuming work, see the [opt-in agent handoff guide](docs/AGENT_HANDOFF.md).
+For projects that want agents to check prior decisions and unfinished tasks when resuming work, see the [opt-in agent handoff guide](docs/AGENT_HANDOFF.md), and see [Known Limitations](docs/KNOWN_LIMITATIONS.md) for current verification scope and non-guarantees.
 
 The grounded task query takes a `taskId` and `query`, with optional `conflictingPaths`. It can retrieve bounded excerpts for natural questions and verify explicit symbol definitions, exact quoted source text, and uniquely stated top-level JSON scalar values directly from captured task sources, even without a separate memory record. Response-only `source_ref:` identifiers represent those references, not persisted memories. Natural-question results are candidate evidence, not proven claims. Sources are checked against captured hashes; conflicting hashes block assertions, and changed sources must be re-read and explicitly checkpointed.
 
