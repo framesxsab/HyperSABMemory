@@ -74,10 +74,14 @@ program
   .command('setup')
   .description('One-shot setup: Installs IDE adapters, local memory, MCP access, and project context')
   .option('--checkpoint', 'Create an initial local Git checkpoint during setup')
+  .option('--inject-tracked', 'Allow injecting HyperSABMemory sections into Git-tracked instruction files', false)
   .action(async (options) => {
     console.log(picocolors.cyan('\n[HyperSABMemory :: One-Shot Setup] Deploying complete ecosystem...'));
     const setupEngine = new OneShotSetupEngine(process.cwd());
-    const result = await setupEngine.executeSetup({ checkpoint: options.checkpoint === true });
+    const result = await setupEngine.executeSetup({
+      checkpoint: options.checkpoint === true,
+      injectTracked: options.injectTracked === true
+    });
     printSetupOutcome(result);
     if (result.success) {
       console.log(picocolors.cyan(`\n${setupNextStepsFlow(process.cwd())}`));
@@ -244,16 +248,21 @@ program
 // Command: inject
 program
   .command('inject')
-  .description('Ingest native IDE rules (MDC, AGENTS.md, CLAUDE.md) and auto-inject HyperSABMemory')
-  .action(() => {
+  .description('Ingest native IDE rules (MDC, AGENTS.md, CLAUDE.md) and safely sync HyperSABMemory')
+  .option('--inject-tracked', 'Allow injecting HyperSABMemory sections into Git-tracked instruction files', false)
+  .action((options) => {
     const engine = new TemporalMemoryEngine(process.cwd());
     const adapters = new UniversalAdaptersEngine(process.cwd());
     const result = adapters.syncAllAdapters({
-      contextBlock: engine.getContextBlock()
+      contextBlock: engine.getContextBlock(),
+      preserveTrackedFiles: options.injectTracked !== true
     });
     console.log(picocolors.green(`✔ Injected ${result.createdFiles.length} adapter files (ingested ${result.ingested.length} native rules).`));
     for (const file of result.createdFiles) {
       console.log(picocolors.gray(`  ${file}`));
+    }
+    if (result.skippedTrackedFiles.length > 0) {
+      console.log(picocolors.yellow(`ℹ Preserved tracked files: ${result.skippedTrackedFiles.join(', ')} (pass --inject-tracked to opt in).`));
     }
   });
 

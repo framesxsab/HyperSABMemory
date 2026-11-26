@@ -77,6 +77,7 @@ async function containStoreInGit(targetDir: string): Promise<boolean> {
 export interface SetupOutcome {
   success: boolean;
   createdFiles: string[];
+  skippedTrackedFiles?: string[];
   genesisHash?: string;
   error?: string;
 }
@@ -91,7 +92,7 @@ export class OneShotSetupEngine {
   /**
    * Executes the full one-shot setup sequence.
    */
-  public async executeSetup(options: { checkpoint?: boolean } = {}): Promise<SetupOutcome> {
+  public async executeSetup(options: { checkpoint?: boolean; injectTracked?: boolean } = {}): Promise<SetupOutcome> {
     let createdFiles: string[] = [];
 
     try {
@@ -108,13 +109,14 @@ export class OneShotSetupEngine {
       // 0. Cold-start bootstrap: seed first-boot facts before the engine loads the store.
       const seedResult = await seedWorkspace(this.targetDir);
 
-      // 1. Sync Universal IDE Adapters (Cursor, Claude Code, Windsurf, Copilot, Antigravity)
+      // 1. Sync Universal IDE Adapters (preserving Git-tracked instruction files unless explicitly opted in)
       const memory = new TemporalMemoryEngine(this.targetDir);
       memory.remember('architecture', 'Initialized HyperSABMemory one-shot setup with universal IDE adapters.');
 
       const adapters = new UniversalAdaptersEngine(this.targetDir);
       const adapterResult = adapters.syncAllAdapters({
-        contextBlock: memory.getContextBlock()
+        contextBlock: memory.getContextBlock(),
+        preserveTrackedFiles: options.injectTracked !== true
       });
       createdFiles = createdFiles.concat(adapterResult.createdFiles);
 
@@ -137,7 +139,12 @@ export class OneShotSetupEngine {
         }
       }
 
-      return { success: true, createdFiles, ...(genesisHash ? { genesisHash } : {}) };
+      return {
+        success: true,
+        createdFiles,
+        skippedTrackedFiles: adapterResult.skippedTrackedFiles,
+        ...(genesisHash ? { genesisHash } : {})
+      };
     } catch (err) {
       console.error('[HyperSABMemory :: OneShotSetup] Setup failed:', err);
       return { success: false, createdFiles, error: err instanceof Error ? err.message : String(err) };
@@ -185,6 +192,13 @@ export function printSetupOutcome(outcome: SetupOutcome, workspaceDir: string = 
     console.log(picocolors.green('✔ Structural graph support ready (uses local graph inputs when present).'));
     console.log(picocolors.green('✔ Temporal memory store initialized.'));
     console.log(picocolors.green('✔ Minimal-change rules installed (.agents/skills/hypersabmemory/SKILL.md).'));
+    if (outcome.skippedTrackedFiles && outcome.skippedTrackedFiles.length > 0) {
+      console.log(
+        picocolors.yellow(
+          `ℹ Preserved ${outcome.skippedTrackedFiles.length} Git-tracked instruction file(s) without modification: ${outcome.skippedTrackedFiles.join(', ')} (pass --inject-tracked to opt in).`
+        )
+      );
+    }
     console.log(picocolors.green('✔ Auto-checkpoints configured (3-minute default).'));
     console.log(picocolors.yellow('Setup does not create Git commits unless run with --checkpoint.'));
     console.log(picocolors.yellow('Note: checkpoints stage all trackable changes at the repository root; review ignore rules for private/generated files.'));

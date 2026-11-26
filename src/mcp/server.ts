@@ -314,10 +314,12 @@ export class HyperSABMemoryMcpServer {
           },
           {
             name: 'hypersabmemory_inject_adapters',
-            description: 'Ingest native IDE rule files and auto-inject HyperSABMemory plus the current Context Block.',
+            description: 'Ingest native IDE rule files and safely inject HyperSABMemory plus the current Context Block (preserves Git-tracked instruction files by default).',
             inputSchema: {
               type: 'object',
-              properties: {}
+              properties: {
+                injectTracked: { type: 'boolean', description: 'Set true to opt in to updating Git-tracked instruction files' }
+              }
             }
           },
           {
@@ -618,12 +620,16 @@ export class HyperSABMemoryMcpServer {
         if (name === 'hypersabmemory_inject_adapters') {
           const adapters = new UniversalAdaptersEngine(this.workspaceDir);
           const result = adapters.syncAllAdapters({
-            contextBlock: this.memory.getContextBlock()
+            contextBlock: this.memory.getContextBlock(),
+            preserveTrackedFiles: args?.injectTracked !== true
           });
+          const skippedMsg = result.skippedTrackedFiles.length
+            ? ` Preserved ${result.skippedTrackedFiles.length} tracked file(s): ${result.skippedTrackedFiles.join(', ')}.`
+            : '';
           return {
             content: [{
               type: 'text',
-              text: `Injected ${result.createdFiles.length} adapter files. Ingested ${result.ingested.length} native rules.`
+              text: `Injected ${result.createdFiles.length} adapter files. Ingested ${result.ingested.length} native rules.${skippedMsg}`
             }]
           };
         }

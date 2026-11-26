@@ -1,9 +1,10 @@
 /**
  * HyperSABMemory — Universal IDE Rule Adapter Generator
- * Ingests native rule formats already on disk, then auto-injects a HyperSABMemory
- * section (Cursor MDC, AGENTS.md, CLAUDE.md, Copilot, Windsurf, Claude JSON).
+ * Ingests native rule formats already on disk, then safely writes un-tracked or
+ * opt-in HyperSABMemory sections (Cursor MDC, AGENTS.md, CLAUDE.md, Copilot, Windsurf, Claude JSON).
  */
 
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -25,6 +26,10 @@ export interface NativeRuleFile {
 
 export interface AdapterSyncOptions {
   contextBlock?: string;
+  /** Skip modifying Git-tracked instruction files by default unless explicitly opted out (`false`). */
+  preserveTrackedFiles?: boolean;
+  /** Optional pre-resolved normalized tracked paths (forward slashes, lowercased on win32). */
+  trackedPaths?: ReadonlySet<string>;
 }
 
 export interface AdapterSyncResult {
@@ -36,6 +41,23 @@ export interface AdapterSyncResult {
   agents: boolean;
   ingested: NativeRuleFile[];
   createdFiles: string[];
+  skippedTrackedFiles: string[];
+}
+
+const ADAPTER_TARGET_PATHS = [
+  path.posix.join('.cursor', 'rules', 'hypersabmemory.mdc'),
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.windsurfrules',
+  path.posix.join('.github', 'copilot-instructions.md'),
+  path.posix.join('.agents', 'skills', 'hypersabmemory', 'SKILL.md'),
+  '.claude.json',
+  '.clinerules'
+];
+
+function normalizeTrackedKey(relativePath: string): string {
+  const posix = relativePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  return process.platform === 'win32' ? posix.toLowerCase() : posix;
 }
 
 const START = '<!-- HYPERSABMEMORY:START -->';
@@ -127,35 +149,78 @@ export class UniversalAdaptersEngine {
   }
 
   /**
-   * Merges HyperSABMemory into native rule files. Preserves user text outside markers.
+   * Returns normalized Git-tracked paths among candidate adapter files, or empty set outside Git repos.
+   */
+  public getTrackedRelativePaths(candidates: string[] = ADAPTER_TARGET_PATHS): Set<string> {
+    try {
+      const stdout = execFileSync('git', ['ls-files', '--', ...candidates], {
+        cwd: this.workspaceDir,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+      const out = new Set<string>();
+      for (const line of stdout.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed) out.add(normalizeTrackedKey(trimmed));
+      }
+      return out;
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  /**
+   * Merges HyperSABMemory into native rule files. Preserves user text outside markers and,
+   * unless `preserveTrackedFiles` is explicitly set to `false`, leaves Git-tracked instruction files untouched.
    */
   public syncAllAdapters(options: AdapterSyncOptions = {}): AdapterSyncResult {
     const ingested = this.ingestNativeRules();
     const createdFiles: string[] = [];
+    const skippedTrackedFiles: string[] = [];
     const inner = this.buildInjectBody(options.contextBlock);
 
-    createdFiles.push(this.writeCursorHypersabmemoryMdc(inner));
-    createdFiles.push(this.mergeMarkdown('AGENTS.md', inner));
-    createdFiles.push(this.mergeMarkdown('CLAUDE.md', inner));
-    createdFiles.push(this.mergeMarkdown('.windsurfrules', inner));
-    createdFiles.push(this.mergeMarkdown(path.join('.github', 'copilot-instructions.md'), inner, true));
-    createdFiles.push(this.mergeSkill(inner));
-    createdFiles.push(this.mergeClaudeJson(inner));
+    const preserveTracked = options.preserveTrackedFiles ?? true;
+    const tracked = preserveTracked
+      ? (options.trackedPaths ?? this.getTrackedRelativePaths(ADAPTER_TARGET_PATHS))
+      : new Set<string>();
+    const isTracked = (relPath: string): boolean => tracked.has(normalizeTrackedKey(relPath));
+
+    const cursorRel = path.posix.join('.cursor', 'rules', 'hypersabmemory.mdc');
+    const copilotRel = path.posix.join('.github', 'copilot-instructions.md');
+    const skillRel = path.posix.join('.agents', 'skills', 'hypersabmemory', 'SKILL.md');
+
+    const applyOrSkip = (relPath: string, writer: () => string): boolean => {
+      if (isTracked(relPath)) {
+        skippedTrackedFiles.push(relPath.replace(/\\/g, '/'));
+        return false;
+      }
+      createdFiles.push(writer());
+      return true;
+    };
+
+    const cursor = applyOrSkip(cursorRel, () => this.writeCursorHypersabmemoryMdc(inner));
+    const agents = applyOrSkip('AGENTS.md', () => this.mergeMarkdown('AGENTS.md', inner));
+    const claudeMd = applyOrSkip('CLAUDE.md', () => this.mergeMarkdown('CLAUDE.md', inner));
+    const windsurf = applyOrSkip('.windsurfrules', () => this.mergeMarkdown('.windsurfrules', inner));
+    const copilot = applyOrSkip(copilotRel, () => this.mergeMarkdown(path.join('.github', 'copilot-instructions.md'), inner, true));
+    const antigravity = applyOrSkip(skillRel, () => this.mergeSkill(inner));
+    const claudeJson = applyOrSkip('.claude.json', () => this.mergeClaudeJson(inner));
 
     const clinePath = path.join(this.workspaceDir, '.clinerules');
     if (fs.existsSync(clinePath)) {
-      createdFiles.push(this.mergeMarkdown('.clinerules', inner));
+      applyOrSkip('.clinerules', () => this.mergeMarkdown('.clinerules', inner));
     }
 
     return {
-      cursor: true,
-      claude: true,
-      windsurf: true,
-      copilot: true,
-      antigravity: true,
-      agents: true,
+      cursor,
+      claude: claudeMd || claudeJson,
+      windsurf,
+      copilot,
+      antigravity,
+      agents,
       ingested,
-      createdFiles
+      createdFiles,
+      skippedTrackedFiles
     };
   }
 
