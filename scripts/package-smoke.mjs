@@ -18,11 +18,14 @@ const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'hypersabmemory-package-smok
 assert.equal(path.dirname(path.resolve(tempRoot)), path.resolve(os.tmpdir()), 'cleanup target is an isolated temp directory');
 
 try {
-  execFileSync(process.execPath, [npmCli, 'pack', '--pack-destination', tempRoot], {
-    cwd: repoRoot,
-    stdio: 'inherit'
-  });
-  const tarball = path.join(tempRoot, `${manifest.name}-${manifest.version}.tgz`);
+  const candidate = process.argv[2];
+  if (!candidate) {
+    execFileSync(process.execPath, [npmCli, 'pack', '--pack-destination', tempRoot], {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    });
+  }
+  const tarball = candidate ? path.resolve(candidate) : path.join(tempRoot, `${manifest.name}-${manifest.version}.tgz`);
   const installDir = path.join(tempRoot, 'install');
 
   execFileSync(process.execPath, [npmCli, 'install', '--prefix', installDir, '--no-audit', '--no-fund', tarball], {

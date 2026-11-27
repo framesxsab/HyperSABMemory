@@ -224,8 +224,11 @@ describe('fail-closed release preflight guard', () => {
     expect(releaseWorkflow).toContain('macos-latest');
     expect(releaseWorkflow).toContain('needs: gates');
     expect(releaseWorkflow).toContain("if: github.event_name == 'push' && github.ref_type == 'tag'");
-    expect(releaseWorkflow).toContain("if: contains(github.ref_name, '-preview.')");
-    expect(releaseWorkflow).toContain('npm publish --tag preview');
+    expect(releaseWorkflow).toContain('id-token: write');
+    expect(releaseWorkflow).toContain('test "$RELEASE_TAG" = preview');
+    expect(releaseWorkflow).toContain('npm publish "$RELEASE_TARBALL" --tag "$RELEASE_TAG"');
+    expect(releaseWorkflow).toContain('needs: publish');
+    expect(releaseWorkflow).not.toContain('secrets.');
     expect(releaseWorkflow).not.toContain('continue-on-error: true');
 
     const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');

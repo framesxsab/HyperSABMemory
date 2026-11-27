@@ -1,13 +1,15 @@
 name: Release
-
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: hypersabmemory-npm-release
+  cancel-in-progress: false
 
 jobs:
   gates:
@@ -19,42 +21,112 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          package-manager-cache: false
+      - name: Require pristine checkout
+        shell: bash
+        run: test -z "$(git status --porcelain --ignored --untracked-files=all)"
       - run: npm ci
-      - name: Verify release tag matches package version
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        run: node -e "const p = require('./package.json'); if (process.env.GITHUB_REF_NAME !== 'v' + p.version) throw new Error('tag/package version mismatch')"
-      - name: Typecheck
-        run: npx tsc --noEmit
+      - name: Verify tag
+        if: github.ref_type == 'tag'
+        run: node -e "if (process.env.GITHUB_REF_NAME !== 'v' + require('./package.json').version) process.exit(1)"
+      - run: npx tsc --noEmit
       - run: npm test
       - run: npm run eval
       - run: npm run eval:baseline
       - run: npm run package:smoke
-      - name: Enforce fail-closed release preflight
-        run: npm run release:preflight
+      - run: npm run release:preflight
+      - name: Prepare and smoke the publication tarball
+        if: runner.os == 'Linux'
+        run: |
+          npm run build
+          npm exec -- node scripts/release-candidate.mjs prepare "$RUNNER_TEMP/npm-candidate"
+          npm run package:smoke -- "$RUNNER_TEMP"/npm-candidate/*.tgz
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && runner.os == 'Linux' }}
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/npm-candidate/
+          if-no-files-found: warn
 
   publish:
     needs: gates
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    environment: npm-preview
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-          cache: npm
-      - run: npm ci
-      - name: Publish preview package to npm
-        if: contains(github.ref_name, '-preview.')
-        run: npm publish --tag preview
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/npm-candidate
+      - name: Verify trusted-publishing toolchain
+        run: |
+          node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 14)) process.exit(1)"
+          npm --version | node -e "const [major, minor, patch] = require('node:fs').readFileSync(0, 'utf8').trim().split('.').map(Number); if (!(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) process.exit(1)"
+      - name: Recheck candidate and registry
+        id: candidate
+        run: node scripts/release-candidate.mjs verify "$RUNNER_TEMP/npm-candidate"
+      - name: Publish verified tarball with OIDC
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
-      - name: Publish stable package to npm
-        if: "!contains(github.ref_name, '-preview.')"
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+          RELEASE_TARBALL: ${{ steps.candidate.outputs.tarball }}
+          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
+        run: |
+          test "$RELEASE_TAG" = preview
+          npm publish "$RELEASE_TARBALL" --tag "$RELEASE_TAG" --registry https://registry.npmjs.org --ignore-scripts --userconfig /dev/null --globalconfig /dev/null
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-publication-verification
+          path: ${{ runner.temp }}/npm-candidate/verify.json
+
+  smoke-published:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/npm-candidate
+      - name: Verify registry integrity and smoke the published package
+        run: |
+          candidate="$RUNNER_TEMP/npm-candidate"
+          version="$(node -p "require('./package.json').version")"
+          for attempt in 1 2 3 4 5; do
+            if node scripts/release-candidate.mjs published "$candidate"; then break; fi
+            test "$attempt" -lt 5 || exit 1
+            sleep 10
+          done
+          mkdir "$RUNNER_TEMP/npm-published"
+          npm pack "hypersabmemory@$version" --registry https://registry.npmjs.org --ignore-scripts --pack-destination "$RUNNER_TEMP/npm-published"
+          cmp "$candidate/hypersabmemory-$version.tgz" "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
+          npm ci
+          npm run package:smoke -- "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-published-verification
+          path: ${{ runner.temp }}/npm-candidate/published.json
