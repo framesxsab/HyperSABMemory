@@ -44,7 +44,6 @@ jobs:
       - name: Prepare and smoke the publication tarball
         if: runner.os == 'Linux'
         run: |
-          npm run build
           npm run release:candidate -- prepare "$RUNNER_TEMP/npm-candidate"
           npm run package:smoke -- "$RUNNER_TEMP"/npm-candidate/*.tgz
       - uses: actions/upload-artifact@v4
@@ -82,6 +81,11 @@ jobs:
       - name: Recheck candidate and registry
         id: candidate
         run: node scripts/release-candidate.mjs verify "$RUNNER_TEMP/npm-candidate"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-publication-verification
+          path: ${{ runner.temp }}/npm-candidate/verify.json
       - name: Publish verified tarball with OIDC
         env:
           RELEASE_TARBALL: ${{ steps.candidate.outputs.tarball }}
@@ -90,11 +94,6 @@ jobs:
           test "$RELEASE_TAG" = preview
           cd "$RUNNER_TEMP"
           npm publish "$RELEASE_TARBALL" --tag "$RELEASE_TAG" --registry https://registry.npmjs.org --ignore-scripts --userconfig /dev/null --globalconfig /dev/null
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: npm-publication-verification
-          path: ${{ runner.temp }}/npm-candidate/verify.json
 
   smoke-published:
     needs: publish
@@ -112,8 +111,7 @@ jobs:
         with:
           name: npm-candidate
           path: ${{ runner.temp }}/npm-candidate
-      - name: Verify registry integrity and smoke the published package
-        id: smoke
+      - name: Verify registry integrity and download exact package
         run: |
           candidate="$RUNNER_TEMP/npm-candidate"
           version="$(node -p "require('./package.json').version")"
@@ -125,8 +123,11 @@ jobs:
           mkdir "$RUNNER_TEMP/npm-published"
           npm pack "hypersabmemory@$version" --registry https://registry.npmjs.org --ignore-scripts --pack-destination "$RUNNER_TEMP/npm-published"
           cmp "$candidate/hypersabmemory-$version.tgz" "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
+      - name: Smoke the exact published tarball
+        id: smoke
+        run: |
           npm ci
-          npm run package:smoke -- "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
+          npm run package:smoke -- "$RUNNER_TEMP"/npm-published/*.tgz
       - name: Record post-publication smoke outcome
         if: always()
         env:

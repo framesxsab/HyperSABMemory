@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import fsDefault from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -197,4 +199,30 @@ it('preserves all MCP configurations when one existing configuration cannot be s
   fs.writeFileSync(claude, original);
   expect(new McpAccessEngine(consumer).connect().written).toHaveLength(3);
   expect(JSON.parse(fs.readFileSync(claude, 'utf8')).mcpServers.custom).toEqual({ command: 'custom' });
+});
+
+it('rolls back earlier MCP file replacements and removes new directories after a late write failure', () => {
+  const consumer = makeTempDir();
+  const cursor = path.join(consumer, '.cursor', 'mcp.json');
+  const claude = path.join(consumer, '.mcp.json');
+  fs.mkdirSync(path.dirname(cursor));
+  const original = Buffer.from('\uFEFF{ "mcpServers": { "custom": { "command": "custom" } } }\r\n');
+  fs.writeFileSync(cursor, original);
+  const rename = fsDefault.renameSync;
+  const spy = vi.spyOn(fsDefault, 'renameSync').mockImplementation((from, to) => {
+    if (path.basename(String(from)) === '2.next') throw new Error('injected final configuration write failure');
+    rename(from, to);
+  });
+  syncBuiltinESMExports();
+  try {
+    expect(() => new McpAccessEngine(consumer).connect()).toThrow('injected final configuration write failure');
+    expect(spy).toHaveBeenCalledTimes(4);
+  } finally {
+    spy.mockRestore();
+    syncBuiltinESMExports();
+  }
+  expect(fs.readFileSync(cursor)).toEqual(original);
+  expect(fs.existsSync(claude)).toBe(false);
+  expect(fs.readdirSync(consumer).sort()).toEqual(['.cursor']);
+  expect(new McpAccessEngine(consumer).connect().written).toHaveLength(3);
 });

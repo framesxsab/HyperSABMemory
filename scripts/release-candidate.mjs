@@ -69,7 +69,7 @@ async function registryMetadata() {
   return response.json();
 }
 
-function candidateIdentity() {
+function candidateIdentity(bindAcceptance = true) {
   const manifest = json('package.json');
   const lock = json('package-lock.json');
   assert.equal(manifest.name, name, 'unexpected package name');
@@ -84,6 +84,9 @@ function candidateIdentity() {
   const tag = releaseChannel(version, readFileSync('CHANGELOG.md', 'utf8'), ref);
   const commit = git('rev-parse', 'HEAD');
   if (process.env.GITHUB_SHA) assert.equal(commit, process.env.GITHUB_SHA, 'runner SHA mismatch');
+  const identity = { name, version, tag, commit };
+  if (!bindAcceptance) return identity;
+  assert.equal(tag, 'preview', 'stable release is pending approved Profile 2 enforcement');
   const ledgerPath = 'docs/acceptance/v' + version + '-acceptance.json';
   const ledger = json(ledgerPath);
   assert.match(ledger.candidateCommit, /^[a-f0-9]{40}$/);
@@ -91,49 +94,60 @@ function candidateIdentity() {
   git('merge-base', '--is-ancestor', ledger.candidateCommit, commit);
   git('diff', '--exit-code', ledger.candidateCommit, commit, '--', 'src');
   return {
-    name, version, tag, commit, ledgerSha256: digest(readFileSync(ledgerPath)),
+    ...identity, ledgerSha256: digest(readFileSync(ledgerPath)),
     evaluatedCommit: ledger.candidateCommit, evaluatedTarballSha256: ledger.tarballSha256
   };
 }
 
+function pack(directory, file, identity) {
+  const npmCli = process.env.npm_execpath;
+  assert.ok(npmCli, 'run pack or prepare through npm run release:candidate');
+  assert.equal(git('ls-files', '--others', '--ignored', '--exclude-standard', '--', 'src', 'scripts', 'docs'), '', 'ignored files in release inputs');
+  execFileSync(process.execPath, ['scripts/build.mjs'], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 120_000 });
+  assert.equal(git('status', '--porcelain', '--untracked-files=all'), '', 'build modified committed-source inputs');
+  const [packed] = JSON.parse(execFileSync(process.execPath, [
+    npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', directory
+  ], { encoding: 'utf8', timeout: 60_000 }));
+  assert.equal(packed.name, name);
+  assert.equal(packed.version, identity.version);
+  const files = new Set(packed.files.map((entry) => entry.path));
+  for (const required of ['package.json', 'dist/cli/index.js', 'dist/index.js', 'dist/index.d.ts', 'docs/AGENT_HANDOFF.md']) {
+    assert.ok(files.has(required), 'required package file missing: ' + required);
+  }
+  const hashes = inspectTarball(file);
+  assert.equal(hashes.integrity, packed.integrity, 'npm package integrity mismatch');
+  return hashes;
+}
+
 async function main(mode, directory) {
-  assert.ok(['prepare', 'verify', 'published'].includes(mode) && directory, 'usage: release-candidate.mjs prepare|verify|published DIRECTORY');
+  assert.ok(['pack', 'prepare', 'verify', 'published'].includes(mode) && directory, 'usage: release-candidate.mjs pack|prepare|verify|published DIRECTORY');
   const report = { schemaVersion: 1, mode, passed: false };
   mkdirSync(directory, { recursive: true });
   try {
     assert.equal(git('status', '--porcelain', '--untracked-files=all'), '', 'release checkout must be clean');
-    const identity = candidateIdentity();
+    const identity = candidateIdentity(mode !== 'pack');
     report.candidate = identity;
     const file = path.join(directory, name + '-' + identity.version + '.tgz');
-    if (mode === 'prepare') {
+    if (mode === 'pack') {
+      Object.assign(report.candidate, pack(directory, file, identity));
+    } else if (mode === 'prepare') {
       report.preflight = runReleasePreflight();
       assert.equal(report.preflight.eligible, true, 'release preflight denied publication');
-      assert.equal(identity.tag, 'preview', 'stable release is pending approved Profile 2 enforcement');
       const metadata = await registryMetadata();
       checkRegistry(metadata, identity);
-      const npmCli = process.env.npm_execpath;
-      assert.ok(npmCli, 'run prepare through npm run release:candidate');
-      const [packed] = JSON.parse(execFileSync(process.execPath, [
-        npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', directory
-      ], { encoding: 'utf8', timeout: 60_000 }));
-      assert.equal(packed.name, name);
-      assert.equal(packed.version, identity.version);
-      const files = new Set(packed.files.map((entry) => entry.path));
-      for (const required of ['package.json', 'dist/cli/index.js', 'dist/index.js', 'dist/index.d.ts', 'docs/AGENT_HANDOFF.md']) {
-        assert.ok(files.has(required), 'required package file missing: ' + required);
-      }
-      const hashes = inspectTarball(file);
-      assert.equal(hashes.integrity, packed.integrity, 'npm package integrity mismatch');
+      const hashes = pack(directory, file, identity);
+      assert.equal(hashes.sha256, identity.evaluatedTarballSha256, 'packed bytes do not match the evaluated acceptance tarball');
       Object.assign(report.candidate, hashes, { latestBefore: metadata['dist-tags'].latest });
     } else {
       assert.equal(process.env.GITHUB_REF_TYPE, 'tag', 'publication requires a release tag');
-      assert.equal(identity.tag, 'preview', 'stable release is pending approved Profile 2 enforcement');
       const prepared = json(path.join(directory, 'prepare.json'));
       assert.equal(prepared.schemaVersion, 1);
       assert.equal(prepared.mode, 'prepare');
       assert.equal(prepared.passed, true, 'candidate preparation did not pass');
       assert.equal(prepared.preflight?.eligible, true, 'candidate has no passing preflight');
-      for (const [key, value] of Object.entries({ ...identity, ...inspectTarball(file) })) {
+      const hashes = inspectTarball(file);
+      assert.equal(hashes.sha256, identity.evaluatedTarballSha256, 'packed bytes do not match the evaluated acceptance tarball');
+      for (const [key, value] of Object.entries({ ...identity, ...hashes })) {
         assert.equal(prepared.candidate[key], value, 'candidate binding mismatch: ' + key);
       }
       report.candidate = prepared.candidate;

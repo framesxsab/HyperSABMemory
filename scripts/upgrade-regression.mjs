@@ -1,7 +1,8 @@
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,8 +15,12 @@ const manifest = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'
 const npmCli = process.env.npm_execpath;
 assert.ok(npmCli, 'run through npm run test:upgrade');
 const versions = process.argv.slice(2);
-if (!versions.length) versions.push('1.4.0', '1.4.1');
-assert.ok(versions.every(version => /^\d+\.\d+\.\d+$/.test(version)), 'provide exact stable npm versions');
+if (!versions.length) versions.push('1.4.0', '1.4.1', '1.5.0-preview.1');
+const exactVersion = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+assert.ok(versions.every(version => {
+  const match = exactVersion.exec(version);
+  return match?.[0] === version && !match[1]?.split('.').some(part => /^0\d+$/.test(part));
+}), 'provide exact npm versions (stable or prerelease)');
 const temp = mkdtempSync(path.join(os.tmpdir(), 'hm-upgrade-'));
 const report = { candidate: manifest.version, results: [] };
 const run = (cwd, command, ...args) => execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 90_000, stdio: 'pipe' }).trim();
@@ -68,7 +73,10 @@ async function scenario(version, candidate, result) {
   writeFileSync(primary, '{"corrupt":');
 
   result.stage = 'create persisted baseline task and interrupted-session fixture';
-  const ledger = new TaskLedger(workspace, { now: () => new Date('2025-01-01T00:00:00Z') });
+  const historicalLedger = path.join(packageRoot(old), 'dist', 'memory', 'taskLedger.js');
+  const Ledger = existsSync(historicalLedger) ? (await import(pathToFileURL(historicalLedger).href)).TaskLedger : TaskLedger;
+  result.taskFixture = Ledger === TaskLedger ? 'synthetic baseline schema' : 'published task ledger';
+  const ledger = new Ledger(workspace, { now: () => new Date('2025-01-01T00:00:00Z') });
   const task = ledger.create({ goal: 'Restore the interrupted upgrade fixture', acceptanceCriteria: ['preserve lease history'] });
   const claim = ledger.claim({ taskId: task.id, agentId: 'interrupted-agent', leaseMinutes: 1 });
   assert.ok(existsSync(path.join(state, 'tasks-coordinator.sqlite')));
@@ -86,11 +94,18 @@ async function scenario(version, candidate, result) {
   const broken = '{"servers":';
   writeFileSync(brokenPath, broken);
   const preserved = configs.map(([p]) => readFileSync(path.join(workspace, p), 'utf8'));
+  const workspaceFiles = readdirSync(workspace, { recursive: true }).map(String).sort();
+  const originalMemory = readFileSync(path.join(workspace, 'Memory.md'));
+  const originalTaskLedger = readFileSync(path.join(state, 'tasks.json'));
   const failed = spawnSync(process.execPath, [entry(candidate), 'setup'], { cwd: workspace, encoding: 'utf8', timeout: 30_000 });
   assert.equal(failed.status, 1, failed.stderr || failed.stdout);
   assert.match(failed.stderr + failed.stdout, /Cannot merge MCP configuration/);
   assert.deepEqual(configs.map(([p]) => readFileSync(path.join(workspace, p), 'utf8')), preserved);
   assert.equal(readFileSync(primary, 'utf8'), '{"corrupt":');
+  assert.deepEqual(readdirSync(workspace, { recursive: true }).map(String).sort(), workspaceFiles);
+  assert.deepEqual(readFileSync(path.join(workspace, 'Memory.md')), originalMemory);
+  assert.deepEqual(readFileSync(path.join(state, 'tasks.json')), originalTaskLedger);
+  assert.equal(readFileSync(path.join(workspace, 'AGENTS.md'), 'utf8'), originalRules);
   writeFileSync(brokenPath, repaired);
 
   result.stage = 'run candidate setup twice and compare records and configuration';
@@ -130,8 +145,11 @@ async function scenario(version, candidate, result) {
 
 try {
   const [packed] = JSON.parse(run(repo, process.execPath, npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', temp));
+  const tarball = path.join(temp, packed.filename);
+  report.candidateIntegrity = 'sha512-' + createHash('sha512').update(readFileSync(tarball)).digest('base64');
+  assert.equal(report.candidateIntegrity, packed.integrity);
   const candidate = path.join(temp, 'candidate');
-  install(candidate, path.join(temp, packed.filename));
+  install(candidate, tarball);
   for (const version of versions) {
     const result = { version, passed: false };
     report.results.push(result);

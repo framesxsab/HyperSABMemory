@@ -126,12 +126,47 @@ export class McpAccessEngine {
       this.planConfig('.mcp.json', 'mcpServers', launch),
       this.planConfig('.vscode/mcp.json', 'servers', launch, { type: 'stdio' })
     ];
-    const written = configs.map(({ abs, payload }) => {
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
-      return abs;
-    });
-    return { launch, written };
+    const staging = fs.mkdtempSync(path.join(this.workspaceDir, '.hypersabmemory-mcp-'));
+    const createdDirs: string[] = [];
+    const written: typeof configs = [];
+    let recoveryRequired = false;
+    try {
+      for (const [index, { payload, original, mode }] of configs.entries()) {
+        fs.writeFileSync(path.join(staging, index + '.next'), JSON.stringify(payload, null, 2) + '\n', { mode });
+        if (original) fs.writeFileSync(path.join(staging, index + '.original'), original, { mode });
+      }
+      for (const [index, config] of configs.entries()) {
+        const dir = path.dirname(config.abs);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir);
+          createdDirs.push(dir);
+        }
+        fs.renameSync(path.join(staging, index + '.next'), config.abs);
+        written.push(config);
+      }
+    } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      for (let index = written.length - 1; index >= 0; index--) {
+        const { abs, original } = written[index];
+        try {
+          if (original) fs.renameSync(path.join(staging, index + '.original'), abs);
+          else fs.unlinkSync(abs);
+        } catch (failure) {
+          rollbackErrors.push(failure);
+        }
+      }
+      for (const dir of createdDirs.reverse()) {
+        try { fs.rmdirSync(dir); } catch (failure) { rollbackErrors.push(failure); }
+      }
+      recoveryRequired = rollbackErrors.length > 0;
+      if (recoveryRequired) {
+        throw new AggregateError([error, ...rollbackErrors], 'MCP configuration rollback failed. Recovery files: ' + staging);
+      }
+      throw error;
+    } finally {
+      if (!recoveryRequired) fs.rmSync(staging, { recursive: true, force: true, maxRetries: 5 });
+    }
+    return { launch, written: written.map(config => config.abs) };
   }
 
   public describeFlow(result: McpConnectResult): string {
@@ -157,17 +192,29 @@ ${launchLabel}: ${result.launch.command} ${result.launch.args.join(' ')}`;
     key: 'mcpServers' | 'servers',
     launch: McpLaunch,
     extra: Record<string, string> = {}
-  ): { abs: string; payload: Record<string, unknown> } {
+  ): { abs: string; payload: Record<string, unknown>; original?: Buffer; mode?: number } {
     const abs = path.join(this.workspaceDir, relativePath);
     let payload: Record<string, unknown> = {};
+    let original: Buffer | undefined;
+    let mode: number | undefined;
     try {
-      const existing: unknown = JSON.parse(fs.readFileSync(abs, 'utf-8').replace(/^\uFEFF/, ''));
-      if (!isConfigObject(existing)) throw new Error('expected a JSON object');
-      payload = existing;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + (error instanceof SyntaxError ? 'invalid JSON' : (error as NodeJS.ErrnoException).code ?? (error as Error).message));
+      const parent = path.dirname(abs);
+      if (parent !== path.resolve(this.workspaceDir) && parent !== this.workspaceDir) {
+        const directory = fs.lstatSync(parent, { throwIfNoEntry: false });
+        if (directory && !directory.isDirectory()) throw new Error('expected a regular configuration directory');
       }
+      const stat = fs.lstatSync(abs, { throwIfNoEntry: false });
+      if (stat) {
+        if (!stat.isFile()) throw new Error('expected a regular configuration file');
+        mode = stat.mode & 0o777;
+        original = fs.readFileSync(abs);
+        const existing: unknown = JSON.parse(original.toString('utf-8').replace(/^\uFEFF/, ''));
+        if (!isConfigObject(existing)) throw new Error('expected a JSON object');
+        payload = existing;
+      }
+    } catch (error) {
+      const detail = error instanceof SyntaxError ? 'invalid JSON' : (error as NodeJS.ErrnoException).code ?? (error as Error).message;
+      throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + detail);
     }
 
     const bucket = payload[key];
@@ -175,7 +222,7 @@ ${launchLabel}: ${result.launch.command} ${result.launch.args.join(' ')}`;
       throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + key + ' must be a JSON object');
     }
     payload[key] = { ...bucket, hypersabmemory: { command: launch.command, args: launch.args, ...extra } };
-    return { abs, payload };
+    return { abs, payload, original, mode };
   }
 }
 
