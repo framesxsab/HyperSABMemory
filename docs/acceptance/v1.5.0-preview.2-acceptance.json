@@ -18,9 +18,24 @@
     "ledgerPath": "docs/acceptance/v1.5.0-preview.1-acceptance.json",
     "ledgerSha256": "d192713391cf0047dbcb8eeba6e5fc76b232b3ee73334afc03487ce9f5c92fcf",
     "evaluatedCommit": "fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae",
+    "evaluatedAt": "2026-11-26T09:53:03.413Z",
     "srcFileCount": 47,
     "srcTreeSha256": "acfe0e144b414f1af9b8327fbfe21e20f3088a1c9373b18dc09fa5c1d1d0bc70",
-    "historicalWaiverInherited": false
+    "inheritedTopLevelSections": [
+      "repositories",
+      "retrieval",
+      "safety",
+      "performance",
+      "continuation"
+    ],
+    "freshContinuationExecuted": false,
+    "historicalWaiverInherited": false,
+    "historicalDeviationDisclosure": {
+      "scope": "Gate 5.5 historical baseline (v1.5.0-preview.1 only; NOT extended to v1.5.0-preview.2)",
+      "incident": "During the Gate 5.5 task-3749 -> task-3769 continuation sequence, raw execution logs for two repositories from task-3749 were overwritten before archival.",
+      "resolutionForPreview1": "On 2026-11-27, the owner explicitly granted a preview.1-only Option A waiver accepting the recovered task-3749 diffs and summaries alongside the complete 3/3 externally verified task-3769 continuation run.",
+      "applicabilityToPreview2": "The preview.1 waiver is NOT extended to v1.5.0-preview.2. No fresh independent continuation experiments were performed for v1.5.0-preview.2; Path B scoped-delta acceptance relies on byte-identical preservation of all 44 protected runtime files relative to fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae combined with fresh scoped-delta verification of the 3 changed CLI/MCP setup files."
+    }
   },
   "scopedDelta": {
     "allowedChangedSrcPaths": [
@@ -56,6 +71,34 @@
       "upgradeMatrixAllPassed": true,
       "lateWriteRollbackVerified": true,
       "packageSmokePassed": true
+    }
+  },
+  "evidenceProvenance": {
+    "freshPreview2ScopedDelta": {
+      "evaluatedAt": "2026-11-28T08:45:00.000Z",
+      "candidateCommit": "5e6093dd68968878cad896e42fbf6d6a2e79e54e",
+      "ciRunUrl": "https://github.com/framesxsab/HyperSABMemory/actions/runs/46127149745",
+      "sections": [
+        "scopedDelta",
+        "scopedDelta.targetedVerification"
+      ],
+      "freshContinuationExecuted": false,
+      "summary": "Fresh typecheck, 7 targeted CLI/MCP setup suites (57/57), full 52-file 391/391 regression suite, 2x79 reliability stress runs, historical upgrade matrix (1.4.0, 1.4.1, 1.5.0-preview.1), injected late-write rollback, and Linux Node 24 packed CLI/MCP smoke verification."
+    },
+    "historicalGate55Baseline": {
+      "sourceLedger": "docs/acceptance/v1.5.0-preview.1-acceptance.json",
+      "evaluatedCommit": "fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae",
+      "evaluatedAt": "2026-11-26T09:53:03.413Z",
+      "sections": [
+        "repositories",
+        "retrieval",
+        "safety",
+        "performance",
+        "continuation"
+      ],
+      "reExecutedForPreview2": false,
+      "waiverExtendedToPreview2": false,
+      "note": "Top-level repositories, retrieval, safety, performance, and continuation objects are historical Gate 5.5 baseline measurements retained byte-identically for fail-closed release-preflight schema verification (stableEqual against v1.5.0-preview.1-acceptance.json). They are NOT newly executed preview.2 experiments; see baselineAcceptance.historicalDeviationDisclosure for the preview.1-specific overwritten-log deviation."
     }
   },
   "repositories": [
