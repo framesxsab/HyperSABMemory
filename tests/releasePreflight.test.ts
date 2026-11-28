@@ -3,7 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import {
+  computeProtectedSubtreeHash,
+  computeSrcFileHashes,
   computeSrcTreeHash,
   formatPreflightSummary,
   inspectEvaluatorOutput,
@@ -425,5 +429,225 @@ describe('Option B Profile 1 preview acceptance gate', () => {
         expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('EVALUATOR_MISSING');
       }
     );
+  });
+});
+
+describe('Path B scoped delta preview acceptance gate', () => {
+  function initScopedWorkspace(mutateAfterBaseline?: (ws: string) => void) {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-scoped-delta-'));
+    const git = (...args: string[]) =>
+      execFileSync('git', args, { cwd: ws, encoding: 'utf8', stdio: 'pipe' }).trim();
+
+    git('init', '-b', 'main');
+    git('config', 'user.name', 'Test Bot');
+    git('config', 'user.email', 'test@example.invalid');
+
+    fs.mkdirSync(path.join(ws, 'src', 'cli'), { recursive: true });
+    fs.mkdirSync(path.join(ws, 'src', 'memory'), { recursive: true });
+    fs.mkdirSync(path.join(ws, 'docs', 'acceptance'), { recursive: true });
+
+    fs.writeFileSync(path.join(ws, 'src', 'cli', 'index.ts'), 'export const cli = 1;\n', 'utf8');
+    fs.writeFileSync(path.join(ws, 'src', 'memory', 'core.ts'), 'export const core = 1;\n', 'utf8');
+    fs.writeFileSync(path.join(ws, 'package.json'), JSON.stringify({ name: 'hypersabmemory', version: '1.5.0-preview.1' }), 'utf8');
+    git('add', '.');
+    git('commit', '-m', 'baseline');
+    const baselineCommit = git('rev-parse', 'HEAD');
+    const baseSrc = computeSrcFileHashes(ws);
+
+    const baselineLedger = {
+      schemaVersion: 1,
+      profile: 'Option B Profile 1 (Developer Preview)',
+      targetVersion: '1.5.0-preview.1',
+      candidateCommit: baselineCommit,
+      ciJobsPassed: 9,
+      ciJobsTotal: 9,
+      srcFileCount: baseSrc.fileCount,
+      srcTreeSha256: baseSrc.sha256,
+      retrieval: {
+        queriesTotal: 45,
+        rawMacroRecallAt5: 0.85,
+        groundedMacroRecallAt5: 0.8,
+        rawNormalizedPrecisionAt5: 0.7917,
+        groundedNormalizedPrecisionAt5: 0.75,
+        groundedMrrAt5: 0.9,
+        groundedTop1Precision: 0.8667,
+        unanswerableStrictEmitRate: 0.4
+      },
+      safety: {
+        unsupportedAssertionsTotal: 0,
+        forgottenCanaryLeaks: 0,
+        populatedMemoryMdLeaks: 0,
+        emptyAfterLastForgetEdgePassed: true,
+        sameSizeStaleLeaks: 0,
+        sameSizeStaleRate: 1,
+        midVerificationMutationPassed: 3,
+        midVerificationMutationTotal: 3,
+        workspaceContainmentViolations: 0,
+        junctionEscapeBlocked: true,
+        falseStaticTestLinks: 0,
+        positiveDeterministicRate: 0.9333,
+        unsupportedDeterministicRate: 1,
+        conflictingEvidenceRate: 1,
+        setupCleanDiffVerified: true
+      },
+      performance: {
+        warmMcpP95Ms: 34.13,
+        coldTsP95MsExcludingStartup: 220.44,
+        compactHandoffP95Ms: 21.54,
+        compactByteReductionMinObserved: 0.5993,
+        compactCompletenessVerified: true
+      },
+      continuation: { passedTasks: 3, totalTasks: 3, allPassed: true }
+    };
+    const baselineLedgerRel = 'docs/acceptance/v1.5.0-preview.1-acceptance.json';
+    const baselineLedgerText = JSON.stringify(baselineLedger, null, 2);
+    fs.writeFileSync(path.join(ws, baselineLedgerRel), baselineLedgerText, 'utf8');
+    const baselineLedgerSha = createHash('sha256').update(Buffer.from(baselineLedgerText, 'utf8')).digest('hex');
+
+    fs.writeFileSync(path.join(ws, 'src', 'cli', 'index.ts'), 'export const cli = 2;\n', 'utf8');
+    if (mutateAfterBaseline) mutateAfterBaseline(ws);
+
+    fs.writeFileSync(path.join(ws, 'package.json'), JSON.stringify({ name: 'hypersabmemory', version: '1.5.0-preview.2' }), 'utf8');
+    git('add', '.');
+    git('commit', '-m', 'preview2');
+    const candidateCommit = git('rev-parse', 'HEAD');
+
+    const liveSrc = computeSrcFileHashes(ws);
+    const allowed = ['src/cli/index.ts'];
+    const protectedInfo = computeProtectedSubtreeHash(ws, allowed);
+
+    const ledger = {
+      ...baselineLedger,
+      targetVersion: '1.5.0-preview.2',
+      candidateCommit,
+      srcFileCount: liveSrc.fileCount,
+      srcTreeSha256: liveSrc.sha256,
+      acceptanceMode: 'scoped_delta',
+      baselineAcceptance: {
+        ledgerPath: baselineLedgerRel,
+        ledgerSha256: baselineLedgerSha,
+        evaluatedCommit: baselineCommit,
+        srcFileCount: baseSrc.fileCount,
+        srcTreeSha256: baseSrc.sha256,
+        historicalWaiverInherited: false
+      },
+      scopedDelta: {
+        allowedChangedSrcPaths: allowed,
+        changedSrcFiles: { 'src/cli/index.ts': liveSrc.files['src/cli/index.ts'] },
+        protectedSubtreeFileCount: protectedInfo.fileCount,
+        protectedSubtreeSha256: protectedInfo.sha256,
+        runtimeDependenciesChanged: false,
+        targetedVerification: {
+          typecheckPassed: true,
+          targetedSetupTestsPassed: true,
+          fullRegressionTestsPassed: 387,
+          fullRegressionTestsTotal: 387,
+          reliabilityStressIterations: 2,
+          reliabilityStressAllPassed: true,
+          upgradeMatrixVersions: ['1.4.0', '1.4.1', '1.5.0-preview.1'],
+          upgradeMatrixAllPassed: true,
+          lateWriteRollbackVerified: true,
+          packageSmokePassed: true
+        }
+      }
+    };
+
+    return { ws, ledgerPath: path.join(ws, 'docs', 'acceptance', 'v1.5.0-preview.2-acceptance.json'), ledger };
+  }
+
+  it('passes only when baseline ledger, protected subtree, allowed delta, and targeted evidence are intact', () => {
+    const { ws, ledgerPath, ledger } = initScopedWorkspace();
+    try {
+      fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2), 'utf8');
+      const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(res.eligible).toBe(true);
+      expect(res.exitCode).toBe(0);
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unapproved src changes outside allowedChangedSrcPaths and protected runtime paths', () => {
+    const { ws, ledgerPath, ledger } = initScopedWorkspace((dir) => {
+      fs.writeFileSync(path.join(dir, 'src', 'cli', 'extra.ts'), 'export const unapproved = true;\n', 'utf8');
+    });
+    try {
+      fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2), 'utf8');
+      const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(res.eligible).toBe(false);
+      expect(res.failureReasons.map((r: { code: string }) => r.code)).toContain('SCOPED_DELTA_UNAPPROVED_SRC_CHANGE');
+
+      ledger.scopedDelta.allowedChangedSrcPaths = ['src/cli/index.ts', 'src/memory/core.ts'];
+      fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2), 'utf8');
+      const protectedRes = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(protectedRes.eligible).toBe(false);
+      expect(protectedRes.failureReasons.map((r: { code: string }) => r.code)).toContain('SCOPED_DELTA_PROTECTED_PATH_FORBIDDEN');
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects modified protected components, incorrect hashes, inherited waivers, incomplete evidence, and malformed modes', () => {
+    const { ws, ledgerPath, ledger } = initScopedWorkspace();
+    try {
+      // Tamper protected subtree hash
+      const badProtected = structuredClone(ledger);
+      badProtected.scopedDelta.protectedSubtreeSha256 = '0'.repeat(64);
+      fs.writeFileSync(ledgerPath, JSON.stringify(badProtected, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'SCOPED_DELTA_PROTECTED_SUBTREE_MISMATCH'
+      );
+
+      // Tamper changedSrcFiles hash
+      const badChanged = structuredClone(ledger);
+      badChanged.scopedDelta.changedSrcFiles['src/cli/index.ts'] = 'f'.repeat(64);
+      fs.writeFileSync(ledgerPath, JSON.stringify(badChanged, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'SCOPED_DELTA_CHANGED_FILE_HASH_MISMATCH'
+      );
+
+      // Inherited historical waiver
+      const badWaiver = structuredClone(ledger);
+      badWaiver.baselineAcceptance.historicalWaiverInherited = true;
+      fs.writeFileSync(ledgerPath, JSON.stringify(badWaiver, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'SCOPED_DELTA_WAIVER_EXTENDED'
+      );
+
+      // Incomplete targeted evidence (missing 1.5.0-preview.1 upgrade)
+      const badEvidence = structuredClone(ledger);
+      badEvidence.scopedDelta.targetedVerification.upgradeMatrixVersions = ['1.4.0', '1.4.1'];
+      fs.writeFileSync(ledgerPath, JSON.stringify(badEvidence, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'SCOPED_DELTA_EVIDENCE_INCOMPLETE'
+      );
+
+      // Tampered inherited metric vs baseline file
+      const badBaselineMetric = structuredClone(ledger);
+      badBaselineMetric.retrieval.rawMacroRecallAt5 = 0.99;
+      fs.writeFileSync(ledgerPath, JSON.stringify(badBaselineMetric, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'SCOPED_DELTA_BASELINE_INVALID'
+      );
+
+      // Invalid acceptanceMode
+      const badMode = { ...ledger, acceptanceMode: 'bypass' };
+      fs.writeFileSync(ledgerPath, JSON.stringify(badMode, null, 2), 'utf8');
+      expect(runReleasePreflight({ cwd: ws, checkBuildArtifact: false }).failureReasons.map((r: { code: string }) => r.code)).toContain(
+        'PREVIEW_ACCEPTANCE_INVALID_MODE'
+      );
+
+      // Stable 1.5.0 remains NO-GO even with a valid scoped_delta preview ledger
+      const stableRes = runReleasePreflight({
+        cwd: ws,
+        versionOverride: '1.5.0',
+        acceptanceLedgerPath: ledgerPath,
+        checkBuildArtifact: false
+      });
+      expect(stableRes.eligible).toBe(false);
+      expect(stableRes.failureReasons.map((r: { code: string }) => r.code)).toContain('EVALUATOR_MISSING');
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
   });
 });

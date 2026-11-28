@@ -1,6 +1,7 @@
 name: Release
 on:
   push:
+    branches: ['feature/v1.5.0-preview.2']
     tags: ['v*']
   workflow_dispatch:
 
@@ -115,9 +116,9 @@ jobs:
         run: |
           candidate="$RUNNER_TEMP/npm-candidate"
           version="$(node -p "require('./package.json').version")"
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             if node scripts/release-candidate.mjs published "$candidate"; then break; fi
-            test "$attempt" -lt 5 || exit 1
+            test "$attempt" -lt 12 || exit 1
             sleep 10
           done
           mkdir "$RUNNER_TEMP/npm-published"

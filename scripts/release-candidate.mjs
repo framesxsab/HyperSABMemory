@@ -69,6 +69,20 @@ async function registryMetadata() {
   return response.json();
 }
 
+export function validateScopedDeltaGitDiff(baselineCommit, candidateCommit, commit, allowed, runGit = git) {
+  assert.match(String(baselineCommit ?? ''), /^[a-f0-9]{40}$/, 'scoped_delta requires baseline evaluatedCommit');
+  assert.ok(Array.isArray(allowed) && allowed.length > 0, 'scoped_delta requires allowedChangedSrcPaths');
+  runGit('merge-base', '--is-ancestor', baselineCommit, candidateCommit);
+  const changed = runGit('diff', '--name-only', baselineCommit, commit, '--', 'src')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const allowedSet = new Set(allowed);
+  for (const rel of changed) {
+    assert.ok(allowedSet.has(rel), 'unapproved scoped_delta src change: ' + rel);
+  }
+}
+
 function candidateIdentity(bindAcceptance = true) {
   const manifest = json('package.json');
   const lock = json('package-lock.json');
@@ -93,6 +107,14 @@ function candidateIdentity(bindAcceptance = true) {
   assert.match(ledger.tarballSha256, /^[a-f0-9]{64}$/, 'acceptance ledger must identify its evaluated tarball');
   git('merge-base', '--is-ancestor', ledger.candidateCommit, commit);
   git('diff', '--exit-code', ledger.candidateCommit, commit, '--', 'src');
+  if (ledger.acceptanceMode === 'scoped_delta') {
+    validateScopedDeltaGitDiff(
+      ledger.baselineAcceptance?.evaluatedCommit,
+      ledger.candidateCommit,
+      commit,
+      ledger.scopedDelta?.allowedChangedSrcPaths
+    );
+  }
   return {
     ...identity, ledgerSha256: digest(readFileSync(ledgerPath)),
     evaluatedCommit: ledger.candidateCommit, evaluatedTarballSha256: ledger.tarballSha256
@@ -136,8 +158,8 @@ async function main(mode, directory) {
       const metadata = await registryMetadata();
       checkRegistry(metadata, identity);
       const hashes = pack(directory, file, identity);
-      assert.equal(hashes.sha256, identity.evaluatedTarballSha256, 'packed bytes do not match the evaluated acceptance tarball');
       Object.assign(report.candidate, hashes, { latestBefore: metadata['dist-tags'].latest });
+      assert.equal(hashes.sha256, identity.evaluatedTarballSha256, 'packed bytes do not match the evaluated acceptance tarball');
     } else {
       assert.equal(process.env.GITHUB_REF_TYPE, 'tag', 'publication requires a release tag');
       const prepared = json(path.join(directory, 'prepare.json'));

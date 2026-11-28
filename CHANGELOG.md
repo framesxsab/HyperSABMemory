@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0-preview.2] - 2026-11-28
+
+> **Developer Preview (`--tag preview`)**: Scoped delta preview over the Gate 5.5 `v1.5.0-preview.1` baseline (`fc0d3c6`) hardening MCP setup atomicity/rollback, upgrade verification, reliability stress harnesses, and OIDC Trusted Publishing (`latest` remains `1.4.1`; stable `X.Y.Z` remains fail-closed `NO-GO`).
+
+### Added
+
+- GitHub Actions OIDC Trusted Publishing workflow (`publish` job bound to `npm-preview` environment with `id-token: write`, zero long-lived `NODE_AUTH_TOKEN`/`NPM_TOKEN`, and `smoke-published` registry byte-comparison verification) plus `scripts/release-candidate.mjs` (`pack`, `prepare`, `verify`, `published`).
+- Historical upgrade regression suite (`npm run test:upgrade`) verifying upgrades from `1.4.0`, `1.4.1`, and `1.5.0-preview.1` across linked Git worktrees, `.bak`/`.tmp` recovery, interrupted task lease reclamation, tracked `AGENTS.md`/`Memory.md` preservation, and failed MCP setup rollback.
+- Configurable multi-iteration reliability stress runner (`npm run test:reliability` + `tests/reliabilityIndex.test.ts`).
+- Fail-closed Path B scoped delta governance in `scripts/release-preflight.mjs` and `scripts/release-candidate.mjs` binding unchanged protected runtime subtrees (`src/memory/*`, `src/mcp/*`, `src/harness/task*`, `src/hooks/*`, `src/server/*`, `src/eval/*`) to the Gate 5.5 baseline alongside verified CLI/MCP setup changes.
+
+### Fixed
+
+- `McpAccessEngine.connect()` now pre-validates `.cursor/mcp.json`, `.mcp.json`, and `.vscode/mcp.json` (JSON object roots/buckets, regular files/dirs) and stages atomic replacements with rollback on late write failure rather than silently overwriting malformed configs.
+- `OneShotSetupEngine.setup()` validates and applies MCP configuration fail-fast before seeding or adapter injection, and `hypersabmemory setup` now sets exit code `1` on failure with a clean BOM-free CLI shebang.
+
 ## [1.5.0-preview.1] - 2026-11-26
 
 > **Developer Preview (`--tag preview`)**: Verified under Option B Profile 1 across three unseen MIT repositories (`mswjs/headers-polyfill`, `nodeca/js-yaml`, `fastify/fast-json-stringify`) with `3/3` live Codex Session A -> Session B continuation tasks passing. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for explicit scope boundaries.

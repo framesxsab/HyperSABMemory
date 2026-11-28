@@ -8,6 +8,26 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const defaultEvaluatorScript = path.join(repoRoot, 'scripts', 'repository-task-eval.mjs');
 const defaultBuildArtifact = path.join(repoRoot, 'dist', 'eval', 'repositoryTaskEvaluation.js');
 const PREVIEW_VERSION_RE = /-preview\.\d+$/;
+const SHA256_RE = /^[a-f0-9]{64}$/;
+const COMMIT_SHA_RE = /^[a-f0-9]{40}$/;
+
+export const PROTECTED_RUNTIME_PREFIXES = [
+  'src/memory/',
+  'src/mcp/',
+  'src/hooks/',
+  'src/server/',
+  'src/eval/'
+];
+
+export const PROTECTED_RUNTIME_FILES = new Set([
+  'src/harness/taskContext.ts',
+  'src/harness/taskSources.ts',
+  'src/harness/ghostPaths.ts',
+  'src/harness/contextEngine.ts',
+  'src/harness/adapters.ts',
+  'src/index.ts',
+  'src/version.ts'
+]);
 
 /**
  * Exact release criteria frozen in src/eval/repositoryTaskEvaluation.ts (line 238).
@@ -134,12 +154,28 @@ function summarizeReport(report) {
   };
 }
 
-export function computeSrcTreeHash(rootDir = repoRoot) {
+function hashNormalizedEntries(entries) {
+  const sorted = [...entries].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const hash = createHash('sha256');
+  const files = {};
+  for (const entry of sorted) {
+    const normalized = entry.content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+    const buf = Buffer.from(normalized, 'utf8');
+    hash.update(entry.rel);
+    hash.update('\0');
+    hash.update(buf);
+    hash.update('\0');
+    files[entry.rel] = createHash('sha256').update(buf).digest('hex');
+  }
+  return { fileCount: sorted.length, sha256: hash.digest('hex'), files };
+}
+
+export function computeSrcFileHashes(rootDir = repoRoot) {
   const srcDir = path.join(rootDir, 'src');
   if (!existsSync(srcDir)) {
-    return { fileCount: 0, sha256: null };
+    return { fileCount: 0, sha256: null, files: {} };
   }
-  const files = [];
+  const entries = [];
   function walk(dir) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
@@ -147,24 +183,79 @@ export function computeSrcTreeHash(rootDir = repoRoot) {
         walk(fullPath);
       } else if (entry.isFile()) {
         const rel = path.relative(rootDir, fullPath).replaceAll('\\', '/');
-        files.push({ rel, fullPath });
+        entries.push({ rel, content: readFileSync(fullPath, 'utf8') });
       }
     }
   }
   walk(srcDir);
-  files.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  return hashNormalizedEntries(entries);
+}
 
-  const hash = createHash('sha256');
-  for (const file of files) {
-    hash.update(file.rel);
-    hash.update('\0');
-    const normalizedText = readFileSync(file.fullPath, 'utf8')
-      .replace(/^\uFEFF/, '')
-      .replace(/\r\n/g, '\n');
-    hash.update(Buffer.from(normalizedText, 'utf8'));
-    hash.update('\0');
+export function computeSrcTreeHash(rootDir = repoRoot) {
+  const { fileCount, sha256 } = computeSrcFileHashes(rootDir);
+  return { fileCount, sha256 };
+}
+
+export function computeProtectedSubtreeHash(rootDir = repoRoot, excludedPaths = []) {
+  const srcDir = path.join(rootDir, 'src');
+  if (!existsSync(srcDir)) {
+    return { fileCount: 0, sha256: null, files: {} };
   }
-  return { fileCount: files.length, sha256: hash.digest('hex') };
+  const excluded = new Set(excludedPaths);
+  const entries = [];
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        const rel = path.relative(rootDir, fullPath).replaceAll('\\', '/');
+        if (!excluded.has(rel)) {
+          entries.push({ rel, content: readFileSync(fullPath, 'utf8') });
+        }
+      }
+    }
+  }
+  walk(srcDir);
+  return hashNormalizedEntries(entries);
+}
+
+export function isProtectedRuntimePath(relPath) {
+  return PROTECTED_RUNTIME_FILES.has(relPath) || PROTECTED_RUNTIME_PREFIXES.some((prefix) => relPath.startsWith(prefix));
+}
+
+function stableEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== typeof b) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, idx) => stableEqual(item, b[idx]));
+  }
+  if (typeof a === 'object') {
+    const keysA = Object.keys(a).sort();
+    const keysB = Object.keys(b).sort();
+    return stableEqual(keysA, keysB) && keysA.every((key) => stableEqual(a[key], b[key]));
+  }
+  return false;
+}
+
+function computeGitCommitSrcHashes(cwd, commitSha) {
+  const listed = spawnSync('git', ['ls-tree', '-r', '--name-only', commitSha, '--', 'src'], {
+    cwd,
+    encoding: 'utf8'
+  });
+  if (listed.status !== 0) return null;
+  const relPaths = listed.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const entries = [];
+  for (const rel of relPaths) {
+    const shown = spawnSync('git', ['show', `${commitSha}:${rel}`], { cwd, encoding: 'utf8' });
+    if (shown.status !== 0) return null;
+    entries.push({ rel, content: shown.stdout });
+  }
+  return hashNormalizedEntries(entries);
 }
 
 export const PREVIEW_GATE_SPEC = [
@@ -472,12 +563,27 @@ export function runPreviewAcceptancePreflight(options = {}) {
     });
   }
 
-  const liveSrc = computeSrcTreeHash(cwd);
+  const liveSrc = computeSrcFileHashes(cwd);
   if (!liveSrc.sha256 || ledger?.srcTreeSha256 !== liveSrc.sha256 || ledger?.srcFileCount !== liveSrc.fileCount) {
     failureReasons.push({
       code: 'SRC_TREE_HASH_MISMATCH',
       detail: `Live src/ hash (${liveSrc.sha256}, ${liveSrc.fileCount} files) does not match evaluated ledger (${String(ledger?.srcTreeSha256)}, ${String(ledger?.srcFileCount)} files)`
     });
+  }
+
+  const mode = ledger?.acceptanceMode;
+  if (mode !== undefined && mode !== 'scoped_delta') {
+    failureReasons.push({
+      code: 'PREVIEW_ACCEPTANCE_INVALID_MODE',
+      detail: `Unsupported acceptanceMode=${String(mode)}`
+    });
+  } else if (mode === undefined && (ledger?.scopedDelta !== undefined || ledger?.baselineAcceptance !== undefined)) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_MALFORMED',
+      detail: 'scopedDelta / baselineAcceptance fields require acceptanceMode="scoped_delta"'
+    });
+  } else if (mode === 'scoped_delta') {
+    validateScopedDeltaLedger({ cwd, ledger, liveSrc, failureReasons });
   }
 
   const { failingCriteria, passingCriteria } = evaluateSpec(ledger, PREVIEW_GATE_SPEC);
@@ -510,6 +616,213 @@ export function runPreviewAcceptancePreflight(options = {}) {
     },
     stderrPreview: ''
   };
+}
+
+function validateScopedDeltaLedger({ cwd, ledger, liveSrc, failureReasons }) {
+  const baseline = ledger?.baselineAcceptance;
+  const delta = ledger?.scopedDelta;
+  if (!isPlainObject(baseline) || !isPlainObject(delta)) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_MALFORMED',
+      detail: 'scoped_delta mode requires baselineAcceptance and scopedDelta objects'
+    });
+    return;
+  }
+
+  if (baseline.historicalWaiverInherited !== false) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_WAIVER_EXTENDED',
+      detail: 'baselineAcceptance.historicalWaiverInherited must be explicitly false for preview.2+'
+    });
+  }
+
+  if (
+    typeof baseline.ledgerPath !== 'string' ||
+    !baseline.ledgerPath ||
+    path.isAbsolute(baseline.ledgerPath) ||
+    !SHA256_RE.test(String(baseline.ledgerSha256 ?? '')) ||
+    !COMMIT_SHA_RE.test(String(baseline.evaluatedCommit ?? '')) ||
+    !SHA256_RE.test(String(baseline.srcTreeSha256 ?? '')) ||
+    !Number.isInteger(baseline.srcFileCount)
+  ) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_BASELINE_INVALID',
+      detail: 'baselineAcceptance must declare relative ledgerPath, 64-char ledgerSha256, 40-char evaluatedCommit, srcTreeSha256, and srcFileCount'
+    });
+  } else {
+    const resolvedRoot = path.resolve(cwd);
+    const baselineAbs = path.resolve(resolvedRoot, baseline.ledgerPath);
+    if (!baselineAbs.startsWith(resolvedRoot + path.sep) || !existsSync(baselineAbs)) {
+      failureReasons.push({
+        code: 'SCOPED_DELTA_BASELINE_INVALID',
+        detail: `Referenced baseline ledger not found at ${baseline.ledgerPath}`
+      });
+    } else {
+      const rawBaseline = readFileSync(baselineAbs, 'utf8');
+      const actualDigest = createHash('sha256').update(Buffer.from(rawBaseline, 'utf8')).digest('hex');
+      if (actualDigest !== baseline.ledgerSha256) {
+        failureReasons.push({
+          code: 'SCOPED_DELTA_BASELINE_INVALID',
+          detail: `Baseline ledger SHA-256 mismatch (${actualDigest} !== ${baseline.ledgerSha256})`
+        });
+      }
+      try {
+        const parsedBaseline = JSON.parse(rawBaseline);
+        const baselineSpec = evaluateSpec(parsedBaseline, PREVIEW_GATE_SPEC);
+        const inheritedMatch =
+          parsedBaseline?.profile === 'Option B Profile 1 (Developer Preview)' &&
+          parsedBaseline?.candidateCommit === baseline.evaluatedCommit &&
+          parsedBaseline?.srcTreeSha256 === baseline.srcTreeSha256 &&
+          parsedBaseline?.srcFileCount === baseline.srcFileCount &&
+          baselineSpec.failingCriteria.length === 0 &&
+          stableEqual(ledger?.retrieval, parsedBaseline?.retrieval) &&
+          stableEqual(ledger?.safety, parsedBaseline?.safety) &&
+          stableEqual(ledger?.performance, parsedBaseline?.performance) &&
+          stableEqual(ledger?.continuation, parsedBaseline?.continuation);
+        if (!inheritedMatch) {
+          failureReasons.push({
+            code: 'SCOPED_DELTA_BASELINE_INVALID',
+            detail: 'Baseline ledger metadata or inherited Profile 1 metrics do not match referenced baseline file'
+          });
+        }
+      } catch {
+        failureReasons.push({
+          code: 'SCOPED_DELTA_BASELINE_INVALID',
+          detail: 'Referenced baseline ledger is not valid JSON'
+        });
+      }
+    }
+  }
+
+  const allowed = delta.allowedChangedSrcPaths;
+  if (
+    !Array.isArray(allowed) ||
+    allowed.length === 0 ||
+    allowed.some((item) => typeof item !== 'string' || !item.startsWith('src/') || item.includes('\\') || item.includes('..')) ||
+    new Set(allowed).size !== allowed.length
+  ) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_MALFORMED',
+      detail: 'scopedDelta.allowedChangedSrcPaths must be a non-empty unique array of relative src/ paths'
+    });
+    return;
+  }
+
+  const forbidden = allowed.filter((rel) => isProtectedRuntimePath(rel));
+  if (forbidden.length > 0) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_PROTECTED_PATH_FORBIDDEN',
+      detail: `Protected runtime paths cannot appear in allowedChangedSrcPaths: ${forbidden.join(', ')}`
+    });
+  }
+
+  const protectedSubtree = computeProtectedSubtreeHash(cwd, allowed);
+  if (
+    !SHA256_RE.test(String(delta.protectedSubtreeSha256 ?? '')) ||
+    delta.protectedSubtreeSha256 !== protectedSubtree.sha256 ||
+    delta.protectedSubtreeFileCount !== protectedSubtree.fileCount
+  ) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_PROTECTED_SUBTREE_MISMATCH',
+      detail: `Protected src/ subtree mismatch (live ${protectedSubtree.sha256}, ${protectedSubtree.fileCount} files vs ledger ${String(delta.protectedSubtreeSha256)}, ${String(delta.protectedSubtreeFileCount)} files)`
+    });
+  }
+
+  if (!isPlainObject(delta.changedSrcFiles)) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_MALFORMED',
+      detail: 'scopedDelta.changedSrcFiles must be an object mapping allowed paths to SHA-256 hashes'
+    });
+  } else {
+    const expectedKeys = [...allowed].sort();
+    const actualKeys = Object.keys(delta.changedSrcFiles).sort();
+    if (!stableEqual(expectedKeys, actualKeys)) {
+      failureReasons.push({
+        code: 'SCOPED_DELTA_CHANGED_FILE_HASH_MISMATCH',
+        detail: 'scopedDelta.changedSrcFiles keys must match allowedChangedSrcPaths exactly'
+      });
+    } else {
+      for (const rel of expectedKeys) {
+        const expectedHash = delta.changedSrcFiles[rel];
+        const liveHash = liveSrc.files[rel];
+        if (!liveHash || expectedHash !== liveHash) {
+          failureReasons.push({
+            code: 'SCOPED_DELTA_CHANGED_FILE_HASH_MISMATCH',
+            detail: `Changed src file hash mismatch for ${rel}`
+          });
+        }
+      }
+    }
+  }
+
+  if (COMMIT_SHA_RE.test(String(baseline?.evaluatedCommit ?? ''))) {
+    const revCheck = spawnSync('git', ['rev-parse', '--verify', `${baseline.evaluatedCommit}^{commit}`], {
+      cwd,
+      encoding: 'utf8'
+    });
+    if (revCheck.status === 0) {
+      const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', baseline.evaluatedCommit, 'HEAD'], {
+        cwd,
+        encoding: 'utf8'
+      });
+      if (ancestor.status !== 0) {
+        failureReasons.push({
+          code: 'SCOPED_DELTA_BASELINE_NOT_ANCESTOR',
+          detail: `Baseline commit ${baseline.evaluatedCommit} is not an ancestor of HEAD`
+        });
+      } else {
+        const baselineSrc = computeGitCommitSrcHashes(cwd, baseline.evaluatedCommit);
+        if (!baselineSrc) {
+          failureReasons.push({
+            code: 'SCOPED_DELTA_BASELINE_INVALID',
+            detail: `Unable to inspect baseline src/ tree at ${baseline.evaluatedCommit}`
+          });
+        } else {
+          const allRelPaths = new Set([...Object.keys(baselineSrc.files), ...Object.keys(liveSrc.files)]);
+          const allowedSet = new Set(allowed);
+          const unapproved = [];
+          for (const rel of allRelPaths) {
+            if (baselineSrc.files[rel] !== liveSrc.files[rel] && !allowedSet.has(rel)) {
+              unapproved.push(rel);
+            }
+          }
+          if (unapproved.length > 0) {
+            failureReasons.push({
+              code: 'SCOPED_DELTA_UNAPPROVED_SRC_CHANGE',
+              detail: `Unapproved src/ delta relative to ${baseline.evaluatedCommit}: ${unapproved.sort().join(', ')}`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const tv = delta.targetedVerification;
+  const upgradeVersions = Array.isArray(tv?.upgradeMatrixVersions) ? tv.upgradeMatrixVersions : [];
+  const hasAllUpgrades = ['1.4.0', '1.4.1', '1.5.0-preview.1'].every((v) => upgradeVersions.includes(v));
+  const evidenceValid =
+    delta.runtimeDependenciesChanged === false &&
+    isPlainObject(tv) &&
+    tv.typecheckPassed === true &&
+    tv.targetedSetupTestsPassed === true &&
+    typeof tv.fullRegressionTestsPassed === 'number' &&
+    typeof tv.fullRegressionTestsTotal === 'number' &&
+    tv.fullRegressionTestsPassed >= 375 &&
+    tv.fullRegressionTestsPassed === tv.fullRegressionTestsTotal &&
+    typeof tv.reliabilityStressIterations === 'number' &&
+    tv.reliabilityStressIterations >= 2 &&
+    tv.reliabilityStressAllPassed === true &&
+    hasAllUpgrades &&
+    tv.upgradeMatrixAllPassed === true &&
+    tv.lateWriteRollbackVerified === true &&
+    tv.packageSmokePassed === true;
+
+  if (!evidenceValid) {
+    failureReasons.push({
+      code: 'SCOPED_DELTA_EVIDENCE_INCOMPLETE',
+      detail: 'scopedDelta targetedVerification evidence is incomplete or unmet'
+    });
+  }
 }
 
 export function extractGateEvaluations(report) {

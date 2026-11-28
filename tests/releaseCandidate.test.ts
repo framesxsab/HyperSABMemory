@@ -1,6 +1,6 @@
 
 import { describe, expect, it } from 'vitest';
-import { checkRegistry, releaseChannel } from '../scripts/release-candidate.mjs';
+import { checkRegistry, releaseChannel, validateScopedDeltaGitDiff } from '../scripts/release-candidate.mjs';
 
 const preview = { version: '1.5.0-preview.1', tag: 'preview', latestBefore: '1.4.1', integrity: 'sha512-candidate' };
 const metadata = () => ({
@@ -46,5 +46,16 @@ describe('release candidate policy', () => {
     data.versions['1.4.2'] = {};
     data['dist-tags'].latest = '1.4.2';
     expect(() => checkRegistry(data, preview, true)).toThrow('changed latest');
+  });
+
+  it('rejects unapproved src changes in scoped_delta candidate validation', () => {
+    const base = 'a'.repeat(40);
+    const cand = 'b'.repeat(40);
+    const allowed = ['src/cli/index.ts'];
+    const mockGit = (...args: string[]) => (args[0] === 'diff' ? 'src/cli/index.ts\nsrc/memory/hybridSearch.ts\n' : '');
+    expect(() => validateScopedDeltaGitDiff(base, cand, cand, allowed, mockGit)).toThrow('unapproved scoped_delta src change: src/memory/hybridSearch.ts');
+    expect(() =>
+      validateScopedDeltaGitDiff(base, cand, cand, allowed, (...args: string[]) => (args[0] === 'diff' ? 'src/cli/index.ts\n' : ''))
+    ).not.toThrow();
   });
 });

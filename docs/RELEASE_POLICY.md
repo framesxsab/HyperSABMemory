@@ -12,7 +12,7 @@
 
 ## 2. Fail-Closed Governance Contract
 
-1. **Profile-Scoped Release Gate**: `scripts/release-preflight.mjs` validates Option B Profile 1 acceptance ledgers (`docs/acceptance/v<version>-acceptance.json`) strictly for `-preview.N` versions bound by live `src/` tree SHA-256 checksums, while keeping stable `X.Y.Z` versions fail-closed (`NO-GO`) under frozen `FROZEN_GATE_SPEC` until Profile 2 acceptance is approved and passed.
+1. **Profile-Scoped Release Gate**: `scripts/release-preflight.mjs` validates Option B Profile 1 acceptance ledgers (`docs/acceptance/v<version>-acceptance.json`) strictly for `-preview.N` versions bound by live `src/` tree SHA-256 checksums (supporting fail-closed `scoped_delta` verification where protected runtime subtrees match the evaluated baseline byte-for-byte and only approved CLI/setup paths differ), while keeping stable `X.Y.Z` versions fail-closed (`NO-GO`) under frozen `FROZEN_GATE_SPEC` until Profile 2 acceptance is approved and passed.
 2. **Threshold Anti-Relaxation Rule**: Safety gates (`0` unsupported assertions, `0` forgotten/stale leaks, `0` workspace escapes, `0` false test links, atomic rename integrity) are permanent and immutable. Acceptance thresholds cannot be lowered after observing evaluation scores.
 3. **Permanent Corpus Separation**: Any repository cohort used during acceptance evaluation (`ni`, `commander`, `p-queue`, `ufo`, `nanostores`, `neverthrow`, `picomatch`, `marked`, `headers-polyfill`, `js-yaml`, `fast-json-stringify`, `rou3`, `tinybench`, `path-to-regexp`, `uuid`) cannot be tuned against and re-submitted as "unseen"; future acceptance cycles require freshly pinned unseen cohorts.
 
@@ -20,11 +20,12 @@
 
 | Stage | Mechanism / Owner | Checks Executed | Fail-Closed Guard |
 |---|---|---|---|
-| **1. Preflight & Parity** | `.github/workflows/release.yml` (`gates` job) | `npm ci`, tag == `package.json` version, zero dirty/secret artifacts | Fails before build/test on mismatch |
-| **2. Cross-Platform Build & Regression** | Shared 3x3 matrix (`ubuntu`, `windows`, `macos` × Node `24`) | `npx tsc --noEmit`, `npm test`, `npm run eval`, `npm run eval:baseline` | `fail-fast: false`; any lane failure blocks release |
-| **3. Package Content & Smoke Verification** | Existing `npm run package:smoke` | `npm pack`, isolated offline `npm install`, `setup`, `doctor --verify`, stdio MCP & Sprint 3.1 handoff | Fails if offline install, CLI entry check, or stdio MCP fails |
-| **4. Profile-Scoped Release Gate** | `npm run release:preflight` | Preview (`-preview.N`) validates Profile 1 ledger + live `src/` tree SHA-256; Stable validates frozen Profile 0 gates | Fails closed if ledger missing, malformed, `src/` hash mismatched, or threshold unmet |
-| **5. Authorized Publication** | `.github/workflows/release.yml` (`publish` job) | Runs `npm publish --tag preview` for `-preview.` tags, `npm publish` otherwise | Runs ONLY on authorized tag push |
+| **1. Preflight & Parity** | `.github/workflows/release.yml` (`gates` job) | `npm ci`, pristine checkout, tag == `package.json` version, `package-lock.json` parity, `CHANGELOG.md` top heading | Fails before build/test on mismatch |
+| **2. Cross-Platform Build & Regression** | Shared 3x1 matrix (`ubuntu`, `windows`, `macos` × Node `24`) | `npx tsc --noEmit`, `npm test`, `npm run eval`, `npm run eval:baseline` | `fail-fast: false`; any lane failure blocks release |
+| **3. Package Content & Candidate Bind** | `npm run package:smoke` + `npm run release:candidate -- prepare` | `npm pack --ignore-scripts`, SHA-256/SHA-512 tarball binding, `package:smoke` on candidate tarball | Fails if offline install, CLI entry check, or stdio MCP fails |
+| **4. Profile-Scoped Release Gate** | `npm run release:preflight` + `release:candidate` | Preview (`-preview.N`) validates Profile 1 ledger + `src/` tree (or fail-closed `scoped_delta`); Stable validates frozen Profile 0 gates | Fails closed if ledger missing, malformed, tampered, or threshold unmet |
+| **5. Authorized OIDC Publication** | `.github/workflows/release.yml` (`publish` job, `environment: npm-preview`) | `id-token: write`, Node `>= 22.14`, npm `>= 11.5.1`, zero `NODE_AUTH_TOKEN`/`NPM_TOKEN`, `npm publish --tag preview` | Runs ONLY on authorized tag push + owner approval |
+| **6. Post-Publish Integrity Verify** | `.github/workflows/release.yml` (`smoke-published` job) | Polls registry propagation, `release:candidate -- published`, byte `cmp` against candidate `.tgz`, `package:smoke` | Fails release workflow if registry bytes or `latest` diverge |
 
 ## 4. Product-Owner Authorization Boundaries
 

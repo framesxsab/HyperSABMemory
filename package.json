@@ -1,6 +1,6 @@
 {
   "name": "hypersabmemory",
-  "version": "1.5.0-preview.1",
+  "version": "1.5.0-preview.2",
   "description": "Local-first, source-verifiable MCP context harness and task-continuation memory engine for AI coding agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

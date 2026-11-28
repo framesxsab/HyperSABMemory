@@ -37,7 +37,7 @@ npx hypersabmemory setup
 
 That command:
 
-1. Writes local MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) keeping existing servers intact, and preserves existing Git-tracked instruction files (`AGENTS.md`, `CLAUDE.md`, `.windsurfrules`, `.github/copilot-instructions.md`, etc.) by default unless `--inject-tracked` is explicitly passed; untracked or new workspaces receive managed harness rules without overwriting custom text
+1. Writes local MCP configs (`.cursor/mcp.json`, `.mcp.json`, `.vscode/mcp.json`) atomically with rollback while keeping existing servers intact (validates existing files as strict JSON objects and fails closed before modifying files on malformed JSON/symlinks), and preserves existing Git-tracked instruction files (`AGENTS.md`, `CLAUDE.md`, `.windsurfrules`, `.github/copilot-instructions.md`, etc.) by default unless `--inject-tracked` is explicitly passed; untracked or new workspaces receive managed harness rules without overwriting custom text
 2. Initializes local memory under `.hypersabmemory/`, kept out of your commits automatically via `.git/info/exclude`
 3. Seeds first-boot facts from your README, package.json, and git history without creating a Git commit. Pass `--checkpoint` to opt into one initial local checkpoint; in a fresh Git repository it also records the `GENESIS <hash>` baseline.
 
