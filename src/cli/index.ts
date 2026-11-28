@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 /**
  * HyperSABMemory — CLI Entry Point
@@ -83,6 +83,7 @@ program
       injectTracked: options.injectTracked === true
     });
     printSetupOutcome(result);
+    if (!result.success) process.exitCode = 1;
     if (result.success) {
       console.log(picocolors.cyan(`\n${setupNextStepsFlow(process.cwd())}`));
     }

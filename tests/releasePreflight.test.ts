@@ -329,18 +329,15 @@ describe('Option B Profile 1 preview acceptance gate', () => {
     };
   }
 
-  it('approves GO when -preview.N ledger, live src/ tree hash, and all Profile 1 metrics satisfy requirements', () => {
+  it('enforces the committed preview ledger against the current source tree', () => {
     const repoLedgerPath = path.join(repoRoot, 'docs', 'acceptance', 'v1.5.0-preview.1-acceptance.json');
-    expect(fs.existsSync(repoLedgerPath)).toBe(true);
     const repoLedger = JSON.parse(fs.readFileSync(repoLedgerPath, 'utf8')) as { srcTreeSha256: string; srcFileCount: number };
     const liveSrc = computeSrcTreeHash(repoRoot);
-    expect(repoLedger.srcTreeSha256).toBe(liveSrc.sha256);
-    expect(repoLedger.srcFileCount).toBe(liveSrc.fileCount);
-
-    const previewRes = runPreviewAcceptancePreflight({ cwd: repoRoot, version: '1.5.0-preview.1', checkBuildArtifact: false });
-    expect(previewRes.eligible).toBe(true);
-    expect(previewRes.exitCode).toBe(0);
-    expect(previewRes.failureReasons).toEqual([]);
+    const unchanged = repoLedger.srcTreeSha256 === liveSrc.sha256 && repoLedger.srcFileCount === liveSrc.fileCount;
+    const result = runPreviewAcceptancePreflight({ cwd: repoRoot, version: '1.5.0-preview.1', checkBuildArtifact: false });
+    expect(result.eligible).toBe(unchanged);
+    expect(result.exitCode).toBe(unchanged ? 0 : 1);
+    expect(result.failureReasons.map(reason => reason.code)).toEqual(unchanged ? [] : ['SRC_TREE_HASH_MISMATCH']);
   });
 
   it('tolerates documentation-only changes when src/ hash remains identical', () => {

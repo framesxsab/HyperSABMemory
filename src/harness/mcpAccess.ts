@@ -121,11 +121,16 @@ export class McpAccessEngine {
 
   public connect(): McpConnectResult {
     const launch = resolveMcpLaunch(this.workspaceDir);
-    const written = [
-      this.mergeCursor(launch),
-      this.mergeClaude(launch),
-      this.mergeVscode(launch)
+    const configs = [
+      this.planConfig('.cursor/mcp.json', 'mcpServers', launch),
+      this.planConfig('.mcp.json', 'mcpServers', launch),
+      this.planConfig('.vscode/mcp.json', 'servers', launch, { type: 'stdio' })
     ];
+    const written = configs.map(({ abs, payload }) => {
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+      return abs;
+    });
     return { launch, written };
   }
 
@@ -147,42 +152,33 @@ Hosts:
 ${launchLabel}: ${result.launch.command} ${result.launch.args.join(' ')}`;
   }
 
-  private mergeCursor(launch: McpLaunch): string {
-    const relativePath = path.join('.cursor', 'mcp.json');
-    return this.mergeKeyedConfig(relativePath, 'mcpServers', launch);
-  }
-
-  private mergeClaude(launch: McpLaunch): string {
-    return this.mergeKeyedConfig('.mcp.json', 'mcpServers', launch);
-  }
-
-  private mergeVscode(launch: McpLaunch): string {
-    const relativePath = path.join('.vscode', 'mcp.json');
-    return this.mergeKeyedConfig(relativePath, 'servers', launch, { type: 'stdio' });
-  }
-
-  private mergeKeyedConfig(
+  private planConfig(
     relativePath: string,
     key: 'mcpServers' | 'servers',
     launch: McpLaunch,
     extra: Record<string, string> = {}
-  ): string {
+  ): { abs: string; payload: Record<string, unknown> } {
     const abs = path.join(this.workspaceDir, relativePath);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
     let payload: Record<string, unknown> = {};
-    if (fs.existsSync(abs)) {
-      try {
-        payload = JSON.parse(fs.readFileSync(abs, 'utf-8')) as Record<string, unknown>;
-      } catch {
-        payload = {};
+    try {
+      const existing: unknown = JSON.parse(fs.readFileSync(abs, 'utf-8'));
+      if (!isConfigObject(existing)) throw new Error('expected a JSON object');
+      payload = existing;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + (error as Error).message);
       }
     }
-    const bucket = (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key]))
-      ? { ...(payload[key] as Record<string, unknown>) }
-      : {};
-    bucket.hypersabmemory = { command: launch.command, args: launch.args, ...extra };
-    payload[key] = bucket;
-    fs.writeFileSync(abs, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
-    return abs;
+
+    const bucket = payload[key];
+    if (bucket !== undefined && !isConfigObject(bucket)) {
+      throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + key + ' must be a JSON object');
+    }
+    payload[key] = { ...bucket, hypersabmemory: { command: launch.command, args: launch.args, ...extra } };
+    return { abs, payload };
   }
+}
+
+function isConfigObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

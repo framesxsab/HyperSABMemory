@@ -106,6 +106,10 @@ export class OneShotSetupEngine {
         return { success: false, createdFiles: [], error: 'Target workspace must be an existing directory.' };
       }
 
+      const access = new McpAccessEngine(this.targetDir);
+      const connected = access.connect();
+      createdFiles = createdFiles.concat(connected.written);
+
       // 0. Cold-start bootstrap: seed first-boot facts before the engine loads the store.
       const seedResult = await seedWorkspace(this.targetDir);
 
@@ -119,10 +123,6 @@ export class OneShotSetupEngine {
         preserveTrackedFiles: options.injectTracked !== true
       });
       createdFiles = createdFiles.concat(adapterResult.createdFiles);
-
-      const access = new McpAccessEngine(this.targetDir);
-      const connected = access.connect();
-      createdFiles = createdFiles.concat(connected.written);
 
       const contained = await containStoreInGit(this.targetDir);
 

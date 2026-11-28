@@ -180,3 +180,21 @@ describe('HyperSABMemory — offline MCP launch resolution', () => {
     expect(access.describeFlow(result)).toMatch(/offline local/i);
   });
 });
+
+it('preserves all MCP configurations when one existing configuration cannot be safely merged', () => {
+  const consumer = makeTempDir();
+  const cursor = path.join(consumer, '.cursor', 'mcp.json');
+  const claude = path.join(consumer, '.mcp.json');
+  fs.mkdirSync(path.dirname(cursor));
+  const original = '{ "mcpServers": { "custom": { "command": "custom" } } }\n';
+  fs.writeFileSync(cursor, original);
+  for (const incompatible of ['{"mcpServers":', 'null', '{"mcpServers":[]}']) {
+    fs.writeFileSync(claude, incompatible);
+    expect(() => new McpAccessEngine(consumer).connect()).toThrow(/\.mcp\.json/);
+    expect(fs.readFileSync(cursor, 'utf8')).toBe(original);
+    expect(fs.readFileSync(claude, 'utf8')).toBe(incompatible);
+  }
+  fs.writeFileSync(claude, original);
+  expect(new McpAccessEngine(consumer).connect().written).toHaveLength(3);
+  expect(JSON.parse(fs.readFileSync(claude, 'utf8')).mcpServers.custom).toEqual({ command: 'custom' });
+});
