@@ -88,6 +88,7 @@ jobs:
           RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
         run: |
           test "$RELEASE_TAG" = preview
+          cd "$RUNNER_TEMP"
           npm publish "$RELEASE_TARBALL" --tag "$RELEASE_TAG" --registry https://registry.npmjs.org --ignore-scripts --userconfig /dev/null --globalconfig /dev/null
       - uses: actions/upload-artifact@v4
         if: always()
@@ -126,6 +127,13 @@ jobs:
           cmp "$candidate/hypersabmemory-$version.tgz" "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
           npm ci
           npm run package:smoke -- "$RUNNER_TEMP/npm-published/hypersabmemory-$version.tgz"
+      - name: Record post-publication smoke outcome
+        if: always()
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-candidate"
+          printf '{"outcome":"%s"}\n' "$SMOKE_OUTCOME" > "$RUNNER_TEMP/npm-candidate/smoke.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

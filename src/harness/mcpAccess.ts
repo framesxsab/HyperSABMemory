@@ -161,12 +161,12 @@ ${launchLabel}: ${result.launch.command} ${result.launch.args.join(' ')}`;
     const abs = path.join(this.workspaceDir, relativePath);
     let payload: Record<string, unknown> = {};
     try {
-      const existing: unknown = JSON.parse(fs.readFileSync(abs, 'utf-8'));
+      const existing: unknown = JSON.parse(fs.readFileSync(abs, 'utf-8').replace(/^\uFEFF/, ''));
       if (!isConfigObject(existing)) throw new Error('expected a JSON object');
       payload = existing;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + (error as Error).message);
+        throw new Error('Cannot merge MCP configuration ' + relativePath + ': ' + (error instanceof SyntaxError ? 'invalid JSON' : (error as NodeJS.ErrnoException).code ?? (error as Error).message));
       }
     }
 

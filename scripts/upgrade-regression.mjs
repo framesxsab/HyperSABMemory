@@ -79,7 +79,7 @@ async function scenario(version, candidate, result) {
   for (const [file, key] of configs) {
     const target = path.join(workspace, file);
     mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, JSON.stringify({ [key]: { custom }, fixtureProperty: 'keep' }));
+    writeFileSync(target, JSON.stringify({ [key]: { custom, hypersabmemory: { command: process.execPath, args: [entry(old), 'mcp'] } }, fixtureProperty: 'keep' }));
   }
   const brokenPath = path.join(workspace, '.vscode/mcp.json');
   const repaired = readFileSync(brokenPath, 'utf8');
