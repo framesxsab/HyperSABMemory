@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "profile": "Option B Profile 1 (Developer Preview)",
+  "targetVersion": "1.5.0-preview.2",
+  "gate": "Gate 5.5 + Path B Scoped Delta",
+  "acceptanceMode": "scoped_delta",
+  "evaluatedAt": "2026-11-28T08:45:00.000Z",
+  "candidateCommit": "5e6093dd68968878cad896e42fbf6d6a2e79e54e",
+  "ciRunUrl": "https://github.com/framesxsab/HyperSABMemory/actions/runs/46127149745",
+  "ciJobsPassed": 9,
+  "ciJobsTotal": 9,
+  "tarballSha256": "0ad269e286689536167122d57e85157906060c5aa1ce321c21f1d680487f9e1b",
+  "tarballIntegrity": "sha512-APcRLElPfWDESyRvR/zhMMHF+0jb6mwv1M7bkg8p0Dozr8ICvJrTKG2t6nAvUH9kkWb3cZpxt8ycIIkS7hz/3Q==",
+  "tarballToolchain": "windows-latest / node-22.14.0",
+  "srcFileCount": 47,
+  "srcTreeSha256": "db1d6a8bab1e4096a3ec9da65d623aa9630b3f71bf19e8458661341a879072a5",
+  "baselineAcceptance": {
+    "ledgerPath": "docs/acceptance/v1.5.0-preview.1-acceptance.json",
+    "ledgerSha256": "4917f46f4c00f08e995f05e4ea8336fbe64aa4baf349845de225afa44cc0ef79",
+    "evaluatedCommit": "fc0d3c6fe4476c9c62363b1926e0e7122ddb0aae",
+    "srcFileCount": 47,
+    "srcTreeSha256": "acfe0e144b414f1af9b8327fbfe21e20f3088a1c9373b18dc09fa5c1d1d0bc70",
+    "historicalWaiverInherited": false
+  },
+  "scopedDelta": {
+    "allowedChangedSrcPaths": [
+      "src/cli/index.ts",
+      "src/cli/oneShotSetup.ts",
+      "src/harness/mcpAccess.ts"
+    ],
+    "changedSrcFiles": {
+      "src/cli/index.ts": "3e59c6cbed4c8496c7882d3579def4e9c81ccbdd54142860f4981dad35053d5f",
+      "src/cli/oneShotSetup.ts": "88d74852c5ae1c050e174a9102cfa7d8db2f04fcb12a60a709e2aae9e6f533b6",
+      "src/harness/mcpAccess.ts": "8dbcddc0581335f197196e9d0cb0eb4341ec8813f760617d78b7abf1a0403f62"
+    },
+    "protectedSubtreeFileCount": 44,
+    "protectedSubtreeSha256": "02a2c743dd438a257d0714d710ead0a8e5f4dc6914e00c0e3b45f5a0deb90f1f",
+    "runtimeDependenciesChanged": false,
+    "targetedVerification": {
+      "typecheckPassed": true,
+      "targetedSetupTestsPassed": true,
+      "targetedTestFiles": 7,
+      "targetedTestCount": 57,
+      "fullRegressionTestsPassed": 391,
+      "fullRegressionTestsTotal": 391,
+      "fullRegressionTestFiles": 52,
+      "reliabilityStressIterations": 2,
+      "reliabilityStressFilesPerIteration": 48,
+      "reliabilityStressTestsPerIteration": 79,
+      "reliabilityStressAllPassed": true,
+      "upgradeMatrixVersions": [
+        "1.4.0",
+        "1.4.1",
+        "1.5.0-preview.1"
+      ],
+      "upgradeMatrixAllPassed": true,
+      "lateWriteRollbackVerified": true,
+      "packageSmokePassed": true
+    }
+  },
+  "repositories": [
+    { "key": "headers-polyfill", "name": "mswjs/headers-polyfill", "license": "MIT", "commit": "b02d0437eaf705a1cfe2657fea6ee47ee7496f47" },
+    { "key": "js-yaml", "name": "nodeca/js-yaml", "license": "MIT", "commit": "3edb91fbc78a10a8ddc15d2e82c8f6d0baa1c3d3" },
+    { "key": "fast-json-stringify", "name": "fastify/fast-json-stringify", "license": "MIT", "commit": "192949a2baaf827648ef6b8fce4e3183fe7cceef" }
+  ],
+  "retrieval": {
+    "queriesTotal": 45,
+    "answerableCount": 30,
+    "unanswerableCount": 15,
+    "rawMacroRecallAt5": 0.85,
+    "groundedMacroRecallAt5": 0.8,
+    "rawNormalizedPrecisionAt5": 0.7917,
+    "groundedNormalizedPrecisionAt5": 0.75,
+    "groundedMrrAt5": 0.9,
+    "groundedTop1Precision": 0.8667,
+    "unanswerableStrictEmitRate": 0.4,
+    "honestAbstentionRate": 1,
+    "provenancePassed": 170,
+    "provenanceTotal": 170
+  },
+  "safety": {
+    "unsupportedAssertionsTotal": 0,
+    "forgottenCanaryLeaks": 0,
+    "populatedMemoryMdLeaks": 0,
+    "emptyAfterLastForgetEdgePassed": true,
+    "sameSizeStaleLeaks": 0,
+    "sameSizeStaleRate": 1,
+    "midVerificationMutationPassed": 3,
+    "midVerificationMutationTotal": 3,
+    "workspaceContainmentViolations": 0,
+    "junctionEscapeBlocked": true,
+    "falseStaticTestLinks": 0,
+    "positiveStaticTestLinks": 0,
+    "positiveDeterministicRate": 0.9333,
+    "unsupportedDeterministicRate": 1,
+    "conflictingEvidenceRate": 1,
+    "setupCleanDiffVerified": true
+  },
+  "performance": {
+    "warmMcpSamples": 90,
+    "warmMcpP95Ms": 34.13,
+    "coldTsSamples": 30,
+    "coldTsP95MsExcludingStartup": 220.44,
+    "compactHandoffSamples": 60,
+    "compactHandoffP95Ms": 21.54,
+    "compactByteReductionMinObserved": 0.5993,
+    "compactByteReductionMean": 0.6044,
+    "compactCompletenessVerified": true
+  },
+  "continuation": {
+    "passedTasks": 3,
+    "totalTasks": 3,
+    "allPassed": true,
+    "model": "gpt-6.2-sol",
+    "cliVersion": "codex-cli 0.171.0",
+    "results": [
+      { "repoKey": "headers-polyfill", "verdict": "PASS" },
+      { "repoKey": "js-yaml", "verdict": "PASS" },
+      { "repoKey": "fast-json-stringify", "verdict": "PASS" }
+    ]
+  },
+  "knownLimitations": {
+    "positiveStaticTestAttributionObserved": "0/9 (0 false links)",
+    "fileSymlinkStatusWindows": "UNVERIFIED (EPERM); NTFS junction containment PASS",
+    "strictJsonMcpConfigMerge": "Existing MCP configs must be valid JSON objects; JSONC and symlinked configs fail closed"
+  }
+}
