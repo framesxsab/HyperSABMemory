@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { TaskLedger } from '../dist/memory/taskLedger.js';
+
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
@@ -40,7 +40,7 @@ async function scenario(version, candidate, result) {
   result.stage = 'install historical release';
   install(old, manifest.name + '@' + version);
   assert.equal(cli(temp, entry(old), '--version'), version);
-  const { SqliteStore } = await import(pathToFileURL(path.join(packageRoot(old), 'dist', 'index.js')).href);
+  const { SqliteStore } = await import(pathToFileURL(path.join(packageRoot(old), 'dist', 'memory', 'sqliteStore.js')).href);
 
   result.stage = 'create linked fixture with released JSON store';
   mkdirSync(root, { recursive: true });
@@ -74,11 +74,17 @@ async function scenario(version, candidate, result) {
 
   result.stage = 'create persisted baseline task and interrupted-session fixture';
   const historicalLedger = path.join(packageRoot(old), 'dist', 'memory', 'taskLedger.js');
-  const Ledger = existsSync(historicalLedger) ? (await import(pathToFileURL(historicalLedger).href)).TaskLedger : TaskLedger;
-  result.taskFixture = Ledger === TaskLedger ? 'synthetic baseline schema' : 'published task ledger';
-  const ledger = new Ledger(workspace, { now: () => new Date('2025-01-01T00:00:00Z') });
-  const task = ledger.create({ goal: 'Restore the interrupted upgrade fixture', acceptanceCriteria: ['preserve lease history'] });
-  const claim = ledger.claim({ taskId: task.id, agentId: 'interrupted-agent', leaseMinutes: 1 });
+  const publishedTaskLedger = existsSync(historicalLedger);
+  result.taskFixture = publishedTaskLedger ? 'published task ledger' : 'synthetic baseline schema';
+  const ledgerPath = publishedTaskLedger ? historicalLedger : path.join(repo, 'dist', 'memory', 'taskLedger.js');
+  // Windows keeps native addons mapped until the process that loaded them exits.
+  const { taskId, generation } = JSON.parse(run(workspace, process.execPath, '--input-type=module', '--eval', [
+    'const { TaskLedger } = await import(process.argv[1]);',
+    'const ledger = new TaskLedger(process.cwd(), { now: () => new Date("2025-01-01T00:00:00Z") });',
+    'const task = ledger.create({ goal: "Restore the interrupted upgrade fixture", acceptanceCriteria: ["preserve lease history"] });',
+    'const claim = ledger.claim({ taskId: task.id, agentId: "interrupted-agent", leaseMinutes: 1 });',
+    'console.log(JSON.stringify({ taskId: task.id, generation: claim.leaseGeneration }));'
+  ].join('\n'), pathToFileURL(ledgerPath).href));
   assert.ok(existsSync(path.join(state, 'tasks-coordinator.sqlite')));
   writeFileSync(path.join(state, 'tasks.json.tmp'), '{"interrupted":');
 
@@ -130,12 +136,12 @@ async function scenario(version, candidate, result) {
   const client = new Client({ name: 'upgrade-fixture', version: '1' });
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [entry(candidate), 'mcp'], cwd: workspace, stderr: 'pipe' }));
-    const restored = await client.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId: task.id } });
+    const restored = await client.callTool({ name: 'hypersabmemory_task_context', arguments: { taskId } });
     assert.equal(restored.isError, undefined, JSON.stringify(restored.structuredContent));
     assert.equal(restored.structuredContent.lease.status, 'expired');
-    const reclaimed = await client.callTool({ name: 'hypersabmemory_task_claim', arguments: { taskId: task.id, agentId: 'resumed-agent' } });
+    const reclaimed = await client.callTool({ name: 'hypersabmemory_task_claim', arguments: { taskId, agentId: 'resumed-agent' } });
     assert.ok(!reclaimed.isError, JSON.stringify(reclaimed.structuredContent));
-    assert.ok(reclaimed.structuredContent.leaseGeneration > claim.leaseGeneration);
+    assert.ok(reclaimed.structuredContent.leaseGeneration > generation);
     assert.ok(!existsSync(path.join(state, 'tasks.json.tmp')));
   } finally {
     await client.close();
