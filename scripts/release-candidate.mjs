@@ -112,7 +112,7 @@ async function main(mode, directory) {
       const metadata = await registryMetadata();
       checkRegistry(metadata, identity);
       const npmCli = process.env.npm_execpath;
-      assert.ok(npmCli, 'run prepare through npm exec');
+      assert.ok(npmCli, 'run prepare through npm run release:candidate');
       const [packed] = JSON.parse(execFileSync(process.execPath, [
         npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', directory
       ], { encoding: 'utf8', timeout: 60_000 }));

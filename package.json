@@ -19,6 +19,9 @@
     "eval:baseline": "node scripts/retrieval-baseline.mjs",
     "eval:option-b:shadow": "node scripts/option-b-shadow-eval.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
+    "test:upgrade": "node scripts/upgrade-regression.mjs",
+    "test:reliability": "node scripts/reliability-stress.mjs",
+    "release:candidate": "node scripts/release-candidate.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "prepublishOnly": "npm test && npm run eval && npm run eval:baseline && npm run package:smoke && npm run release:preflight"
   },

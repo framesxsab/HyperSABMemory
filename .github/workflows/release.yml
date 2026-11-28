@@ -45,7 +45,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           npm run build
-          npm exec -- node scripts/release-candidate.mjs prepare "$RUNNER_TEMP/npm-candidate"
+          npm run release:candidate -- prepare "$RUNNER_TEMP/npm-candidate"
           npm run package:smoke -- "$RUNNER_TEMP"/npm-candidate/*.tgz
       - uses: actions/upload-artifact@v4
         if: ${{ always() && runner.os == 'Linux' }}
@@ -112,6 +112,7 @@ jobs:
           name: npm-candidate
           path: ${{ runner.temp }}/npm-candidate
       - name: Verify registry integrity and smoke the published package
+        id: smoke
         run: |
           candidate="$RUNNER_TEMP/npm-candidate"
           version="$(node -p "require('./package.json').version")"
@@ -129,4 +130,6 @@ jobs:
         if: always()
         with:
           name: npm-published-verification
-          path: ${{ runner.temp }}/npm-candidate/published.json
+          path: |
+            ${{ runner.temp }}/npm-candidate/published.json
+            ${{ runner.temp }}/npm-candidate/smoke.json
