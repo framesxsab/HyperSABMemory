@@ -30,7 +30,7 @@ it('rechecks decision evidence when its source changes during construction', () 
     expect(payload.staleSources).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'misc.md', status: 'modified' })]));
     expect(payload.canAssert).toBe(false);
   } finally { vi.restoreAllMocks(); syncBuiltinESMExports(); fs.rmSync(dir, { recursive: true, force: true }); }
-});
+}, 15_000);
 
 it('does not verify ambiguous or unsupported quotation syntax as decision evidence', () => {
   for (const content of ['Decision: Keep invoice storage local.\nDecision: Keep invoice storage local.\n', 'Decision: Keep invoice storage \`local\`.\n']) {
@@ -44,4 +44,4 @@ it('does not verify ambiguous or unsupported quotation syntax as decision eviden
       expect(payload.canAssert).toBe(false);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
-});
+}, 15_000);

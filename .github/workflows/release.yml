@@ -1,7 +1,6 @@
 name: Release
 on:
   push:
-    branches: ['feature/v1.5.0-preview.2']
     tags: ['v*']
   workflow_dispatch:
 

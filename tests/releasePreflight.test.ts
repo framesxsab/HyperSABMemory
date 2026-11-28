@@ -562,6 +562,13 @@ describe('Path B scoped delta preview acceptance gate', () => {
       const res = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
       expect(res.eligible).toBe(true);
       expect(res.exitCode).toBe(0);
+
+      // Verify CRLF checkout of baseline ledger produces identical normalized digest
+      const basePath = path.join(ws, ledger.baselineAcceptance.ledgerPath);
+      const lfText = fs.readFileSync(basePath, 'utf8');
+      fs.writeFileSync(basePath, '\uFEFF' + lfText.replace(/\n/g, '\r\n'), 'utf8');
+      const crlfRes = runReleasePreflight({ cwd: ws, checkBuildArtifact: false });
+      expect(crlfRes.eligible).toBe(true);
     } finally {
       fs.rmSync(ws, { recursive: true, force: true });
     }

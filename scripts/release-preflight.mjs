@@ -658,7 +658,7 @@ function validateScopedDeltaLedger({ cwd, ledger, liveSrc, failureReasons }) {
         detail: `Referenced baseline ledger not found at ${baseline.ledgerPath}`
       });
     } else {
-      const rawBaseline = readFileSync(baselineAbs, 'utf8');
+      const rawBaseline = readFileSync(baselineAbs, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
       const actualDigest = createHash('sha256').update(Buffer.from(rawBaseline, 'utf8')).digest('hex');
       if (actualDigest !== baseline.ledgerSha256) {
         failureReasons.push({
